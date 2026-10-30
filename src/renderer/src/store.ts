@@ -1,9 +1,12 @@
 import { create } from 'zustand'
-import type { TreeNode, VaultInfo, VaultStats } from '@shared/types'
+import type { Project, TreeNode, VaultInfo, VaultStats } from '@shared/types'
 import { baseName, movedPath } from '@shared/names'
 
 /** `docId` stays the same when the open file is renamed, so the editor isn't recreated. */
-export type View = { kind: 'home' } | { kind: 'file'; path: string; docId: number }
+export type View =
+  | { kind: 'home' }
+  | { kind: 'file'; path: string; docId: number }
+  | { kind: 'project'; slug: string }
 
 export interface Tab {
   id: number
@@ -43,6 +46,7 @@ interface State {
   /** Every .md note in the vault, for links, Ctrl+P and autocomplete */
   notes: string[]
   folders: string[]
+  projects: Project[]
   stats: VaultStats
   recent: string[]
   tabs: Tab[]
@@ -66,6 +70,8 @@ interface State {
   /** Opens in the current tab, or a new one; switches to the tab if the note is already open. */
   openFile(path: string, opts?: { newTab?: boolean; reveal?: Omit<Reveal, 'path'> }): Promise<void>
   goHome(): void
+  openProject(slug: string, opts?: { newTab?: boolean }): void
+  createProject(): Promise<void>
   newTab(): void
   closeTab(id: number): void
   activateTab(id: number): void
@@ -138,23 +144,27 @@ const tabsKey = (vault: string) => `waypoint:tabs:${vault}`
 function saveTabs(vault: string | undefined, tabs: Tab[], activeTab: number) {
   if (!vault) return
   try {
-    const paths = tabs.map((t) => (t.view.kind === 'file' ? t.view.path : null))
+    const paths = tabs.map((t) =>
+      t.view.kind === 'file' ? t.view.path : t.view.kind === 'project' ? `project:${t.view.slug}` : null
+    )
     localStorage.setItem(tabsKey(vault), JSON.stringify({ paths, active: tabs.findIndex((t) => t.id === activeTab) }))
   } catch {
     /* ignore */
   }
 }
-function loadTabs(vault: string, notes: string[]): { tabs: Tab[]; activeTab: number } | null {
+function loadTabs(vault: string, notes: string[], projects: Project[]): { tabs: Tab[]; activeTab: number } | null {
   try {
     const saved = JSON.parse(localStorage.getItem(tabsKey(vault)) ?? 'null') as {
       paths: (string | null)[]
       active: number
     } | null
     if (!saved?.paths?.length) return null
-    const tabs = saved.paths.map(
-      (p): Tab =>
-        p && notes.includes(p) ? { id: ++nextId, view: { kind: 'file', path: p, docId: ++nextId } } : homeTab()
-    )
+    const tabs = saved.paths.map((p): Tab => {
+      if (p?.startsWith('project:') && projects.some((x) => x.slug === p.slice(8))) {
+        return { id: ++nextId, view: { kind: 'project', slug: p.slice(8) } }
+      }
+      return p && notes.includes(p) ? { id: ++nextId, view: { kind: 'file', path: p, docId: ++nextId } } : homeTab()
+    })
     return { tabs, activeTab: (tabs[saved.active] ?? tabs[0]).id }
   } catch {
     return null
@@ -176,6 +186,14 @@ export const useStore = create<State>((set, get) => {
     const expanded: Record<string, boolean> = {}
     for (const [k, v] of Object.entries(s.expanded)) expanded[movedPath(k, from, to) ?? k] = v
     const tabs = s.tabs.map((t): Tab => {
+      if (t.view.kind === 'project') {
+        const moved = movedPath(`projects/${t.view.slug}`, from, to)
+        if (!moved) return t
+        // Still a project folder → follow its new name; moved somewhere else → it's no longer a project
+        return /^projects\/[^/]+$/.test(moved)
+          ? { ...t, view: { kind: 'project', slug: moved.slice('projects/'.length) } }
+          : { ...t, view: { kind: 'home' } }
+      }
       if (t.view.kind !== 'file') return t
       const moved = movedPath(t.view.path, from, to)
       return moved ? { ...t, view: { ...t.view, path: moved } } : t
@@ -190,6 +208,7 @@ export const useStore = create<State>((set, get) => {
     tree: [],
     notes: [],
     folders: [],
+    projects: [],
     stats: { notes: 0, projects: 0 },
     recent: [],
     tabs: [],
@@ -210,7 +229,7 @@ export const useStore = create<State>((set, get) => {
       set({ vault })
       if (!vault) return
       await get().refresh()
-      const restored = loadTabs(vault.path, get().notes)
+      const restored = loadTabs(vault.path, get().notes, get().projects)
       if (restored) setTabs(restored.tabs, restored.activeTab)
       else setTabs([homeTab()], 0)
     },
@@ -221,22 +240,23 @@ export const useStore = create<State>((set, get) => {
       set({ vault, tree: [], recent: [] })
       if (!vault) return
       await get().refresh()
-      const restored = loadTabs(vault.path, get().notes)
+      const restored = loadTabs(vault.path, get().notes, get().projects)
       if (restored) setTabs(restored.tabs, restored.activeTab)
       else setTabs([homeTab()], 0)
     },
 
     async refresh() {
       if (!get().vault) return
-      const [tree, stats, recent] = await Promise.all([
+      const [tree, stats, recent, projects] = await Promise.all([
         window.api.tree(),
         window.api.stats(),
-        window.api.recent()
+        window.api.recent(),
+        window.api.projects()
       ])
       const notes: string[] = []
       const folders: string[] = []
       flatten(tree, notes, folders)
-      set({ tree, stats, recent, notes, folders })
+      set({ tree, stats, recent, notes, folders, projects })
     },
 
     async openFile(path, opts = {}) {
@@ -274,6 +294,37 @@ export const useStore = create<State>((set, get) => {
         tabs.map((t) => (t.id === activeTab ? { ...t, view: { kind: 'home' } } : t)),
         activeTab
       )
+    },
+
+    openProject(slug, opts = {}) {
+      const { tabs, activeTab } = get()
+      const existing = tabs.find((t) => t.view.kind === 'project' && t.view.slug === slug)
+      if (existing) return setTabs(tabs, existing.id)
+      const view: View = { kind: 'project', slug }
+      if (opts.newTab || !tabs.length) {
+        const tab = { id: ++nextId, view }
+        const at = tabs.findIndex((t) => t.id === activeTab) + 1
+        return setTabs([...tabs.slice(0, at), tab, ...tabs.slice(at)], tab.id)
+      }
+      setTabs(
+        tabs.map((t) => (t.id === activeTab ? { ...t, view } : t)),
+        activeTab
+      )
+    },
+
+    async createProject() {
+      const name = await get().ask('New project', { placeholder: 'Project name', action: 'Create' })
+      if (!name) return
+      try {
+        const slug = await window.api.createProject(name)
+        set((s) => ({ expanded: { ...s.expanded, projects: true } }))
+        await get().refresh()
+        get().openProject(slug)
+      } catch (e) {
+        alert(`Couldn't create the project.
+
+${(e as Error).message}`)
+      }
     },
 
     newTab() {

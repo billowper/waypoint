@@ -5,6 +5,8 @@ import { stat } from 'fs/promises'
 import { watch, type FSWatcher } from 'chokidar'
 import { Vault } from './vault'
 import { NotesIndex } from './notesIndex'
+import { createProject, knownExternalPaths, listProjects, saveProject } from './projects'
+import type { ProjectSettings } from '@shared/types'
 import { loadConfig, saveConfig } from './config'
 import type { ChangeEvent, VaultInfo } from '@shared/types'
 import { movedPath } from '@shared/names'
@@ -261,6 +263,39 @@ function registerIpc() {
     await requireIndex().idle()
     return requireIndex().backlinks(rel)
   })
+  ipcMain.handle('projects:list', () => listProjects(requireVault()))
+  ipcMain.handle('projects:create', async (_e, name: string) => {
+    const slug = await createProject(requireVault(), name)
+    await requireIndex().rebuild()
+    return slug
+  })
+  ipcMain.handle('projects:save', (_e, slug: string, settings: ProjectSettings) =>
+    saveProject(requireVault(), slug, settings)
+  )
+
+  // Paths outside the vault come from project settings; refuse anything a project doesn't list,
+  // so the UI can never be used to open arbitrary files (openPath would run an .exe)
+  const allowedExternal = async (path: string) => {
+    if (!(await knownExternalPaths(requireVault())).has(path.toLowerCase())) {
+      throw new Error('That path is not listed in any project')
+    }
+    return path
+  }
+  ipcMain.handle('ext:open', async (_e, path: string) => {
+    const err = await shell.openPath(await allowedExternal(path))
+    if (err) throw new Error(err)
+  })
+  ipcMain.handle('ext:reveal', async (_e, path: string) => shell.showItemInFolder(await allowedExternal(path)))
+  ipcMain.handle('ext:code', async (_e, path: string) => {
+    await shell.openExternal(`vscode://file/${encodeURI((await allowedExternal(path)).replace(/\\/g, '/'))}`)
+  })
+  ipcMain.handle('ext:pick', async (_e, kind: 'file' | 'folder') => {
+    const r = await dialog.showOpenDialog(win!, {
+      properties: [kind === 'folder' ? 'openDirectory' : 'openFile']
+    })
+    return r.canceled ? null : (r.filePaths[0] ?? null)
+  })
+
   ipcMain.handle('file:reveal', (_e, rel: string) => shell.showItemInFolder(requireVault().abs(rel)))
 
   ipcMain.handle('recent:get', () => (vault ? (loadConfig().recent[vault.root] ?? []) : []))

@@ -13,6 +13,7 @@ import { resolveLink } from '@shared/links'
 import { enqueue, registerEditor, useStore, type Reveal, type SaveState } from '../store'
 import { linkContext, livePreview, refreshLinks } from './livePreview'
 import { wikiComplete } from './wikiComplete'
+import { frontmatterSyntax } from './frontmatterSyntax'
 
 const SAVE_DELAY = 400
 /** How long the # title has to sit still before the file is renamed to match it */
@@ -201,7 +202,7 @@ export default function Editor({ tabId, path, active }: Props) {
             bracketMatching(),
             highlightSelectionMatches(),
             EditorView.lineWrapping,
-            markdown({ base: markdownLanguage, codeLanguages: languages }),
+            markdown({ base: markdownLanguage, codeLanguages: languages, extensions: [frontmatterSyntax] }),
             syntaxHighlighting(mdHighlight),
             linkContext.of({ notes: () => store().notes, from: () => pathRef.current, open: openLink }),
             livePreview,

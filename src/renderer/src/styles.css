@@ -691,6 +691,20 @@ button.crumb.current:hover {
   color: var(--text-dim);
 }
 
+/* YAML properties at the top of a note (project and task settings) */
+.editor .cm-line.cm-md-frontmatter {
+  font-family: var(--mono);
+  font-size: 0.82em;
+  color: var(--text-faint);
+  background: rgba(255, 255, 255, 0.025);
+}
+
+.editor .cm-line.cm-md-frontmatter * {
+  color: inherit !important;
+  font-size: inherit !important;
+  font-weight: normal !important;
+}
+
 .editor .cm-md-hr {
   display: inline-block;
   width: 100%;
@@ -896,6 +910,240 @@ button.crumb.current:hover {
   display: flex;
   justify-content: flex-end;
   gap: 8px;
+}
+
+/* Projects -------------------------------------------------------------- */
+
+.projects-nav {
+  max-height: 30vh;
+  overflow: auto;
+  padding-top: 0;
+}
+
+.nav-item.done {
+  opacity: 0.55;
+}
+
+.nav-item.dim {
+  color: var(--text-faint);
+  font-size: 13px;
+}
+
+.nav-label {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.status-dot {
+  width: 8px;
+  height: 8px;
+  border-radius: 50%;
+  flex: none;
+  margin: 0 4px;
+  background: var(--status);
+}
+
+.status-idea { --status: #8caaee; }
+.status-active { --status: #a6d189; }
+.status-paused { --status: #e5c890; }
+.status-done { --status: #737994; }
+
+.project-page {
+  max-width: 860px;
+  margin: 0 auto;
+  padding: 36px 48px 80px;
+  user-select: text;
+}
+
+.project-head {
+  margin-bottom: 20px;
+}
+
+.project-title {
+  width: 100%;
+  font: 600 30px/1.2 var(--display);
+  color: var(--text-strong);
+  background: none;
+  border: 0;
+  border-radius: 6px;
+  padding: 4px 6px;
+  margin-left: -6px;
+  outline: none;
+}
+
+.project-title:hover,
+.project-title:focus {
+  background: var(--panel);
+}
+
+.status-pills {
+  display: flex;
+  gap: 6px;
+  margin: 10px 0 14px;
+}
+
+.pill {
+  padding: 3px 12px;
+  border-radius: 999px;
+  border: 1px solid var(--border);
+  color: var(--text-dim);
+  font-size: 12.5px;
+  text-transform: capitalize;
+}
+
+.pill.on {
+  border-color: var(--status);
+  color: var(--text-strong);
+  background: color-mix(in srgb, var(--status) 18%, transparent);
+}
+
+.project-meta {
+  display: flex;
+  align-items: center;
+  gap: 16px;
+  flex-wrap: wrap;
+  font-size: 12.5px;
+  color: var(--text-faint);
+}
+
+.project-meta label {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.project-meta .created {
+  margin-left: auto;
+}
+
+.project-page input:not(.project-title) {
+  font: inherit;
+  font-size: 13.5px;
+  color: var(--text-strong);
+  background: var(--bg);
+  border: 1px solid var(--border);
+  border-radius: 6px;
+  padding: 6px 9px;
+  outline: none;
+  min-width: 0;
+}
+
+.project-page input:not(.project-title):focus {
+  border-color: var(--accent);
+}
+
+.project-page input.short {
+  width: 80px;
+}
+
+.card {
+  background: var(--panel);
+  border: 1px solid var(--border);
+  border-radius: 10px;
+  padding: 14px 16px;
+  margin-bottom: 14px;
+}
+
+.card h2 {
+  font-size: 11px;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+  color: var(--text-faint);
+  font-weight: 600;
+  margin: 0 0 10px;
+}
+
+.card-head {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  margin-bottom: 10px;
+}
+
+.card-head h2 {
+  flex: 1;
+  margin: 0;
+}
+
+.card .empty {
+  margin: 0;
+  font-size: 13px;
+}
+
+.overview {
+  margin: 0;
+  white-space: pre-wrap;
+  color: var(--text);
+  max-height: 9em;
+  overflow: hidden;
+}
+
+.field-row {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  margin-bottom: 8px;
+}
+
+.field-row > input {
+  flex: 1;
+}
+
+.field-row > input.link-title {
+  flex: 0 0 180px;
+}
+
+.field-row .path {
+  flex: 1;
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  color: var(--text-dim);
+  font-size: 12.5px;
+}
+
+.actions {
+  display: flex;
+  gap: 8px;
+  margin: -2px 0 10px;
+}
+
+.btn.small {
+  padding: 4px 10px;
+  font-size: 12.5px;
+  border-radius: 6px;
+  white-space: nowrap;
+}
+
+.btn:disabled {
+  opacity: 0.4;
+  cursor: default;
+}
+
+.page-list,
+.project-cards {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+}
+
+.page-list button,
+.project-cards button {
+  display: flex;
+  align-items: baseline;
+  gap: 10px;
+  width: 100%;
+  padding: 6px 8px;
+  border-radius: 6px;
+  text-align: left;
+  color: var(--text-strong);
+}
+
+.page-list button:hover,
+.project-cards button:hover {
+  background: var(--hover);
 }
 
 /* Picker (Ctrl+P, Move to…) --------------------------------------------- */

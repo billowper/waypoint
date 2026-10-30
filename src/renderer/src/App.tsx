@@ -9,6 +9,7 @@ import Prompt from './components/Prompt'
 import ContextMenu from './components/ContextMenu'
 import Picker from './components/Picker'
 import Backlinks from './components/Backlinks'
+import ProjectPage from './components/ProjectPage'
 
 /** F2 / Delete act on the keyboard-focused tree item, else the open note (else selected folder for F2) */
 function fileTarget(fallbackToFolder: boolean): string | null {
@@ -89,6 +90,7 @@ export default function App() {
         <div className="content">
           <div className="pane">
             {view.kind === 'home' && <Home />}
+            {view.kind === 'project' && <ProjectPage key={view.slug} slug={view.slug} />}
             {/* Every open note keeps its editor (and undo history); only the active one shows */}
             {tabs.map((t) =>
               t.view.kind === 'file' ? (

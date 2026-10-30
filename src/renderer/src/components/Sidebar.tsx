@@ -4,8 +4,24 @@ import FileTree, { DRAG_TYPE } from './FileTree'
 import SearchPanel from './SearchPanel'
 
 export default function Sidebar() {
-  const { vault, view, goHome, newNote, newFolder, openVault, tree, selectedDir, sidebarMode, setSidebarMode, move } =
-    useStore()
+  const {
+    vault,
+    view,
+    goHome,
+    newNote,
+    newFolder,
+    openVault,
+    tree,
+    selectedDir,
+    sidebarMode,
+    setSidebarMode,
+    move,
+    projects,
+    openProject,
+    createProject
+  } = useStore()
+  // Finished projects drop to the bottom
+  const listed = [...projects].sort((a, b) => Number(a.status === 'done') - Number(b.status === 'done'))
   const [rootDrop, setRootDrop] = useState(false)
 
   // Dropping on empty space below the tree moves the item to the vault root
@@ -37,6 +53,34 @@ export default function Sidebar() {
         >
           <span className="nav-icon">⌂</span> Home
         </button>
+      </nav>
+
+      <div className="section-head">
+        <span>Projects</span>
+        <span className="section-target" />
+        <div className="section-actions">
+          <button className="icon-btn" title="New project" onClick={createProject}>
+            ＋
+          </button>
+        </div>
+      </div>
+      <nav className="sidebar-nav projects-nav">
+        {listed.map((p) => (
+          <button
+            key={p.slug}
+            className={`nav-item ${view.kind === 'project' && view.slug === p.slug ? 'active' : ''} ${p.status === 'done' ? 'done' : ''}`}
+            title={`${p.title} · ${p.status}`}
+            onClick={(e) => openProject(p.slug, { newTab: e.ctrlKey })}
+          >
+            <span className={`status-dot status-${p.status}`} />
+            <span className="nav-label">{p.title}</span>
+          </button>
+        ))}
+        {listed.length === 0 && (
+          <button className="nav-item dim" onClick={createProject}>
+            Create your first project…
+          </button>
+        )}
       </nav>
 
       <div className="section-head">

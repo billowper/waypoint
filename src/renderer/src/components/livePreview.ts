@@ -142,6 +142,13 @@ function build(view: EditorView): DecorationSet {
           case 'FencedCode':
             fencedCode(node)
             return false
+          case 'Frontmatter': {
+            const last = doc.lineAt(node.to).number
+            for (let l = doc.lineAt(node.from).number; l <= last; l++) {
+              decos.push(Decoration.line({ class: 'cm-md-frontmatter' }).range(doc.line(l).from))
+            }
+            return false
+          }
           case 'Link':
             link(node)
             return false

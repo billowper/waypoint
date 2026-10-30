@@ -4,11 +4,15 @@ import { useStore, type Tab } from '../store'
 
 const SAVE_LABEL = { saved: 'Saved', saving: 'Saving…', unsaved: 'Edited', error: 'Save failed' }
 
-const tabTitle = (t: Tab) => (t.view.kind === 'file' ? baseName(t.view.path) : 'Home')
-
 /** Tab strip across the top of the window (also the window's drag area) */
 export function TabBar() {
-  const { tabs, activeTab, activateTab, closeTab, newTab } = useStore()
+  const { tabs, activeTab, activateTab, closeTab, newTab, projects } = useStore()
+  const tabTitle = (t: Tab) =>
+    t.view.kind === 'file'
+      ? baseName(t.view.path)
+      : t.view.kind === 'project'
+        ? (projects.find((p) => t.view.kind === 'project' && p.slug === t.view.slug)?.title ?? t.view.slug)
+        : 'Home'
   const onMouseDown = (t: Tab) => (e: MouseEvent) => {
     if (e.button === 1) {
       e.preventDefault()
@@ -22,11 +26,12 @@ export function TabBar() {
           <div
             key={t.id}
             className={`tab ${t.id === activeTab ? 'active' : ''}`}
-            title={t.view.kind === 'file' ? t.view.path : 'Home'}
+            title={t.view.kind === 'file' ? t.view.path : tabTitle(t)}
             onMouseDown={onMouseDown(t)}
           >
             <button className="tab-title" onClick={() => activateTab(t.id)}>
               {t.view.kind === 'home' && <span className="tab-icon">⌂</span>}
+              {t.view.kind === 'project' && <span className="tab-icon">◇</span>}
               {tabTitle(t)}
             </button>
             <button className="tab-close" title="Close tab (Ctrl+W)" onClick={() => closeTab(t.id)}>

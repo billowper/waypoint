@@ -6,7 +6,8 @@ function greeting() {
 }
 
 export default function Home() {
-  const { stats, recent, openFile, newNote, tree } = useStore()
+  const { stats, recent, openFile, newNote, tree, projects, openProject, createProject } = useStore()
+  const active = projects.filter((p) => p.status === 'active')
   const hasInbox = tree.some((n) => n.path === 'inbox.md')
   const date = new Date().toLocaleDateString(undefined, {
     weekday: 'long',
@@ -24,6 +25,9 @@ export default function Home() {
       <div className="home-actions">
         <button className="btn primary" onClick={() => newNote('notes')}>
           New note <kbd>Ctrl N</kbd>
+        </button>
+        <button className="btn" onClick={createProject}>
+          New project
         </button>
         {hasInbox && (
           <button className="btn" onClick={() => openFile('inbox.md')}>
@@ -45,6 +49,27 @@ export default function Home() {
           <span className="stat-num">—</span>
           <span className="stat-label">tasks due · phase 3</span>
         </div>
+      </section>
+
+      <section className="panel">
+        <h2>Active projects</h2>
+        {active.length === 0 ? (
+          <p className="empty">No active projects. Create one to keep its notes, links and tasks together.</p>
+        ) : (
+          <ul className="project-cards">
+            {active.map((p) => (
+              <li key={p.slug}>
+                <button onClick={(e) => openProject(p.slug, { newTab: e.ctrlKey })}>
+                  <span className="recent-name">{p.title}</span>
+                  <span className="recent-path">
+                    {p.tags.join(' · ')}
+                    {p.tags.length ? ' · ' : ''}updated {new Date(p.updated || Date.now()).toLocaleDateString()}
+                  </span>
+                </button>
+              </li>
+            ))}
+          </ul>
+        )}
       </section>
 
       <section className="panel">

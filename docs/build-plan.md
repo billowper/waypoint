@@ -51,7 +51,7 @@ vault/
   Obsidian-style tabs (click replaces, Ctrl/middle-click = new tab), restored on relaunch
 - **Checkpoint:** file handling vs Notion/Obsidian expectations
 
-### Phase 2 — Projects, wikis, resources, Home
+### Phase 2 — Projects, wikis, resources, Home — BUILT (unattended), awaiting review
 - Projects are a first-class type: "Create project" makes `projects/<slug>/project.md` with
   default folders; sidebar/Home list projects, not just folders
 - `project.md` frontmatter holds the project's settings, edited through a form in the app
