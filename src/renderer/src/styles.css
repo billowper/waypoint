@@ -983,9 +983,109 @@ button.crumb.current:hover {
 /* Projects -------------------------------------------------------------- */
 
 .projects-nav {
-  max-height: 30vh;
-  overflow: auto;
   padding-top: 0;
+}
+
+/* Home, Inbox and Projects scroll together; the Files section (hidden by default) sits below */
+.sidebar-scroll {
+  flex: 1 1 auto;
+  min-height: 0;
+  overflow: auto;
+}
+
+.sidebar-scroll.shared {
+  flex: 1 1 50%;
+}
+
+.files-section {
+  flex: none;
+  display: flex;
+  flex-direction: column;
+  min-height: 0;
+  border-top: 1px solid var(--border);
+}
+
+.files-section.open {
+  flex: 1 1 50%;
+}
+
+.files-section .section-head {
+  padding-left: 6px;
+}
+
+/* A sidebar row with an expand arrow (Inbox, each project) */
+.nav-row {
+  display: flex;
+  align-items: center;
+  border-radius: 6px;
+}
+
+.nav-row:hover {
+  background: var(--hover);
+}
+
+.nav-row.active {
+  background: var(--active);
+}
+
+.nav-row.active .nav-item {
+  color: var(--text-strong);
+}
+
+.nav-row.done {
+  opacity: 0.55;
+}
+
+.nav-row.drop-target {
+  background: color-mix(in srgb, var(--accent) 16%, transparent);
+}
+
+.nav-row .nav-item {
+  flex: 1;
+  min-width: 0;
+  padding-left: 2px;
+  background: none;
+}
+
+.nav-chev {
+  width: 18px;
+  height: 28px;
+  flex: none;
+  display: grid;
+  place-items: center;
+  border-radius: 4px;
+}
+
+.nav-chev .chev {
+  margin: 0;
+}
+
+.row-add {
+  width: 22px;
+  height: 22px;
+  margin-right: 4px;
+  opacity: 0;
+}
+
+.nav-row:hover .row-add {
+  opacity: 1;
+}
+
+.nav-tree {
+  margin: 0 0 4px;
+}
+
+.tree-row.done {
+  opacity: 0.5;
+}
+
+.tree-row .task-id {
+  margin-right: 6px;
+}
+
+.tree-label {
+  overflow: hidden;
+  text-overflow: ellipsis;
 }
 
 .nav-item.done {

@@ -73,6 +73,8 @@ interface State {
   selectedDir: string
   expanded: Record<string, boolean>
   sidebarMode: 'files' | 'search' | 'git'
+  /** Which sidebar sections are open (remembered between launches) */
+  sidebarOpen: SidebarOpen
   git: GitStatus | null
   gitBusy: string | null
   vaultSettings: VaultSettings | null
@@ -134,6 +136,9 @@ interface State {
   openPicker(picker: PickerState): void
   closePicker(): void
   setSidebarMode(mode: State['sidebarMode']): void
+  toggleSection(section: 'files' | 'inbox'): void
+  /** Open or close a project's tree in the sidebar */
+  setProjectOpen(slug: string, open: boolean): void
   toggleBacklinks(): void
   clearReveal(): void
 }
@@ -145,6 +150,30 @@ export const canRename = (p: string) => p !== '' && p !== 'projects'
 
 let nextId = 0
 let prefsTimer: ReturnType<typeof setTimeout> | null = null
+
+/** Sidebar sections: the file tree starts hidden; projects open while you're in them unless set */
+export interface SidebarOpen {
+  files: boolean
+  inbox: boolean
+  /** Explicit choice per project; missing = open only while that project is in focus */
+  projects: Record<string, boolean>
+}
+const SIDEBAR_KEY = 'waypoint:sidebar'
+function loadSidebar(): SidebarOpen {
+  try {
+    const s = JSON.parse(localStorage.getItem(SIDEBAR_KEY) ?? 'null')
+    return { files: !!s?.files, inbox: s?.inbox !== false, projects: s?.projects ?? {} }
+  } catch {
+    return { files: false, inbox: true, projects: {} }
+  }
+}
+function saveSidebar(s: SidebarOpen) {
+  try {
+    localStorage.setItem(SIDEBAR_KEY, JSON.stringify(s))
+  } catch {
+    /* ignore */
+  }
+}
 const homeTab = (): Tab => ({ id: ++nextId, view: { kind: 'home' } })
 
 // Saves and file operations run one at a time, in order, so a save never lands on a path that
@@ -343,6 +372,7 @@ export const useStore = create<State>((set, get) => {
     selectedDir: 'notes',
     expanded: { notes: true },
     sidebarMode: 'files',
+    sidebarOpen: loadSidebar(),
     git: null,
     gitBusy: null,
     vaultSettings: null,
@@ -774,7 +804,26 @@ ${(e as Error).message}`)
     closeMenu: () => set({ menu: null }),
     openPicker: (picker) => set({ picker, menu: null }),
     closePicker: () => set({ picker: null }),
-    setSidebarMode: (sidebarMode) => set({ sidebarMode }),
+    // Search and Git live in the Files section, so choosing them opens it
+    setSidebarMode(sidebarMode) {
+      const sidebarOpen = { ...get().sidebarOpen, files: true }
+      saveSidebar(sidebarOpen)
+      set({ sidebarMode, sidebarOpen })
+    },
+
+    toggleSection(section) {
+      const cur = get().sidebarOpen
+      const sidebarOpen = { ...cur, [section]: !cur[section] }
+      saveSidebar(sidebarOpen)
+      set({ sidebarOpen })
+    },
+
+    setProjectOpen(slug, open) {
+      const cur = get().sidebarOpen
+      const sidebarOpen = { ...cur, projects: { ...cur.projects, [slug]: open } }
+      saveSidebar(sidebarOpen)
+      set({ sidebarOpen })
+    },
     toggleBacklinks: () => set((s) => ({ backlinksOpen: !s.backlinksOpen })),
     clearReveal: () => set({ reveal: null })
   }
