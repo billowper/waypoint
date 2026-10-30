@@ -24,6 +24,7 @@ import {
 } from './desktop'
 import { withDefaults, type Prefs } from '@shared/prefs'
 import { startNudges } from './nudges'
+import { backupNow } from './backups'
 import type { AppCommand, DesktopInfo } from '@shared/types'
 import type { ChangeEvent, VaultInfo } from '@shared/types'
 import { movedPath } from '@shared/names'
@@ -197,20 +198,38 @@ function loadPage(w: BrowserWindow, hash = '') {
   }
 }
 
+/** Window chrome colours to match the app's theme (the caption buttons are drawn by Windows) */
+function chrome() {
+  const light = !nativeTheme.shouldUseDarkColors
+  return light
+    ? { background: '#f8f7f4', overlay: { color: '#f8f7f4', symbolColor: '#34322d', height: 38 } }
+    : { background: '#17181b', overlay: { color: '#17181b', symbolColor: '#c9c6bf', height: 38 } }
+}
+
+function applyTheme() {
+  nativeTheme.themeSource = prefs().theme
+  const c = chrome()
+  if (win && !win.isDestroyed()) {
+    win.setBackgroundColor(c.background)
+    win.setTitleBarOverlay(c.overlay)
+  }
+}
+
 function createWindow() {
   const cfg = loadConfig()
   const b = cfg.bounds ?? { width: 1280, height: 820 }
-  nativeTheme.themeSource = 'dark'
+  nativeTheme.themeSource = prefs().theme
+  const c = chrome()
 
   win = new BrowserWindow({
     ...b,
     minWidth: 720,
     minHeight: 480,
     show: false,
-    backgroundColor: '#17181b',
+    backgroundColor: c.background,
     icon: appIcon(),
     titleBarStyle: 'hidden',
-    titleBarOverlay: { color: '#17181b', symbolColor: '#c9c6bf', height: 38 },
+    titleBarOverlay: c.overlay,
     webPreferences: {
       preload: preloadPath(),
       contextIsolation: true,
@@ -403,6 +422,7 @@ function registerIpc() {
   ipcMain.handle('prefs:save', (_e, p: Prefs) => {
     saveConfig({ prefs: withDefaults(p) })
     applyPrefs(prefs(), desktopHooks)
+    applyTheme()
     onPrefsChanged()
     return prefs()
   })
@@ -473,6 +493,7 @@ if (!gotLock) {
   })
 
   app.on('before-quit', () => (quitting = true))
+  nativeTheme.on('updated', () => applyTheme()) // Windows switched light/dark while on "system"
 
   app.whenReady().then(async () => {
     app.setAppUserModelId('com.billlowe.waypoint')
@@ -502,6 +523,24 @@ if (!gotLock) {
       nothing: () => toast('Nothing to nudge about', 'No overdue, due-soon or waiting tasks, and no quiet projects. Nice.')
     })
     ipcMain.handle('nudge:now', () => nudges.now())
+
+    // Backups: on demand, and daily (checked at start and every few hours) when set up
+    const runBackup = async () => {
+      const v = requireVault()
+      const p = prefs()
+      const file = await backupNow(v, p.backup.dir, p.backup.keep)
+      saveConfig({ prefs: { ...p, backup: { ...p.backup, last: Date.now() } } })
+      return file
+    }
+    ipcMain.handle('backup:now', runBackup)
+    const dailyBackup = () => {
+      const { backup } = prefs()
+      if (vault && backup.dir && backup.daily && Date.now() - backup.last > 24 * 3600_000) {
+        runBackup().catch((e) => toast('Backup failed', (e as Error).message))
+      }
+    }
+    setTimeout(dailyBackup, 2 * 60_000)
+    setInterval(dailyBackup, 3 * 3600_000)
     if (vault) updateJumpList(loadConfig().recent[vault.root] ?? [])
     const hidden = process.argv.includes('--hidden') // started with Windows: tray only
     pendingCommand = commandFromArgv(process.argv)

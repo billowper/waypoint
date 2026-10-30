@@ -4,6 +4,7 @@ import type { ExcalidrawImperativeAPI } from '@excalidraw/excalidraw/types'
 import '@excalidraw/excalidraw/index.css'
 import { baseName } from '@shared/names'
 import { enqueue, registerEditor, useStore } from '../store'
+import { useResolvedTheme } from '../theme'
 
 const SAVE_DELAY = 800
 /** Cards link back to notes/tasks with this scheme; clicks are handled here, never by a browser */
@@ -13,7 +14,8 @@ type Scene = Parameters<NonNullable<React.ComponentProps<typeof Excalidraw>['onC
 
 /** An Excalidraw board stored as a .excalidraw JSON file in the vault, saved as you draw */
 export default function Canvas({ path, active }: { path: string; active: boolean }) {
-  const { openFile, notes, tasks } = useStore()
+  const { openFile, notes, tasks, prefs } = useStore()
+  const theme = useResolvedTheme(prefs?.theme)
   const [initial, setInitial] = useState<Record<string, unknown> | null>(null)
   const [error, setError] = useState('')
   const api = useRef<ExcalidrawImperativeAPI | null>(null)
@@ -157,7 +159,7 @@ export default function Canvas({ path, active }: { path: string; active: boolean
       </div>
       <div className="canvas-host">
         <Excalidraw
-          theme="dark"
+          theme={theme}
           initialData={initial}
           excalidrawAPI={(a) => (api.current = a)}
           onChange={onChange}

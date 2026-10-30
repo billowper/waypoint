@@ -139,7 +139,9 @@ export class Vault {
         0
       )
     const all = await this.tree()
-    const projects = (await this.tree('projects')).filter((n) => n.type === 'dir').length
+    // Reuse the walk rather than reading projects/ again
+    const projectsDir = all.find((n) => n.type === 'dir' && n.path === 'projects')
+    const projects = (projectsDir?.children ?? []).filter((n) => n.type === 'dir').length
     return { notes: count(all), projects }
   }
 

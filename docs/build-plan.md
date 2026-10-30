@@ -103,7 +103,7 @@ vault/
 - Drop notes/tasks onto a board as linked cards
 - **Checkpoint:** how much whiteboard is needed
 
-### Phase 8 — Polish & release
+### Phase 8 — Polish & release — BUILT (unattended), awaiting review
 - Themes (light/dark), keyboard shortcut map, settings page
 - Performance pass on large vaults
 - Installer, auto-update, backups
@@ -147,3 +147,16 @@ vault/
   quick-capture hotkey Ctrl+Alt+W (Ctrl+Alt+Space was already taken on Bill's PC); start-with-Windows off by default; nudges at most every 2 h,
   weekdays 09:00–18:00, snoozable; canvas = Excalidraw; Phase 8 adds light theme + settings page +
   vault zip backups, skips auto-update (needs a release server)
+- 2026-10-30: Phase 8: light/system theme, Settings page (Windows, nudges, backups, shortcuts), daily zip backups
+  via Windows tar (no .git), lighter refresh on autosave, NSIS installer dist/Waypoint-Setup-0.0.1.exe.
+  Auto-update skipped (needs a release server).
+
+## Review checklist for Bill (all unattended phases)
+1. Install dist/Waypoint-Setup-0.0.1.exe (unsigned, so SmartScreen warns: More info → Run anyway).
+2. Projects: sidebar + → create; set status, tags, repo path (Open in VS Code), links, bookmarks.
+3. Tasks: Open board → add tasks, drag between columns, click a card → properties bar; Home → My work.
+4. Git: sidebar Git → Start versioning → edit → Commit; ⟲ on a note shows history and diffs.
+5. Windows: Ctrl+Alt+W quick capture → inbox.md; right-click the taskbar icon for the jump list; tray ◆ menu; closing keeps it in the tray.
+6. Nudges: Settings → Nudge me now (in-app banner when focused, toast otherwise); Don't nag / Snooze.
+7. Boards: project page → New board → Add note or task card → click its link icon.
+8. Settings: theme Light/System; Backups → choose folder → Back up now.

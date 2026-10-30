@@ -208,6 +208,8 @@ export interface Api {
   /** Quick capture window: append to inbox.md, then close */
   captureAdd(text: string): Promise<void>
   captureClose(): void
+  /** Zip the vault into the backup folder now; returns the file written */
+  backupNow(): Promise<string>
   /** New Excalidraw board in a folder; returns its path */
   createBoard(dir: string, name: string): Promise<string>
   /** Show a nudge right away (ignores timing rules; for trying it out) */

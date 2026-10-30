@@ -7,6 +7,17 @@ export interface Prefs {
   captureHotkey: string
   nudges: NudgePrefs
   theme: 'dark' | 'light' | 'system'
+  backup: BackupPrefs
+}
+
+export interface BackupPrefs {
+  /** Folder outside the vault for zip snapshots; '' = not set up */
+  dir: string
+  daily: boolean
+  /** How many snapshots to keep */
+  keep: number
+  /** Epoch ms of the last backup */
+  last: number
 }
 
 export interface NudgePrefs {
@@ -39,7 +50,8 @@ export const DEFAULT_PREFS: Prefs = {
     muted: [],
     staleDays: 14
   },
-  theme: 'dark'
+  theme: 'dark',
+  backup: { dir: '', daily: true, keep: 14, last: 0 }
 }
 
 /** Fill in anything missing (older config files, hand edits) */
@@ -47,6 +59,7 @@ export function withDefaults(p: Partial<Prefs> | undefined): Prefs {
   return {
     ...DEFAULT_PREFS,
     ...p,
-    nudges: { ...DEFAULT_PREFS.nudges, ...p?.nudges }
+    nudges: { ...DEFAULT_PREFS.nudges, ...p?.nudges },
+    backup: { ...DEFAULT_PREFS.backup, ...p?.backup }
   }
 }

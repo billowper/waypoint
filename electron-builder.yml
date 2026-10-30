@@ -8,6 +8,13 @@ files:
   - package.json
 win:
   target: nsis
+  icon: build/icon.ico
 nsis:
   oneClick: false
   allowToChangeInstallationDirectory: true
+  createDesktopShortcut: true
+  # The Start-menu shortcut carries the app id; Windows needs it before it will show toasts
+  createStartMenuShortcut: true
+  shortcutName: Waypoint
+  artifactName: Waypoint-Setup-${version}.exe
+  uninstallDisplayName: Waypoint

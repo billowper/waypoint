@@ -1,5 +1,6 @@
 import { lazy, Suspense, useEffect } from 'react'
 import { canRename, useStore } from './store'
+import { useApplyTheme } from './theme'
 import Sidebar from './components/Sidebar'
 import { PathBar, TabBar } from './components/TopBar'
 import Home from './components/Home'
@@ -37,13 +38,34 @@ const inTextField = () => {
 export default function App() {
   const { vault, view, tabs, activeTab, init, refresh, prompt, menu, backlinksOpen, git, setSidebarMode } = useStore()
 
+  useApplyTheme(useStore((s) => s.prefs?.theme))
+
   useEffect(() => {
     init()
   }, [init])
 
   useEffect(() => {
-    // Tree refresh on any change on disk (including our own saves — cheap at this size)
-    return window.api.onChanged(() => refresh())
+    // Refresh the tree, projects and tasks when files appear, vanish or project data changes.
+    // Plain edits to notes (every autosave) change none of that, so they're skipped; bursts
+    // (git pull, link rewrites) are coalesced into one refresh.
+    let timer: ReturnType<typeof setTimeout> | null = null
+    let gitTimer: ReturnType<typeof setTimeout> | null = null
+    const off = window.api.onChanged((events) => {
+      const structural = events.some((e) => e.event !== 'change' || e.path.startsWith('projects/'))
+      if (!structural) {
+        // Only the git "N changes" count can move; check it once typing settles
+        if (gitTimer) clearTimeout(gitTimer)
+        gitTimer = setTimeout(() => useStore.getState().refreshGit(), 1500)
+        return
+      }
+      if (timer) clearTimeout(timer)
+      timer = setTimeout(() => refresh(), 150)
+    })
+    return () => {
+      off()
+      if (timer) clearTimeout(timer)
+      if (gitTimer) clearTimeout(gitTimer)
+    }
   }, [refresh])
 
   useEffect(() => {

@@ -7,7 +7,7 @@ function greeting() {
 }
 
 export default function Home() {
-  const { stats, recent, openFile, newNote, tree, projects, openProject, createProject, tasks } = useStore()
+  const { stats, recent, openFile, newNote, tree, projects, openProject, createProject, tasks, notes } = useStore()
   const active = projects.filter((p) => p.status === 'active')
   // My work: open tasks in projects that aren't finished, overdue first
   const liveProjects = new Set(projects.filter((p) => p.status !== 'done').map((p) => p.slug))
@@ -109,7 +109,7 @@ export default function Home() {
           <p className="empty">Notes you open will show up here.</p>
         ) : (
           <ul className="recent">
-            {recent.slice(0, 10).map((r) => (
+            {recent.filter((r) => notes.includes(r)).slice(0, 10).map((r) => (
               <li key={r}>
                 <button onClick={() => openFile(r)}>
                   <span className="recent-name">{r.split('/').pop()!.replace(/\.md$/, '')}</span>

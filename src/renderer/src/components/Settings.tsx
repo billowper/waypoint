@@ -16,6 +16,7 @@ export default function Settings() {
   const { prefs, savePrefs, vault, openVault } = useStore()
   const [info, setInfo] = useState<DesktopInfo | null>(null)
   const [recording, setRecording] = useState(false)
+  const [backingUp, setBackingUp] = useState(false)
 
   useEffect(() => {
     window.api.desktopInfo().then(setInfo)
@@ -24,6 +25,23 @@ export default function Settings() {
   if (!prefs) return null
   const set = (patch: Partial<Prefs>) => savePrefs({ ...prefs, ...patch })
   const nudge = (patch: Partial<Prefs['nudges']>) => set({ nudges: { ...prefs.nudges, ...patch } })
+  const backup = (patch: Partial<Prefs['backup']>) => set({ backup: { ...prefs.backup, ...patch } })
+  const backUpNow = async () => {
+    setBackingUp(true)
+    try {
+      const file = await window.api.backupNow()
+      // The main process stamped the time; pick it up
+      useStore.setState({ prefs: await window.api.prefs() })
+      alert(`Backed up to:
+${file}`)
+    } catch (e) {
+      alert(`Backup failed.
+
+${(e as Error).message}`)
+    } finally {
+      setBackingUp(false)
+    }
+  }
   const hours = Array.from({ length: 24 }, (_, h) => h)
 
   return (
@@ -209,6 +227,56 @@ export default function Settings() {
                   Nudge me now
                 </button>
               </div>
+            </div>
+          </>
+        )}
+      </section>
+
+      <section className="card">
+        <h2>Backups</h2>
+        <div className="setting">
+          <div>
+            <div className="setting-name">Backup folder</div>
+            <div className="setting-help">
+              {prefs.backup.dir || 'Zip snapshots of the vault go here, e.g. a folder on OneDrive or another drive.'}
+            </div>
+          </div>
+          <button
+            className="btn small"
+            onClick={async () => {
+              const dir = await window.api.pickPath('folder')
+              if (dir) backup({ dir })
+            }}
+          >
+            {prefs.backup.dir ? 'Change…' : 'Choose…'}
+          </button>
+        </div>
+        {prefs.backup.dir && (
+          <>
+            <label className="setting">
+              <div className="setting-name">Back up once a day</div>
+              <input type="checkbox" checked={prefs.backup.daily} onChange={(e) => backup({ daily: e.target.checked })} />
+            </label>
+            <div className="setting">
+              <div className="setting-name">Keep</div>
+              <select value={prefs.backup.keep} onChange={(e) => backup({ keep: Number(e.target.value) })}>
+                {[3, 7, 14, 30, 90].map((n) => (
+                  <option key={n} value={n}>
+                    newest {n}
+                  </option>
+                ))}
+              </select>
+            </div>
+            <div className="setting">
+              <div>
+                <div className="setting-name">
+                  {prefs.backup.last ? `Last backup ${new Date(prefs.backup.last).toLocaleString()}` : 'Not backed up yet'}
+                </div>
+                <div className="setting-help">Git history (.git) isn't included; it's a backup of its own.</div>
+              </div>
+              <button className="btn small primary" disabled={backingUp} onClick={backUpNow}>
+                {backingUp ? 'Backing up…' : 'Back up now'}
+              </button>
             </div>
           </>
         )}

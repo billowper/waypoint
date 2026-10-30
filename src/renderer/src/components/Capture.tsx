@@ -1,9 +1,16 @@
-import { useState } from 'react'
+import { useEffect, useState } from 'react'
+import type { Prefs } from '@shared/prefs'
+import { useApplyTheme } from '../theme'
 
 /** The quick-capture window (global hotkey, jump list, tray): one box that appends to inbox.md */
 export default function Capture() {
   const [text, setText] = useState('')
   const [busy, setBusy] = useState(false)
+  const [theme, setTheme] = useState<Prefs['theme']>()
+  useApplyTheme(theme)
+  useEffect(() => {
+    window.api.prefs().then((p) => setTheme(p.theme))
+  }, [])
 
   const save = async () => {
     if (!text.trim() || busy) return

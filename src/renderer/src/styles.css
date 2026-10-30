@@ -17,7 +17,40 @@
   --display: 'Segoe UI Variable Display', 'Segoe UI', system-ui, sans-serif;
   --mono: 'Cascadia Code', 'Cascadia Mono', Consolas, monospace;
   --titlebar: 38px;
+  --tint: rgba(255, 255, 255, 0.06); /* inline code, faint fills */
+  --scrollbar: #34353c;
+  --quote: #45464e;
+  --warn: #e5c890;
+  --danger: #ef6f6c;
+  --ok: #a6d189;
+  --info: #8caaee;
   color-scheme: dark;
+}
+
+/* Light theme (Settings → Appearance); same roles, warm paper tones */
+:root[data-theme='light'] {
+  --bg: #f8f7f4;
+  --sidebar: #f0eee9;
+  --panel: #ffffff;
+  --hover: #e9e6df;
+  --active: #e1ddd4;
+  --border: #dfdbd2;
+  --text: #34322d;
+  --text-strong: #17160f;
+  --text-dim: #6c6961;
+  --text-faint: #9c988e;
+  --accent: #b8740f;
+  --accent-ink: #ffffff;
+  --selection: rgba(184, 116, 15, 0.2);
+  --code: #8a5510;
+  --tint: rgba(0, 0, 0, 0.05);
+  --scrollbar: #cdc8bd;
+  --quote: #cfcac0;
+  --warn: #a8690a;
+  --danger: #c63d3a;
+  --ok: #3d8a2c;
+  --info: #3b63c4;
+  color-scheme: light;
 }
 
 * {
@@ -599,7 +632,7 @@ button.crumb.current:hover {
 }
 
 .save-state.error {
-  color: #ef6f6c;
+  color: var(--danger);
 }
 
 /* Editor ---------------------------------------------------------------- */
@@ -663,7 +696,7 @@ button.crumb.current:hover {
 }
 
 .editor .cm-md-inline-code {
-  background: rgba(255, 255, 255, 0.06);
+  background: var(--tint);
   border-radius: 4px;
   padding: 1px 3px;
 }
@@ -686,7 +719,7 @@ button.crumb.current:hover {
 }
 
 .editor .cm-line.cm-md-quote {
-  border-left: 3px solid #45464e;
+  border-left: 3px solid var(--quote);
   padding-left: 14px;
   color: var(--text-dim);
 }
@@ -696,7 +729,7 @@ button.crumb.current:hover {
   font-family: var(--mono);
   font-size: 0.82em;
   color: var(--text-faint);
-  background: rgba(255, 255, 255, 0.025);
+  background: var(--tint);
 }
 
 .editor .cm-line.cm-md-frontmatter * {
@@ -948,9 +981,9 @@ button.crumb.current:hover {
   background: var(--status);
 }
 
-.status-idea { --status: #8caaee; }
-.status-active { --status: #a6d189; }
-.status-paused { --status: #e5c890; }
+.status-idea { --status: var(--info); }
+.status-active { --status: var(--ok); }
+.status-paused { --status: var(--warn); }
 .status-done { --status: #737994; }
 
 .project-page {
@@ -1262,7 +1295,7 @@ button.crumb.current:hover {
 }
 
 .task-card:hover {
-  border-color: #3a3b43;
+  border-color: var(--active);
 }
 
 .task-card.dragging {
@@ -1278,11 +1311,11 @@ button.crumb.current:hover {
 }
 
 .task-card.priority-high {
-  border-left-color: #e5c890;
+  border-left-color: var(--warn);
 }
 
 .task-card.priority-urgent {
-  border-left-color: #ef6f6c;
+  border-left-color: var(--danger);
 }
 
 .task-title {
@@ -1319,11 +1352,11 @@ button.crumb.current:hover {
 }
 
 .badge.priority-high {
-  color: #e5c890;
+  color: var(--warn);
 }
 
 .badge.priority-urgent {
-  color: #ef6f6c;
+  color: var(--danger);
 }
 
 .badge.priority-low {
@@ -1337,12 +1370,12 @@ button.crumb.current:hover {
 }
 
 .due.soon {
-  color: #e5c890;
+  color: var(--warn);
 }
 
 .due.today,
 .due.overdue {
-  color: #ef6f6c;
+  color: var(--danger);
   font-weight: 600;
 }
 
@@ -1442,11 +1475,11 @@ button.crumb.current:hover {
 }
 
 .taskbar input[type='date'] {
-  color-scheme: dark;
+  color-scheme: inherit;
 }
 
 .stat.alert .stat-num {
-  color: #ef6f6c;
+  color: var(--danger);
 }
 
 .recent button .due {
@@ -1478,7 +1511,7 @@ button.crumb.current:hover {
 }
 
 .git-indicator.conflict {
-  color: #ef6f6c;
+  color: var(--danger);
 }
 
 .git-icon {
@@ -1576,17 +1609,17 @@ button.crumb.current:hover {
   flex: none;
   font-family: var(--mono);
   font-weight: 600;
-  color: #e5c890;
+  color: var(--warn);
 }
 
 .git-code.code-new,
 .git-code.code-A {
-  color: #a6d189;
+  color: var(--ok);
 }
 
 .git-code.code-D,
 .git-code.code-U {
-  color: #ef6f6c;
+  color: var(--danger);
 }
 
 .git-path {
@@ -1599,7 +1632,7 @@ button.crumb.current:hover {
 .git-warning,
 .conflict-banner {
   background: rgba(239, 111, 108, 0.12);
-  color: #f2a6a4;
+  color: var(--danger);
   border: 1px solid rgba(239, 111, 108, 0.35);
   border-radius: 7px;
   padding: 8px 10px;
@@ -1697,17 +1730,17 @@ button.crumb.current:hover {
 }
 
 .diff .add {
-  color: #a6d189;
+  color: var(--ok);
   background: rgba(166, 209, 137, 0.08);
 }
 
 .diff .del {
-  color: #ef9f9c;
+  color: var(--danger);
   background: rgba(239, 111, 108, 0.08);
 }
 
 .diff .hunk {
-  color: #8caaee;
+  color: var(--info);
 }
 
 .diff .meta {
@@ -1919,7 +1952,7 @@ body.capture-window {
 }
 
 .setting-help .warn {
-  color: #ef6f6c;
+  color: var(--danger);
 }
 
 .setting input[type='checkbox'] {
@@ -2104,7 +2137,7 @@ body.capture-window {
 }
 
 .menu button.danger:hover {
-  color: #ef6f6c;
+  color: var(--danger);
 }
 
 .menu hr {
@@ -2119,7 +2152,7 @@ body.capture-window {
 }
 
 ::-webkit-scrollbar-thumb {
-  background: #34353c;
+  background: var(--scrollbar);
   border-radius: 10px;
   border: 3px solid transparent;
   background-clip: content-box;
