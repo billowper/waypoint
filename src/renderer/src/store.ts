@@ -1,5 +1,5 @@
 import { create } from 'zustand'
-import type { Project, Task, TaskFields, TreeNode, VaultInfo, VaultStats } from '@shared/types'
+import type { GitStatus, Project, Task, TaskFields, TreeNode, VaultInfo, VaultSettings, VaultStats } from '@shared/types'
 import { baseName, movedPath } from '@shared/names'
 
 /** `docId` stays the same when the open file is renamed, so the editor isn't recreated. */
@@ -8,6 +8,8 @@ export type View =
   | { kind: 'file'; path: string; docId: number }
   | { kind: 'project'; slug: string }
   | { kind: 'board'; slug: string }
+  /** Git history of one note, or of the whole vault when path is '' */
+  | { kind: 'history'; path: string }
 
 export interface Tab {
   id: number
@@ -59,7 +61,10 @@ interface State {
   /** Folder that "new note / new folder" targets */
   selectedDir: string
   expanded: Record<string, boolean>
-  sidebarMode: 'files' | 'search'
+  sidebarMode: 'files' | 'search' | 'git'
+  git: GitStatus | null
+  gitBusy: string | null
+  vaultSettings: VaultSettings | null
   backlinksOpen: boolean
   prompt: PromptState | null
   menu: MenuState | null
@@ -77,6 +82,11 @@ interface State {
   openBoard(slug: string, opts?: { newTab?: boolean }): void
   createTask(project: string, fields: Partial<TaskFields>): Promise<string | null>
   updateTask(path: string, patch: Partial<TaskFields>): Promise<void>
+  refreshGit(): Promise<void>
+  /** Run a git action with a busy label; errors are shown to the user */
+  runGit(label: string, fn: () => Promise<unknown>): Promise<boolean>
+  saveVaultSettings(settings: VaultSettings): Promise<void>
+  openHistory(path: string, opts?: { newTab?: boolean }): void
   newTab(): void
   closeTab(id: number): void
   activateTab(id: number): void
@@ -245,6 +255,9 @@ export const useStore = create<State>((set, get) => {
     selectedDir: 'notes',
     expanded: { notes: true },
     sidebarMode: 'files',
+    git: null,
+    gitBusy: null,
+    vaultSettings: null,
     backlinksOpen: true,
     prompt: null,
     menu: null,
@@ -285,6 +298,7 @@ export const useStore = create<State>((set, get) => {
       const folders: string[] = []
       flatten(tree, notes, folders)
       set({ tree, stats, recent, notes, folders, projects, tasks })
+      get().refreshGit()
     },
 
     async openFile(path, opts = {}) {
@@ -357,6 +371,53 @@ ${(e as Error).message}`)
 ${(e as Error).message}`)
       }
       await get().refresh()
+    },
+
+    async refreshGit() {
+      if (!get().vault) return
+      const [git, vaultSettings] = await Promise.all([
+        window.api.gitStatus().catch((e): GitStatus => ({
+          isRepo: false, branch: '', files: [], conflicted: [], ahead: 0, behind: 0, hasRemote: false,
+          lastCommit: null, error: (e as Error).message
+        })),
+        window.api.vaultSettings().catch(() => null)
+      ])
+      set({ git, vaultSettings })
+    },
+
+    async runGit(label, fn) {
+      if (get().gitBusy) return false
+      set({ gitBusy: label })
+      try {
+        await flushEditors() // commit what's on screen, and don't let a pull fight unsaved text
+        await enqueue(fn)
+        return true
+      } catch (e) {
+        alert(`${label} failed.
+
+${(e as Error).message}`)
+        return false
+      } finally {
+        set({ gitBusy: null })
+        await get().refresh()
+      }
+    },
+
+    async saveVaultSettings(settings) {
+      set({ vaultSettings: settings })
+      await window.api.saveVaultSettings(settings)
+    },
+
+    openHistory(path, opts = {}) {
+      const { tabs, activeTab } = get()
+      const existing = tabs.find((t) => t.view.kind === 'history' && t.view.path === path)
+      if (existing) return setTabs(tabs, existing.id)
+      const tab = { id: ++nextId, view: { kind: 'history', path } as View }
+      if (!opts.newTab && tabs.find((t) => t.id === activeTab)?.view.kind === 'history') {
+        return setTabs(tabs.map((t) => (t.id === activeTab ? { ...t, view: tab.view } : t)), activeTab)
+      }
+      const at = tabs.findIndex((t) => t.id === activeTab) + 1
+      setTabs([...tabs.slice(0, at), tab, ...tabs.slice(at)], tab.id)
     },
 
     async createProject() {

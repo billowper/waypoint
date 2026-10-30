@@ -7,7 +7,8 @@ import { Vault } from './vault'
 import { NotesIndex } from './notesIndex'
 import { createProject, knownExternalPaths, listProjects, saveProject } from './projects'
 import { createTask, isTaskPath, listTasks, updateTask } from './tasks'
-import type { ProjectSettings, TaskFields } from '@shared/types'
+import { VaultGit } from './git'
+import type { ProjectSettings, TaskFields, VaultSettings } from '@shared/types'
 import { loadConfig, saveConfig } from './config'
 import type { ChangeEvent, VaultInfo } from '@shared/types'
 import { movedPath } from '@shared/names'
@@ -16,6 +17,7 @@ import { formatLink, linkTextFor, parseLinks, resolveLink } from '@shared/links'
 let win: BrowserWindow | null = null
 let vault: Vault | null = null
 let notes: NotesIndex | null = null
+let git: VaultGit | null = null
 let watcher: FSWatcher | null = null
 
 const MAX_RECENT = 20
@@ -34,16 +36,44 @@ function requireIndex(): NotesIndex {
   return notes
 }
 
+function requireGit(): VaultGit {
+  if (!git) throw new Error('No vault open')
+  return git
+}
+
+/** Optional auto-commit (off by default): commits any changes every N minutes. */
+let autoCommitTimer: NodeJS.Timeout | null = null
+async function scheduleAutoCommit() {
+  if (autoCommitTimer) clearInterval(autoCommitTimer)
+  autoCommitTimer = null
+  const v = vault
+  if (!v) return
+  const { git: g } = await v.settings()
+  if (!g.autoCommit) return
+  autoCommitTimer = setInterval(async () => {
+    if (vault !== v || !git?.isRepo()) return
+    try {
+      if (await git.commitIfChanged(`Auto-commit ${new Date().toLocaleString('en-GB')}`)) {
+        win?.webContents.send('git:changed')
+      }
+    } catch (e) {
+      console.error('[auto-commit]', e) // e.g. conflicts: leave it for Bill to sort out
+    }
+  }, g.intervalMinutes * 60_000)
+}
+
 async function setVault(path: string | undefined) {
   await watcher?.close()
   watcher = null
   vault = path ? new Vault(path) : null
   notes = vault ? new NotesIndex(vault) : null
+  git = vault ? new VaultGit(vault.root) : null
   saveConfig({ vaultPath: path })
   if (vault) {
     notes!.rebuild()
     startWatching(vault)
   }
+  scheduleAutoCommit()
 }
 
 function notify(events: ChangeEvent[]) {
@@ -264,6 +294,22 @@ function registerIpc() {
     await requireIndex().idle()
     return requireIndex().backlinks(rel)
   })
+  ipcMain.handle('settings:get', () => requireVault().settings())
+  ipcMain.handle('settings:save', async (_e, settings: VaultSettings) => {
+    await requireVault().saveSettings(settings)
+    scheduleAutoCommit()
+  })
+  ipcMain.handle('git:status', () => requireGit().status())
+  ipcMain.handle('git:init', () => requireGit().init())
+  ipcMain.handle('git:commit', (_e, message: string) =>
+    requireGit().commitIfChanged(message.trim() || `Update ${new Date().toLocaleString('en-GB')}`)
+  )
+  ipcMain.handle('git:pull', () => requireGit().pull())
+  ipcMain.handle('git:push', () => requireGit().push())
+  ipcMain.handle('git:log', (_e, file?: string) => requireGit().log(file))
+  ipcMain.handle('git:diff', (_e, hash: string, file?: string) =>
+    hash === 'working' ? requireGit().workingDiff(file) : requireGit().diff(hash, file)
+  )
   ipcMain.handle('tasks:list', (_e, project?: string) => listTasks(requireVault(), project))
   ipcMain.handle('tasks:create', async (_e, project: string, fields: Partial<TaskFields>) => {
     const rel = await createTask(requireVault(), project, fields)

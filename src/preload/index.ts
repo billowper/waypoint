@@ -26,6 +26,15 @@ const api: Api = {
   tasks: (project) => ipcRenderer.invoke('tasks:list', project),
   createTask: (project, fields) => ipcRenderer.invoke('tasks:create', project, fields),
   updateTask: (rel, patch) => ipcRenderer.invoke('tasks:update', rel, patch),
+  vaultSettings: () => ipcRenderer.invoke('settings:get'),
+  saveVaultSettings: (settings) => ipcRenderer.invoke('settings:save', settings),
+  gitStatus: () => ipcRenderer.invoke('git:status'),
+  gitInit: () => ipcRenderer.invoke('git:init'),
+  gitCommit: (message) => ipcRenderer.invoke('git:commit', message),
+  gitPull: () => ipcRenderer.invoke('git:pull'),
+  gitPush: () => ipcRenderer.invoke('git:push'),
+  gitLog: (file) => ipcRenderer.invoke('git:log', file),
+  gitDiff: (hash, file) => ipcRenderer.invoke('git:diff', hash, file),
   reveal: (rel) => ipcRenderer.invoke('file:reveal', rel),
   recent: () => ipcRenderer.invoke('recent:get'),
   touchRecent: (rel) => ipcRenderer.invoke('recent:touch', rel),
@@ -33,6 +42,11 @@ const api: Api = {
     const h = (_e: IpcRendererEvent, events: ChangeEvent[]) => cb(events)
     ipcRenderer.on('vault:changed', h)
     return () => ipcRenderer.removeListener('vault:changed', h)
+  },
+  onGitChanged: (cb) => {
+    const h = () => cb()
+    ipcRenderer.on('git:changed', h)
+    return () => ipcRenderer.removeListener('git:changed', h)
   }
 }
 

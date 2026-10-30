@@ -13,7 +13,9 @@ export function TabBar() {
       : t.view.kind === 'project' || t.view.kind === 'board'
         ? (projects.find((p) => 'slug' in t.view && p.slug === t.view.slug)?.title ?? t.view.slug) +
           (t.view.kind === 'board' ? ' · tasks' : '')
-        : 'Home'
+        : t.view.kind === 'history'
+          ? `History · ${t.view.path ? baseName(t.view.path) : 'vault'}`
+          : 'Home'
   const onMouseDown = (t: Tab) => (e: MouseEvent) => {
     if (e.button === 1) {
       e.preventDefault()
@@ -51,7 +53,7 @@ export function TabBar() {
 
 /** Folder path, title (click to rename) and note actions for the open note */
 export function PathBar() {
-  const { view, activeTab, saveStates, rename, backlinksOpen, toggleBacklinks } = useStore()
+  const { view, activeTab, saveStates, rename, backlinksOpen, toggleBacklinks, openHistory, git } = useStore()
   if (view.kind !== 'file') return null
   const crumbs = view.path.replace(/\.md$/i, '').split('/')
   const saveState = saveStates[activeTab] ?? 'saved'
@@ -72,6 +74,11 @@ export function PathBar() {
         )}
       </nav>
       <span className={`save-state ${saveState}`}>{SAVE_LABEL[saveState]}</span>
+      {git?.isRepo && (
+        <button className="icon-btn" title="History of this note" onClick={(e) => openHistory(view.path, { newTab: e.ctrlKey })}>
+          ⟲
+        </button>
+      )}
       <button className="icon-btn" title="Show in Explorer" onClick={() => window.api.reveal(view.path)}>
         ⧉
       </button>

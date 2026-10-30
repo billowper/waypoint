@@ -94,6 +94,33 @@ export interface Task extends TaskFields {
   completed: string
 }
 
+export interface GitStatus {
+  isRepo: boolean
+  branch: string
+  /** Changed files (vault-relative) with git's two-letter code, e.g. "M", "A", "?" */
+  files: { path: string; code: string }[]
+  conflicted: string[]
+  ahead: number
+  behind: number
+  hasRemote: boolean
+  lastCommit: { hash: string; date: string; message: string } | null
+  /** Set when git itself isn't installed or failed */
+  error?: string
+}
+
+export interface GitCommit {
+  hash: string
+  date: string
+  message: string
+  author: string
+}
+
+/** Per-vault settings in .app/settings.json (committed with the vault) */
+export interface VaultSettings {
+  version: number
+  git: { autoCommit: boolean; intervalMinutes: number }
+}
+
 export interface Api {
   getVault(): Promise<VaultInfo | null>
   openVault(): Promise<VaultInfo | null>
@@ -128,8 +155,21 @@ export interface Api {
   /** Returns the new task's path */
   createTask(project: string, fields: Partial<TaskFields>): Promise<string>
   updateTask(rel: string, patch: Partial<TaskFields>): Promise<Task>
+  vaultSettings(): Promise<VaultSettings>
+  saveVaultSettings(settings: VaultSettings): Promise<void>
+  gitStatus(): Promise<GitStatus>
+  gitInit(): Promise<void>
+  /** Resolves false when there was nothing to commit */
+  gitCommit(message: string): Promise<boolean>
+  gitPull(): Promise<string>
+  gitPush(): Promise<void>
+  gitLog(file?: string): Promise<GitCommit[]>
+  /** Patch for a commit, or uncommitted changes when hash is "working" */
+  gitDiff(hash: string, file?: string): Promise<string>
   recent(): Promise<string[]>
   touchRecent(rel: string): Promise<string[]>
   reveal(rel: string): Promise<void>
   onChanged(cb: (events: ChangeEvent[]) => void): () => void
+  /** Fires after commits the app made by itself (auto-commit) */
+  onGitChanged(cb: () => void): () => void
 }

@@ -2,6 +2,7 @@ import { useState, type DragEvent } from 'react'
 import { useStore } from '../store'
 import FileTree, { DRAG_TYPE } from './FileTree'
 import SearchPanel from './SearchPanel'
+import GitPanel, { GitIndicator } from './GitPanel'
 
 export default function Sidebar() {
   const {
@@ -95,6 +96,9 @@ export default function Sidebar() {
           >
             Search
           </button>
+          <button className={sidebarMode === 'git' ? 'on' : ''} title="Version history" onClick={() => setSidebarMode('git')}>
+            Git
+          </button>
         </div>
         {sidebarMode === 'files' && (
           <>
@@ -122,9 +126,12 @@ export default function Sidebar() {
         >
           <FileTree nodes={tree} depth={0} />
         </div>
-      ) : (
+      ) : sidebarMode === 'search' ? (
         <SearchPanel />
+      ) : (
+        <GitPanel />
       )}
+      <GitIndicator />
     </aside>
   )
 }

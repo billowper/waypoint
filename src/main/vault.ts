@@ -1,6 +1,6 @@
 import { promises as fs, existsSync } from 'fs'
 import { join, resolve, relative, sep, basename, extname, dirname } from 'path'
-import type { TreeNode, VaultStats } from '@shared/types'
+import type { TreeNode, VaultSettings, VaultStats } from '@shared/types'
 import { sanitize } from '@shared/names'
 
 const IGNORED = new Set(['.git', 'node_modules', '.app', '.obsidian', '.trash'])
@@ -68,6 +68,29 @@ export class Vault {
         ''
       ].join('\n')
     )
+  }
+
+  /** .app/settings.json, with defaults for anything missing (the file is optional) */
+  async settings(): Promise<VaultSettings> {
+    let data: Partial<VaultSettings> = {}
+    try {
+      data = JSON.parse(await fs.readFile(join(this.root, '.app', 'settings.json'), 'utf8'))
+    } catch {
+      /* missing or unreadable: defaults */
+    }
+    return {
+      ...data,
+      version: 1,
+      git: {
+        autoCommit: data.git?.autoCommit === true,
+        intervalMinutes: Math.max(5, Number(data.git?.intervalMinutes) || 15)
+      }
+    }
+  }
+
+  async saveSettings(settings: VaultSettings): Promise<void> {
+    await fs.mkdir(join(this.root, '.app'), { recursive: true })
+    await fs.writeFile(join(this.root, '.app', 'settings.json'), JSON.stringify(settings, null, 2) + '\n', 'utf8')
   }
 
   async tree(dirRel = ''): Promise<TreeNode[]> {

@@ -80,7 +80,7 @@ vault/
 - Cross-project "My work" view on Home
 - **Checkpoint:** workflow states and fields actually wanted
 
-### Phase 4 — Git integration
+### Phase 4 — Git integration — BUILT (unattended), awaiting review
 - Init/attach repo for the vault; status indicator
 - Commit (with message), pull, push; optional auto-commit on interval
 - File history and diff view; conflict notice

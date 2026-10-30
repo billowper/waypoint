@@ -12,6 +12,7 @@ import Backlinks from './components/Backlinks'
 import ProjectPage from './components/ProjectPage'
 import Board from './components/Board'
 import TaskBar from './components/TaskBar'
+import History from './components/History'
 
 /** F2 / Delete act on the keyboard-focused tree item, else the open note (else selected folder for F2) */
 function fileTarget(fallbackToFolder: boolean): string | null {
@@ -29,7 +30,7 @@ const inTextField = () => {
 }
 
 export default function App() {
-  const { vault, view, tabs, activeTab, init, refresh, prompt, menu, backlinksOpen } = useStore()
+  const { vault, view, tabs, activeTab, init, refresh, prompt, menu, backlinksOpen, git, setSidebarMode } = useStore()
 
   useEffect(() => {
     init()
@@ -39,6 +40,16 @@ export default function App() {
     // Tree refresh on any change on disk (including our own saves — cheap at this size)
     return window.api.onChanged(() => refresh())
   }, [refresh])
+
+  useEffect(() => {
+    // Git status also changes without file edits (auto-commit, pushes from elsewhere)
+    const off = window.api.onGitChanged(() => useStore.getState().refreshGit())
+    const timer = setInterval(() => useStore.getState().refreshGit(), 60_000)
+    return () => {
+      off()
+      clearInterval(timer)
+    }
+  }, [])
 
   useEffect(() => {
     const onKey = (e: KeyboardEvent) => {
@@ -88,6 +99,12 @@ export default function App() {
       <Sidebar />
       <main className="main">
         <TabBar />
+        {git && git.conflicted.length > 0 && (
+          <button className="conflict-banner" onClick={() => setSidebarMode('git')}>
+            {git.conflicted.length} file{git.conflicted.length === 1 ? ' has' : 's have'} git conflicts after a pull. Click
+            to see them.
+          </button>
+        )}
         <PathBar />
         {view.kind === 'file' && <TaskBar path={view.path} />}
         <div className="content">
@@ -95,6 +112,7 @@ export default function App() {
             {view.kind === 'home' && <Home />}
             {view.kind === 'project' && <ProjectPage key={view.slug} slug={view.slug} />}
             {view.kind === 'board' && <Board key={view.slug} slug={view.slug} />}
+            {view.kind === 'history' && <History key={view.path} path={view.path} />}
             {/* Every open note keeps its editor (and undo history); only the active one shows */}
             {tabs.map((t) =>
               t.view.kind === 'file' ? (
