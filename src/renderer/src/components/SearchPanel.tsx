@@ -3,6 +3,7 @@ import type { SearchHit } from '@shared/types'
 import { baseName } from '@shared/names'
 import { useStore } from '../store'
 import { noteMenu, showMenu } from '../menus'
+import Icon from './Icon'
 
 const DEBOUNCE = 150
 const CONTEXT = 40 // characters shown before the first match on long lines
@@ -110,6 +111,7 @@ export default function SearchPanel() {
                 title={h.path}
                 onClick={(e) => open(noteRow, e.ctrlKey)}
               >
+                <Icon path={h.path} />
                 {baseName(h.path)}
                 <span className="search-dir">{h.path.includes('/') ? h.path.slice(0, h.path.lastIndexOf('/')) : ''}</span>
               </button>

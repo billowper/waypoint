@@ -160,3 +160,6 @@ vault/
 6. Nudges: Settings → Nudge me now (in-app banner when focused, toast otherwise); Don't nag / Snooze.
 7. Boards: project page → New board → Add note or task card → click its link icon.
 8. Settings: theme Light/System; Backups → choose folder → Back up now.
+- 2026-10-30: Icons for every content type live in .app/icons.json (path → emoji or img:<file>), pictures in
+  .app/icons/ (copied from a file or downloaded once from a URL), served via wp-icon://; picking uses Windows' emoji
+  panel (app.showEmojiPanel). Icons follow renames/moves and are dropped on delete

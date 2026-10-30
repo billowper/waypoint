@@ -14,6 +14,7 @@ import ContextMenu from './components/ContextMenu'
 import Picker from './components/Picker'
 import Backlinks from './components/Backlinks'
 import ProjectPage from './components/ProjectPage'
+import IconPicker from './components/IconPicker'
 import Board from './components/Board'
 import TaskBar from './components/TaskBar'
 import History from './components/History'
@@ -229,6 +230,7 @@ export default function App() {
       </main>
       {menu && <ContextMenu {...menu} />}
       <Picker />
+      <IconPicker />
       {prompt && <Prompt {...prompt} />}
     </div>
   )

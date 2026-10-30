@@ -68,6 +68,16 @@ const api: Api = {
   backupNow: () => ipcRenderer.invoke('backup:now'),
   setChrome: (background, symbols) => ipcRenderer.send('theme:chrome', background, symbols),
   installedFonts: () => ipcRenderer.invoke('fonts:list'),
+  icons: () => ipcRenderer.invoke('icons:get'),
+  setIcon: (path, icon) => ipcRenderer.invoke('icons:set', path, icon),
+  iconFromFile: (path) => ipcRenderer.invoke('icons:fromFile', path),
+  iconFromUrl: (path, url) => ipcRenderer.invoke('icons:fromUrl', path, url),
+  showEmojiPanel: () => ipcRenderer.send('icons:emojiPanel'),
+  onIconsChanged: (cb) => {
+    const h = () => cb()
+    ipcRenderer.on('icons:changed', h)
+    return () => ipcRenderer.removeListener('icons:changed', h)
+  },
   openWindow: (views, atCursor) => ipcRenderer.invoke('window:open', views, atCursor),
   windowInfo: () => ipcRenderer.invoke('window:info'),
   claimOpen: (path) => ipcRenderer.invoke('window:claim', path),

@@ -73,6 +73,12 @@ interface State {
   selectedDir: string
   expanded: Record<string, boolean>
   sidebarMode: 'files' | 'search' | 'git'
+  /** Icons by vault path (emoji or "img:<file>"), from .app/icons.json */
+  icons: Record<string, string>
+  /** The icon chooser, when open: for which item, and where */
+  iconPicker: { path: string; x: number; y: number } | null
+  /** Where the last right-click menu was, so things it opens appear in the same place */
+  lastMenuPos: { x: number; y: number }
   /** Which sidebar sections are open (remembered between launches) */
   sidebarOpen: SidebarOpen
   git: GitStatus | null
@@ -137,6 +143,10 @@ interface State {
   closePicker(): void
   setSidebarMode(mode: State['sidebarMode']): void
   toggleSection(section: 'files' | 'inbox'): void
+  /** Open the icon chooser for a path (at a point, or where the last menu was) */
+  openIconPicker(path: string, at?: { x: number; y: number }): void
+  closeIconPicker(): void
+  setIcon(path: string, icon: string | null): Promise<void>
   /** Show a folder in the sidebar: open its section, expand down to it, scroll to it */
   revealFolder(path: string): void
   /** Open or close a project's tree in the sidebar */
@@ -339,6 +349,7 @@ export const useStore = create<State>((set, get) => {
       await flushEditors()
     })
     window.api.onPrefsChanged((prefs) => set({ prefs }))
+    window.api.onIconsChanged(async () => set({ icons: await window.api.icons().catch(() => get().icons) }))
   }
 
   /** Show a project page or board: switch to its tab if open, else replace the current tab or add one */
@@ -375,6 +386,9 @@ export const useStore = create<State>((set, get) => {
     expanded: { notes: true },
     sidebarMode: 'files',
     sidebarOpen: loadSidebar(),
+    icons: {},
+    iconPicker: null,
+    lastMenuPos: { x: 200, y: 120 },
     git: null,
     gitBusy: null,
     vaultSettings: null,
@@ -419,18 +433,19 @@ export const useStore = create<State>((set, get) => {
 
     async refresh() {
       if (!get().vault) return
-      const [tree, stats, recent, projects, tasks] = await Promise.all([
+      const [tree, stats, recent, projects, tasks, icons] = await Promise.all([
         window.api.tree(),
         window.api.stats(),
         window.api.recent(),
         window.api.projects(),
-        window.api.tasks()
+        window.api.tasks(),
+        window.api.icons().catch(() => ({}))
       ])
       const notes: string[] = []
       const folders: string[] = []
       const boards: string[] = []
       flatten(tree, notes, folders, boards)
-      set({ tree, stats, recent, notes, folders, boards, projects, tasks })
+      set({ tree, stats, recent, notes, folders, boards, projects, tasks, icons })
       get().refreshGit()
     },
 
@@ -841,6 +856,23 @@ ${(e as Error).message}`)
           row.classList.add('flash')
         })
       )
+    },
+
+    openIconPicker(path, at) {
+      set({ iconPicker: { path, ...(at ?? get().lastMenuPos) }, menu: null })
+    },
+
+    closeIconPicker: () => set({ iconPicker: null }),
+
+    async setIcon(path, icon) {
+      // Show it at once; the main process writes .app/icons.json and tells every window
+      set((s) => {
+        const icons = { ...s.icons }
+        if (icon) icons[path] = icon
+        else delete icons[path]
+        return { icons }
+      })
+      await window.api.setIcon(path, icon)
     },
 
     toggleSection(section) {

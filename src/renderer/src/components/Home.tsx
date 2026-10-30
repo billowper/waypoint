@@ -1,5 +1,6 @@
 import { useStore } from '../store'
 import { noteMenu, projectMenu, showMenu } from '../menus'
+import Icon from './Icon'
 import { byUrgency, dueState, formatDue } from './Board'
 
 function greeting() {
@@ -74,6 +75,7 @@ export default function Home() {
                   onContextMenu={(e) => showMenu(e, noteMenu(t.path))}
                 >
                   <span className="task-id">{t.id}</span>
+                  <Icon path={t.path} />
                   <span className="recent-name">{t.title}</span>
                   <span className="recent-path">
                     {projectTitle(t.project)} · {t.status === 'doing' ? 'doing' : 'to do'}
@@ -98,6 +100,7 @@ export default function Home() {
                   onClick={(e) => openProject(p.slug, { newTab: e.ctrlKey })}
                   onContextMenu={(e) => showMenu(e, projectMenu(p.slug))}
                 >
+                  <Icon path={p.dir} />
                   <span className="recent-name">{p.title}</span>
                   <span className="recent-path">
                     {p.tags.join(' · ')}
@@ -119,6 +122,7 @@ export default function Home() {
             {recent.filter((r) => notes.includes(r)).slice(0, 10).map((r) => (
               <li key={r}>
                 <button onClick={(e) => openFile(r, { newTab: e.ctrlKey })} onContextMenu={(e) => showMenu(e, noteMenu(r))}>
+                  <Icon path={r} />
                   <span className="recent-name">{r.split('/').pop()!.replace(/\.md$/, '')}</span>
                   <span className="recent-path">{r.includes('/') ? r.slice(0, r.lastIndexOf('/')) : ''}</span>
                 </button>

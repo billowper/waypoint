@@ -2,6 +2,7 @@ import { useCallback, useEffect, useRef, useState } from 'react'
 import { PROJECT_STATUSES, TASK_STATUSES, TASK_STATUS_LABEL, type Project, type ProjectSettings } from '@shared/types'
 import { byUrgency, dueState, formatDue } from './Board'
 import AccentPicker from './AccentPicker'
+import Icon from './Icon'
 import { baseName } from '@shared/names'
 import { useStore } from '../store'
 import { noteMenu, showMenu } from '../menus'
@@ -85,6 +86,16 @@ export default function ProjectPage({ slug }: { slug: string }) {
   return (
     <div className="project-page">
       <header className="project-head">
+        <button
+          className="project-icon"
+          title="Icon"
+          onClick={(e) => {
+            const r = e.currentTarget.getBoundingClientRect()
+            useStore.getState().openIconPicker(project.dir, { x: r.left, y: r.bottom + 6 })
+          }}
+        >
+          <Icon path={project.dir} fallback={<span className="icon-add">☺</span>} />
+        </button>
         <input
           className="project-title"
           value={s.title}

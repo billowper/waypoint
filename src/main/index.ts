@@ -26,6 +26,7 @@ import { withDefaults, type Prefs } from '@shared/prefs'
 import { startNudges } from './nudges'
 import { backupNow } from './backups'
 import { installedFonts } from './fonts'
+import { dropIcons, iconFromFile, iconFromUrl, moveIcons, readIcons, registerIconScheme, serveIcons, setIcon } from './icons'
 import {
   appWindows,
   broadcast,
@@ -199,6 +200,7 @@ async function relocate(rel: string, op: (v: Vault) => Promise<string>, sender?:
   if (to === rel) return to
   updateRecent(v, (r) => movedPath(r, rel, to) ?? r)
   broadcast('vault:moved', [rel, to], sender) // other windows' editors and tabs follow
+  if (await moveIcons(v, rel, to)) broadcast('icons:changed', [])
   const changed = await updateLinks(v, before, rel, to)
   await index.rebuild()
   notify(changed.map((path) => ({ event: 'change', path })))
@@ -387,6 +389,7 @@ function registerIpc() {
     await flushOthers(e.sender)
     broadcast('vault:removed', [rel], e.sender)
     await withFolderUnlocked(v, rel, () => shell.trashItem(abs))
+    if (await dropIcons(v, rel)) broadcast('icons:changed', [])
     updateRecent(v, (r) => (movedPath(r, rel, rel) ? null : r))
     await requireIndex().remove(rel)
     notify([{ event: isDir ? 'unlinkDir' : 'unlink', path: rel }])
@@ -508,6 +511,34 @@ function registerIpc() {
   })
   ipcMain.handle('fonts:list', () => installedFonts())
 
+  // Icons for notes, boards, folders, tasks and projects
+  const iconChanged = () => broadcast('icons:changed', [])
+  ipcMain.handle('icons:get', () => readIcons(requireVault()))
+  ipcMain.handle('icons:set', async (_e, path: string, icon: string | null) => {
+    await setIcon(requireVault(), path, icon)
+    iconChanged()
+  })
+  ipcMain.handle('icons:fromFile', async (e, path: string) => {
+    const r = await dialog.showOpenDialog(BrowserWindow.fromWebContents(e.sender) ?? win!, {
+      title: 'Choose an image for the icon',
+      properties: ['openFile'],
+      filters: [{ name: 'Images', extensions: ['png', 'jpg', 'jpeg', 'gif', 'webp', 'svg', 'ico', 'bmp'] }]
+    })
+    if (r.canceled || !r.filePaths[0]) return null
+    const icon = await iconFromFile(requireVault(), r.filePaths[0])
+    await setIcon(requireVault(), path, icon)
+    iconChanged()
+    return icon
+  })
+  ipcMain.handle('icons:fromUrl', async (_e, path: string, url: string) => {
+    const icon = await iconFromUrl(requireVault(), url)
+    await setIcon(requireVault(), path, icon)
+    iconChanged()
+    return icon
+  })
+  // Windows' own emoji panel (Win+.); it types into whatever has focus
+  ipcMain.on('icons:emojiPanel', () => app.showEmojiPanel())
+
   // Windows: open content in a window of its own; one editor per note across all windows
   ipcMain.handle('window:open', (_e, views: ViewRef[], atCursor?: boolean) => {
     if (views.length) openContentWindow(views, atCursor ? screen.getCursorScreenPoint() : undefined)
@@ -597,6 +628,7 @@ const desktopHooks = {
   }
 }
 
+registerIconScheme() // before the app is ready
 const gotLock = app.requestSingleInstanceLock()
 if (!gotLock) {
   app.quit()
@@ -629,6 +661,7 @@ if (!gotLock) {
     // shortcuts and a reload can drop an unsaved edit. Keep them in dev for reload/DevTools.
     if (app.isPackaged) Menu.setApplicationMenu(null)
     registerIpc()
+    serveIcons(() => vault)
     initWindows({
       main: () => win,
       create: (opts, hash) => makeAppWindow(opts, hash),

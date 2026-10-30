@@ -2468,6 +2468,161 @@ body.search-window #root {
   margin: 4px 2px;
 }
 
+/* Item icons (emoji or picture) --------------------------------------- */
+
+.item-icon {
+  flex: none;
+  display: inline-grid;
+  place-items: center;
+  width: 1.25em;
+  height: 1.25em;
+  margin-right: 6px;
+  line-height: 1;
+  font-family: 'Segoe UI Emoji', var(--sans);
+}
+
+img.item-icon {
+  object-fit: contain;
+  border-radius: 3px;
+}
+
+.nav-item .item-icon.nav-glyph {
+  margin-right: 0;
+}
+
+.crumb-last {
+  display: inline-flex;
+  align-items: center;
+}
+
+.crumb-icon,
+.project-icon {
+  display: inline-grid;
+  place-items: center;
+  border-radius: 5px;
+  flex: none;
+}
+
+.crumb-icon {
+  width: 24px;
+  height: 24px;
+  margin-right: 4px;
+}
+
+.crumb-icon .item-icon {
+  margin: 0;
+}
+
+.project-icon {
+  width: 52px;
+  height: 52px;
+  margin: 0 0 6px -4px;
+  font-size: 34px;
+}
+
+.project-icon .item-icon {
+  margin: 0;
+}
+
+.crumb-icon:hover,
+.project-icon:hover {
+  background: var(--hover);
+}
+
+/* No icon yet: a faint face that appears on hover */
+.icon-add {
+  color: var(--text-faint);
+  opacity: 0;
+  font-size: 0.9em;
+}
+
+.crumb-icon:hover .icon-add,
+.project-icon:hover .icon-add,
+.project-head:hover .icon-add {
+  opacity: 1;
+}
+
+.icon-picker {
+  position: fixed;
+  z-index: 60;
+  width: 360px;
+  padding: 12px;
+  background: var(--panel);
+  border: 1px solid var(--border);
+  border-radius: 10px;
+  box-shadow: 0 14px 40px rgba(0, 0, 0, 0.45);
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+}
+
+.icon-picker-head {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+}
+
+.icon-preview {
+  width: 40px;
+  height: 40px;
+  display: grid;
+  place-items: center;
+  font-size: 26px;
+  background: var(--bg);
+  border: 1px solid var(--border);
+  border-radius: 8px;
+}
+
+.icon-preview .item-icon {
+  margin: 0;
+}
+
+.icon-none {
+  color: var(--text-faint);
+  font-size: 18px;
+}
+
+.icon-for {
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  color: var(--text-dim);
+  font-size: 13px;
+}
+
+.emoji-input,
+.icon-url input {
+  font: inherit;
+  font-size: 14px;
+  color: var(--text-strong);
+  background: var(--bg);
+  border: 1px solid var(--accent);
+  border-radius: 7px;
+  padding: 7px 10px;
+  outline: none;
+}
+
+.icon-actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+}
+
+.btn.danger:hover {
+  color: var(--danger);
+}
+
+.icon-url {
+  display: flex;
+  gap: 6px;
+}
+
+.icon-url input {
+  flex: 1;
+  min-width: 0;
+}
+
 /* Picker (Ctrl+P, Move to…) --------------------------------------------- */
 
 .picker {

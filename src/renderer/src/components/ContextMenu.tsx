@@ -40,6 +40,7 @@ export default function ContextMenu({ x, y, items }: MenuState) {
               className={it.danger ? 'danger' : ''}
               disabled={it.disabled}
               onClick={() => {
+                useStore.setState({ lastMenuPos: { x: pos.left, y: pos.top } })
                 closeMenu()
                 it.run()
               }}

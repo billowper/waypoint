@@ -3,6 +3,7 @@ import { baseName } from '@shared/names'
 import type { Project, ViewRef } from '@shared/types'
 import { flushEditors, isContentWindow, toRef, useStore, type Tab } from '../store'
 import { projectMenu, showMenu, tabMenu, treeMenu } from '../menus'
+import Icon from './Icon'
 
 const SAVE_LABEL = { saved: 'Saved', saving: 'Saving…', unsaved: 'Edited', error: 'Save failed' }
 
@@ -98,9 +99,10 @@ export function TabBar() {
           >
             <button className="tab-title" onClick={() => activateTab(t.id)}>
               {t.view.kind === 'home' && <span className="tab-icon">⌂</span>}
-              {t.view.kind === 'project' && <span className="tab-icon">◇</span>}
-              {t.view.kind === 'board' && <span className="tab-icon">▦</span>}
-              {t.view.kind === 'canvas' && <span className="tab-icon">✎</span>}
+              {t.view.kind === 'project' && <Icon path={`projects/${t.view.slug}`} fallback={<span className="tab-icon">◇</span>} />}
+              {t.view.kind === 'board' && <Icon path={`projects/${t.view.slug}`} fallback={<span className="tab-icon">▦</span>} />}
+              {t.view.kind === 'canvas' && <Icon path={t.view.path} fallback={<span className="tab-icon">✎</span>} />}
+              {t.view.kind === 'file' && <Icon path={t.view.path} />}
               {tabTitle(t, projects)}
             </button>
             <button className="tab-close" title="Close tab (Ctrl+W)" onClick={() => closeTab(t.id)}>
@@ -118,7 +120,7 @@ export function TabBar() {
 
 /** Folder path, title (click to rename) and note actions for the open note */
 export function PathBar() {
-  const { view, activeTab, saveStates, rename, backlinksOpen, toggleBacklinks, openHistory, git, projects, openProject, openBoard, revealFolder } =
+  const { view, activeTab, saveStates, rename, backlinksOpen, toggleBacklinks, openHistory, git, projects, openProject, openBoard, revealFolder, openIconPicker } =
     useStore()
   if (view.kind !== 'file') return null
   const crumbs = view.path.replace(/\.md$/i, '').split('/')
@@ -137,9 +139,22 @@ export function PathBar() {
       <nav className="crumbs">
         {crumbs.map((c, i) =>
           i === crumbs.length - 1 ? (
-            <button key={i} className="crumb current" title="Rename (F2)" onClick={() => rename(view.path)}>
-              {c}
-            </button>
+            <span key={i} className="crumb-last">
+              {/* The note's icon, right by its name (click to choose one) */}
+              <button
+                className="crumb-icon"
+                title="Icon"
+                onClick={(e) => {
+                  const r = e.currentTarget.getBoundingClientRect()
+                  openIconPicker(view.path, { x: r.left, y: r.bottom + 4 })
+                }}
+              >
+                <Icon path={view.path} fallback={<span className="icon-add">☺</span>} />
+              </button>
+              <button className="crumb current" title="Rename (F2)" onClick={() => rename(view.path)}>
+                {c}
+              </button>
+            </span>
           ) : (
             (() => {
               const dir = folderAt(i)

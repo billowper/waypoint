@@ -250,6 +250,16 @@ export interface Api {
   onPrefsChanged(cb: (prefs: Prefs) => void): () => void
   /** Clipboard and selection actions for context menus */
   editAction(action: 'cut' | 'copy' | 'paste' | 'selectAll'): void
+  /** Icons by vault-relative path: an emoji, or "img:<file>" for a stored picture */
+  icons(): Promise<Record<string, string>>
+  setIcon(path: string, icon: string | null): Promise<void>
+  /** Pick an image file and use it as the icon; null if cancelled */
+  iconFromFile(path: string): Promise<string | null>
+  /** Download an image and use it as the icon */
+  iconFromUrl(path: string, url: string): Promise<string>
+  /** Open Windows' emoji panel (it types into the focused box) */
+  showEmojiPanel(): void
+  onIconsChanged(cb: () => void): () => void
   /** Font families installed on this PC (sorted) */
   installedFonts(): Promise<string[]>
   /** Match the native title-bar buttons to the page's colours */

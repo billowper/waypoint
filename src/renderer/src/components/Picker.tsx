@@ -1,6 +1,7 @@
 import { useEffect, useMemo, useRef, useState, type KeyboardEvent } from 'react'
 import { baseName } from '@shared/names'
 import { useStore } from '../store'
+import Icon from './Icon'
 
 interface Item {
   key: string
@@ -134,6 +135,7 @@ export default function Picker() {
                 onMouseMove={() => setIndex(i)}
                 onClick={(e) => pick(item, e.ctrlKey)}
               >
+                <Icon path={item.key} />
                 <span className="picker-label">{item.label}</span>
                 <span className="picker-detail">{item.detail}</span>
               </button>

@@ -17,6 +17,9 @@ export function showMenu(e: ReactMouseEvent | MouseEvent, items: MenuItem[]) {
 
 const copy = (text: string) => navigator.clipboard.writeText(text).catch(() => undefined)
 
+/** "Icon…": choose an emoji or picture for this note/board/folder/project */
+const iconItem = (path: string): MenuItem => ({ label: 'Icon…', run: () => store().openIconPicker(path) })
+
 /** Open / new tab / new window for anything that can be a tab */
 function openItems(ref: ViewRef): MenuItem[] {
   const s = store()
@@ -51,7 +54,7 @@ function fileItems(path: string): MenuItem[] {
 /** A note, board or other file anywhere it's listed (Home, search, backlinks, cards…) */
 export function noteMenu(path: string): MenuItem[] {
   const ref: ViewRef = path.toLowerCase().endsWith('.excalidraw') ? { kind: 'canvas', path } : { kind: 'file', path }
-  return [...openItems(ref), sep, ...fileItems(path)]
+  return [...openItems(ref), sep, iconItem(path), ...fileItems(path)]
 }
 
 /** A file or folder in the tree */
@@ -70,6 +73,7 @@ export function treeMenu(path: string, type: 'file' | 'dir'): MenuItem[] {
           sep
         ]
       : []),
+    ...(type === 'dir' ? [iconItem(path)] : []),
     ...(editable
       ? [
           { label: 'Rename', kbd: 'F2', run: () => s.rename(path) },
@@ -101,6 +105,7 @@ export function tabMenu(tab: Tab): MenuItem[] {
     ...(path
       ? [
           sep,
+          iconItem(path),
           ...(tab.view.kind === 'file' && canRename(path) ? [{ label: 'Rename', kbd: 'F2', run: () => s.rename(path) }] : []),
           ...fileItems(path)
         ]
@@ -115,6 +120,7 @@ export function projectMenu(slug: string): MenuItem[] {
   return [
     ...openItems({ kind: 'project', slug }),
     sep,
+    iconItem(dir),
     { label: 'Open task board', run: () => s.openBoard(slug) },
     { label: 'Open task board in new window', run: () => s.openInNewWindow({ kind: 'board', slug }) },
     { label: 'New task', run: async () => {

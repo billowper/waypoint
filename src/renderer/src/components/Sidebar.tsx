@@ -5,6 +5,7 @@ import FileTree, { DRAG_TYPE } from './FileTree'
 import SearchPanel from './SearchPanel'
 import { projectMenu, showMenu, treeMenu } from '../menus'
 import GitPanel, { GitIndicator } from './GitPanel'
+import Icon from './Icon'
 
 /** General notes live here (the Notes item); inbox.md (quick captures) is pinned at the top */
 const NOTES_DIR = 'notes'
@@ -136,7 +137,7 @@ export default function Sidebar() {
               onClick={() => toggleSection('inbox')}
               onContextMenu={(e) => showMenu(e, treeMenu(NOTES_DIR, 'dir'))}
             >
-              <span className="nav-icon">✎</span> Notes
+              <Icon path={NOTES_DIR} className="nav-glyph" fallback={<span className="nav-icon">✎</span>} /> Notes
             </button>
             <button className="icon-btn row-add" title="New note (Ctrl+N)" onClick={() => newNote(NOTES_DIR)}>
               ＋
@@ -153,7 +154,7 @@ export default function Sidebar() {
                 onContextMenu={(e) => notes.includes(INBOX_NOTE) && showMenu(e, treeMenu(INBOX_NOTE, 'file'))}
               >
                 <span className="chev spacer" />
-                <span className="tree-icon">✉</span>
+                <Icon path={INBOX_NOTE} fallback={<span className="tree-icon">✉</span>} />
                 Inbox
               </button>
               <FileTree nodes={inboxKids} depth={1} />
@@ -194,6 +195,7 @@ export default function Sidebar() {
                     onContextMenu={(e) => showMenu(e, projectMenu(p.slug))}
                   >
                     <span className={`status-dot status-${p.status}`} />
+                    <Icon path={`projects/${p.slug}`} />
                     <span className="nav-label">{p.title}</span>
                   </button>
                 </div>
