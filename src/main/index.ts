@@ -234,12 +234,18 @@ function applyTheme() {
 /** UI scale: zoom the page; the Windows caption strip has to grow with it to line up */
 const chromeColors = new Map<number, { color: string; symbolColor: string }>() // per window (project colours)
 function applyScale(w?: BrowserWindow | null) {
-  const targets = w ? [w] : appWindows()
+  const all = appWindows()
+  // Only windows with the Windows caption overlay (never the popups)
+  const targets = w ? all.filter((x) => x === w) : all
   const scale = Math.min(2, Math.max(0.6, prefs().uiScale || 1))
   for (const t of targets) {
     if (t.isDestroyed()) continue
     t.webContents.setZoomFactor(scale)
-    t.setTitleBarOverlay({ ...chrome().overlay, ...(chromeColors.get(t.id) ?? {}), height: Math.round(38 * scale) })
+    try {
+      t.setTitleBarOverlay({ ...chrome().overlay, ...(chromeColors.get(t.id) ?? {}), height: Math.round(38 * scale) })
+    } catch (e) {
+      console.warn('[chrome]', e) // never worth crashing over
+    }
   }
 }
 
@@ -531,6 +537,8 @@ function registerIpc() {
     const w = BrowserWindow.fromWebContents(e.sender)
     if (!w || w.isDestroyed() || !/^#[0-9a-f]{6}$/i.test(background) || !/^#[0-9a-f]{6}$/i.test(symbols)) return
     w.setBackgroundColor(background)
+    // Popups (quick capture/search) have no title-bar buttons to restyle or scale
+    if (!appWindows().includes(w)) return
     chromeColors.set(w.id, { color: background, symbolColor: symbols })
     applyScale(w)
   })
