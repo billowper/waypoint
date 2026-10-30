@@ -2,7 +2,7 @@ import { useRef, useState, type DragEvent, type MouseEvent } from 'react'
 import type { TreeNode } from '@shared/types'
 import { canRename, useStore } from '../store'
 import { showMenu, treeMenu } from '../menus'
-import Icon from './Icon'
+import Icon, { noteDefault } from './Icon'
 
 export const DRAG_TYPE = 'application/x-waypoint-path'
 /** Hovering a closed folder while dragging opens it after this long */
@@ -147,7 +147,7 @@ export default function FileTree({ nodes, depth }: Props) {
               {...drag(n)}
             >
               <span className="chev spacer" />
-              <Icon path={n.path} fallback={isBoard ? <span className="tree-icon">✎</span> : null} />
+              <Icon path={n.path} fallback={isBoard ? <span className="tree-icon">✎</span> : noteDefault(n.path, !!task)} />
               {task ? (
                 <>
                   <span className="task-id">{task.id}</span>

@@ -2481,6 +2481,14 @@ body.search-window #root {
   font-family: 'Segoe UI Emoji', var(--sans);
 }
 
+/* Built-in default icons keep the fixed icon colour in every theme */
+svg.item-icon.doc-icon {
+  width: 1.05em;
+  height: 1.05em;
+  color: var(--icon);
+  opacity: 0.85;
+}
+
 img.item-icon {
   object-fit: contain;
   border-radius: 3px;

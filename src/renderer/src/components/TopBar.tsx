@@ -3,7 +3,7 @@ import { baseName } from '@shared/names'
 import type { Project, ViewRef } from '@shared/types'
 import { flushEditors, isContentWindow, toRef, useStore, type Tab } from '../store'
 import { projectMenu, showMenu, tabMenu, treeMenu } from '../menus'
-import Icon from './Icon'
+import Icon, { noteDefault } from './Icon'
 
 const SAVE_LABEL = { saved: 'Saved', saving: 'Saving…', unsaved: 'Edited', error: 'Save failed' }
 
@@ -102,7 +102,7 @@ export function TabBar() {
               {t.view.kind === 'project' && <Icon path={`projects/${t.view.slug}`} fallback={<span className="tab-icon">◇</span>} />}
               {t.view.kind === 'board' && <Icon path={`projects/${t.view.slug}`} fallback={<span className="tab-icon">▦</span>} />}
               {t.view.kind === 'canvas' && <Icon path={t.view.path} fallback={<span className="tab-icon">✎</span>} />}
-              {t.view.kind === 'file' && <Icon path={t.view.path} />}
+              {t.view.kind === 'file' && <Icon path={t.view.path} fallback={noteDefault(t.view.path, /^projects\/[^/]+\/tasks\//.test(t.view.path))} />}
               {tabTitle(t, projects)}
             </button>
             <button className="tab-close" title="Close tab (Ctrl+W)" onClick={() => closeTab(t.id)}>
@@ -149,7 +149,7 @@ export function PathBar() {
                   openIconPicker(view.path, { x: r.left, y: r.bottom + 4 })
                 }}
               >
-                <Icon path={view.path} fallback={<span className="icon-add">☺</span>} />
+                <Icon path={view.path} fallback={noteDefault(view.path, /^projects\/[^/]+\/tasks\//.test(view.path)) ?? <span className="icon-add">☺</span>} />
               </button>
               <button className="crumb current" title="Rename (F2)" onClick={() => rename(view.path)}>
                 {c}

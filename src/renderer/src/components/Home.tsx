@@ -1,6 +1,6 @@
 import { useStore } from '../store'
 import { noteMenu, projectMenu, showMenu } from '../menus'
-import Icon from './Icon'
+import Icon, { noteDefault } from './Icon'
 import { byUrgency, dueState, formatDue } from './Board'
 
 function greeting() {
@@ -122,7 +122,7 @@ export default function Home() {
             {recent.filter((r) => notes.includes(r)).slice(0, 10).map((r) => (
               <li key={r}>
                 <button onClick={(e) => openFile(r, { newTab: e.ctrlKey })} onContextMenu={(e) => showMenu(e, noteMenu(r))}>
-                  <Icon path={r} />
+                  <Icon path={r} fallback={noteDefault(r, /^projects\/[^/]+\/tasks\//.test(r))} />
                   <span className="recent-name">{r.split('/').pop()!.replace(/\.md$/, '')}</span>
                   <span className="recent-path">{r.includes('/') ? r.slice(0, r.lastIndexOf('/')) : ''}</span>
                 </button>
