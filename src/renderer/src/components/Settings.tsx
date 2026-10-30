@@ -2,6 +2,7 @@ import { useEffect, useState } from 'react'
 import type { DesktopInfo } from '@shared/types'
 import { DEFAULT_COLORS, DEFAULT_FONTS, type Prefs } from '@shared/prefs'
 import ColorPair from './ColorPair'
+import FontSelect from './FontSelect'
 
 /** Fonts that come with Windows 11 (any installed font name can be typed in too) */
 const FONT_CHOICES = [
@@ -150,7 +151,29 @@ ${(e as Error).message}`)
       </section>
 
       <section className="card">
-        <h2>Fonts</h2>
+        <h2>Fonts and size</h2>
+        <div className="setting">
+          <div>
+            <div className="setting-name">Interface scale</div>
+            <div className="setting-help">Makes everything bigger or smaller. Ctrl + = / Ctrl + − / Ctrl + 0 also work.</div>
+          </div>
+          <div className="hotkey">
+            <input
+              type="range"
+              min={0.75}
+              max={1.5}
+              step={0.05}
+              value={prefs.uiScale}
+              onChange={(e) => set({ uiScale: Number(e.target.value) })}
+            />
+            <span className="size-value">{Math.round(prefs.uiScale * 100)}%</span>
+            {prefs.uiScale !== 1 && (
+              <button className="btn small" onClick={() => set({ uiScale: 1 })}>
+                Reset
+              </button>
+            )}
+          </div>
+        </div>
         {(
           [
             ['ui', 'Interface', FONT_CHOICES],
@@ -160,21 +183,12 @@ ${(e as Error).message}`)
         ).map(([key, label, choices]) => (
           <div className="setting" key={key}>
             <div className="setting-name">{label}</div>
-            <div className="hotkey">
-              <input
-                className="font-input"
-                list={`fonts-${key}`}
-                value={prefs.fonts[key]}
-                placeholder={key === 'editor' ? 'Same as interface' : ''}
-                style={{ fontFamily: prefs.fonts[key] || undefined }}
-                onChange={(e) => set({ fonts: { ...prefs.fonts, [key]: e.target.value } })}
-              />
-              <datalist id={`fonts-${key}`}>
-                {choices.map((f) => (
-                  <option key={f} value={f} />
-                ))}
-              </datalist>
-            </div>
+            <FontSelect
+              value={prefs.fonts[key]}
+              suggested={[...choices]}
+              emptyLabel={key === 'editor' ? 'Same as interface' : undefined}
+              onChange={(font) => set({ fonts: { ...prefs.fonts, [key]: font } })}
+            />
           </div>
         ))}
         <div className="setting">

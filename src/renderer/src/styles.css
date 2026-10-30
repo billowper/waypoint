@@ -1935,7 +1935,8 @@ body.search-window #root {
   border: 1px solid var(--border);
   border-radius: 12px;
   overflow: hidden;
-  box-shadow: 0 16px 48px rgba(0, 0, 0, 0.45);
+  /* No drop shadow: the popup window is exactly the box's size, so a shadow gets clipped into a
+     visible rectangle at the window edge */
 }
 
 .quick-search input {
@@ -2207,6 +2208,95 @@ body.search-window #root {
 
 .project-colors input {
   accent-color: var(--accent);
+}
+
+.font-select {
+  position: relative;
+}
+
+.font-current {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+  width: 240px;
+  padding: 5px 10px;
+  background: var(--bg);
+  border: 1px solid var(--border);
+  border-radius: 6px;
+  color: var(--text-strong);
+  text-align: left;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.font-current:hover {
+  border-color: var(--accent);
+}
+
+.chev-down {
+  color: var(--text-faint);
+  font-family: var(--sans);
+}
+
+.font-menu {
+  position: absolute;
+  right: 0;
+  top: calc(100% + 4px);
+  z-index: 30;
+  width: 300px;
+  background: var(--panel);
+  border: 1px solid var(--border);
+  border-radius: 9px;
+  box-shadow: 0 14px 40px rgba(0, 0, 0, 0.45);
+  padding: 6px;
+}
+
+.font-menu input {
+  width: 100%;
+  font: inherit;
+  font-size: 13px;
+  color: var(--text-strong);
+  background: var(--bg);
+  border: 1px solid var(--accent);
+  border-radius: 6px;
+  padding: 5px 8px;
+  outline: none;
+  margin-bottom: 4px;
+}
+
+.font-menu ul {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  max-height: 280px;
+  overflow: auto;
+}
+
+.font-menu button {
+  display: block;
+  width: 100%;
+  padding: 5px 8px;
+  border-radius: 5px;
+  text-align: left;
+  font-size: 15px;
+  color: var(--text);
+}
+
+.font-menu button:hover {
+  background: var(--hover);
+}
+
+.font-menu button.on {
+  background: var(--active);
+  color: var(--text-strong);
+}
+
+.font-menu hr {
+  border: 0;
+  border-top: 1px solid var(--border);
+  margin: 4px 2px;
 }
 
 /* Picker (Ctrl+P, Move to…) --------------------------------------------- */

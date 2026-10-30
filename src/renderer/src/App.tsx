@@ -136,6 +136,10 @@ export default function App() {
             requestAnimationFrame(() => document.querySelector<HTMLInputElement>('.search-input')?.select())
           })
         } else if (k === 'b') run(s.toggleBacklinks)
+      } else if ((k === '=' || k === '+' || k === '-' || k === '0') && s.prefs) {
+        const p = s.prefs
+        const next = k === '0' ? 1 : Math.round((p.uiScale + (k === '-' ? -0.1 : 0.1)) * 100) / 100
+        run(() => s.savePrefs({ ...p, uiScale: Math.min(1.5, Math.max(0.75, next)) }))
       } else if (k === ',') run(s.openSettings)
       else if (k === 'n') run(() => s.newNote())
       else if (k === 'p' || k === 'o') run(() => s.openPicker({ kind: 'notes' }))

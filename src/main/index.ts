@@ -25,6 +25,7 @@ import {
 import { withDefaults, type Prefs } from '@shared/prefs'
 import { startNudges } from './nudges'
 import { backupNow } from './backups'
+import { installedFonts } from './fonts'
 import type { AppCommand, DesktopInfo } from '@shared/types'
 import type { ChangeEvent, VaultInfo } from '@shared/types'
 import { movedPath } from '@shared/names'
@@ -215,6 +216,16 @@ function applyTheme() {
   }
 }
 
+/** UI scale: zoom the page; the Windows caption strip has to grow with it to line up */
+let chromeColors: { color: string; symbolColor: string } | null = null
+function applyScale() {
+  if (!win || win.isDestroyed()) return
+  const scale = Math.min(2, Math.max(0.6, prefs().uiScale || 1))
+  win.webContents.setZoomFactor(scale)
+  const base = chrome().overlay
+  win.setTitleBarOverlay({ ...base, ...(chromeColors ?? {}), height: Math.round(38 * scale) })
+}
+
 function createWindow() {
   const cfg = loadConfig()
   const b = cfg.bounds ?? { width: 1280, height: 820 }
@@ -256,6 +267,7 @@ function createWindow() {
     }
   })
   win.on('closed', () => (win = null))
+  win.webContents.on('did-finish-load', applyScale)
 
   // Open external links in the default browser, never inside the app
   win.webContents.setWindowOpenHandler(({ url }) => {
@@ -423,6 +435,7 @@ function registerIpc() {
     saveConfig({ prefs: withDefaults(p) })
     applyPrefs(prefs(), desktopHooks)
     applyTheme()
+    applyScale()
     onPrefsChanged()
     return prefs()
   })
@@ -450,11 +463,13 @@ function registerIpc() {
     closePopup('search')
     if (c.kind === 'open' && vault && vault.isNote(c.path)) runCommand(c)
   })
+  ipcMain.handle('fonts:list', () => installedFonts())
   ipcMain.on('theme:chrome', (e, background: string, symbols: string) => {
     const w = BrowserWindow.fromWebContents(e.sender)
     if (!w || w.isDestroyed() || !/^#[0-9a-f]{6}$/i.test(background) || !/^#[0-9a-f]{6}$/i.test(symbols)) return
     w.setBackgroundColor(background)
-    if (w === win) w.setTitleBarOverlay({ color: background, symbolColor: symbols, height: 38 })
+    chromeColors = { color: background, symbolColor: symbols }
+    if (w === win) applyScale()
   })
   // The UI asks for this once it's listening, so launch commands (jump list) aren't lost
   ipcMain.on('app:ready', (e) => {

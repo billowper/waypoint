@@ -217,6 +217,8 @@ export interface Api {
   searchClose(): void
   /** Fit the popup window to its content */
   popupHeight(px: number): void
+  /** Font families installed on this PC (sorted) */
+  installedFonts(): Promise<string[]>
   /** Match the native title-bar buttons to the page's colours */
   setChrome(background: string, symbols: string): void
   /** Zip the vault into the backup folder now; returns the file written */

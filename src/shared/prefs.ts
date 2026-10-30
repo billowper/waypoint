@@ -10,6 +10,8 @@ export interface Prefs {
   /** The two picked colours; everything else is calculated (see palette.ts) */
   colors: ThemeColors
   fonts: FontPrefs
+  /** Zoom for the whole interface (1 = 100%) */
+  uiScale: number
   /** Electron accelerator for the global search popup; '' turns it off */
   searchHotkey: string
   backup: BackupPrefs
@@ -79,6 +81,7 @@ export const DEFAULT_PREFS: Prefs = {
   theme: 'dark',
   colors: DEFAULT_COLORS,
   fonts: DEFAULT_FONTS,
+  uiScale: 1,
   searchHotkey: 'Control+Alt+F',
   backup: { dir: '', daily: true, keep: 14, last: 0 }
 }

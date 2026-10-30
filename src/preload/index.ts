@@ -65,7 +65,8 @@ const api: Api = {
   nudgeNow: () => ipcRenderer.invoke('nudge:now'),
   createBoard: (dir, name) => ipcRenderer.invoke('boards:create', dir, name),
   backupNow: () => ipcRenderer.invoke('backup:now'),
-  setChrome: (background, symbols) => ipcRenderer.send('theme:chrome', background, symbols)
+  setChrome: (background, symbols) => ipcRenderer.send('theme:chrome', background, symbols),
+  installedFonts: () => ipcRenderer.invoke('fonts:list')
 }
 
 contextBridge.exposeInMainWorld('api', api)
