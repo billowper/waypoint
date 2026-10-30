@@ -13,6 +13,8 @@ import ProjectPage from './components/ProjectPage'
 import Board from './components/Board'
 import TaskBar from './components/TaskBar'
 import History from './components/History'
+import Settings from './components/Settings'
+import NudgeBanner from './components/NudgeBanner'
 
 /** F2 / Delete act on the keyboard-focused tree item, else the open note (else selected folder for F2) */
 function fileTarget(fallbackToFolder: boolean): string | null {
@@ -40,6 +42,20 @@ export default function App() {
     // Tree refresh on any change on disk (including our own saves — cheap at this size)
     return window.api.onChanged(() => refresh())
   }, [refresh])
+
+  useEffect(() => {
+    // Jump list, tray, toast clicks and second launches arrive here
+    return window.api.onCommand((c) => {
+      const s = useStore.getState()
+      if ('nudge' in c && c.nudge) s.setNudge(c.nudge)
+      if (c.kind === 'nudge') return
+      if (c.kind === 'new-note') s.newNote('notes') // from the jump list or tray: a plain note
+      else if (c.kind === 'home') s.goHome()
+      else if (c.kind === 'open') s.notes.includes(c.path) && s.openFile(c.path)
+      else if (c.kind === 'open-project') s.openProject(c.slug)
+      else if (c.kind === 'open-board') s.openBoard(c.slug)
+    })
+  }, [])
 
   useEffect(() => {
     // Git status also changes without file edits (auto-commit, pushes from elsewhere)
@@ -83,7 +99,8 @@ export default function App() {
             requestAnimationFrame(() => document.querySelector<HTMLInputElement>('.search-input')?.select())
           })
         } else if (k === 'b') run(s.toggleBacklinks)
-      } else if (k === 'n') run(() => s.newNote())
+      } else if (k === ',') run(s.openSettings)
+      else if (k === 'n') run(() => s.newNote())
       else if (k === 'p' || k === 'o') run(() => s.openPicker({ kind: 'notes' }))
       else if (k === 't') run(s.newTab)
       else if (k === 'w') run(() => s.closeTab(s.activeTab))
@@ -105,6 +122,7 @@ export default function App() {
             to see them.
           </button>
         )}
+        <NudgeBanner />
         <PathBar />
         {view.kind === 'file' && <TaskBar path={view.path} />}
         <div className="content">
@@ -113,6 +131,7 @@ export default function App() {
             {view.kind === 'project' && <ProjectPage key={view.slug} slug={view.slug} />}
             {view.kind === 'board' && <Board key={view.slug} slug={view.slug} />}
             {view.kind === 'history' && <History key={view.path} path={view.path} />}
+            {view.kind === 'settings' && <Settings />}
             {/* Every open note keeps its editor (and undo history); only the active one shows */}
             {tabs.map((t) =>
               t.view.kind === 'file' ? (

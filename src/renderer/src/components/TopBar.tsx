@@ -13,7 +13,9 @@ export function TabBar() {
       : t.view.kind === 'project' || t.view.kind === 'board'
         ? (projects.find((p) => 'slug' in t.view && p.slug === t.view.slug)?.title ?? t.view.slug) +
           (t.view.kind === 'board' ? ' · tasks' : '')
-        : t.view.kind === 'history'
+        : t.view.kind === 'settings'
+          ? 'Settings'
+          : t.view.kind === 'history'
           ? `History · ${t.view.path ? baseName(t.view.path) : 'vault'}`
           : 'Home'
   const onMouseDown = (t: Tab) => (e: MouseEvent) => {

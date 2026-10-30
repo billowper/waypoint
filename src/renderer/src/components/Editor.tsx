@@ -180,7 +180,8 @@ export default function Editor({ tabId, path, active }: Props) {
       await save()
       const clean = target.replace(/\\/g, '/').replace(/\.md$/i, '')
       const slash = clean.lastIndexOf('/')
-      const here = pathRef.current.includes('/') ? pathRef.current.slice(0, pathRef.current.lastIndexOf('/')) : ''
+      let here = pathRef.current.includes('/') ? pathRef.current.slice(0, pathRef.current.lastIndexOf('/')) : ''
+      here = here.replace(/^(projects\/[^/]+)\/tasks(\/.*)?$/, '$1') // linked from a task: not another task
       const dir = slash === -1 ? here : clean.slice(0, slash)
       const created = await window.api.createNote(dir, clean.slice(slash + 1))
       await refresh()

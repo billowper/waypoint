@@ -19,7 +19,8 @@ export default function Sidebar() {
     move,
     projects,
     openProject,
-    createProject
+    createProject,
+    openSettings
   } = useStore()
   // Finished projects drop to the bottom
   const listed = [...projects].sort((a, b) => Number(a.status === 'done') - Number(b.status === 'done'))
@@ -43,6 +44,9 @@ export default function Sidebar() {
         <span className="brand-mark small">◆</span>
         <button className="vault-name no-drag" title={vault?.path} onClick={openVault}>
           {vault?.name}
+        </button>
+        <button className="icon-btn settings-btn" title="Settings (Ctrl+,)" onClick={openSettings}>
+          ⚙
         </button>
       </div>
 

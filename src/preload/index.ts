@@ -1,5 +1,5 @@
 import { contextBridge, ipcRenderer, type IpcRendererEvent } from 'electron'
-import type { Api, ChangeEvent } from '../shared/types'
+import type { Api, AppCommand, ChangeEvent } from '../shared/types'
 
 const api: Api = {
   getVault: () => ipcRenderer.invoke('vault:get'),
@@ -47,7 +47,19 @@ const api: Api = {
     const h = () => cb()
     ipcRenderer.on('git:changed', h)
     return () => ipcRenderer.removeListener('git:changed', h)
-  }
+  },
+  onCommand: (cb) => {
+    const h = (_e: IpcRendererEvent, c: AppCommand) => cb(c)
+    ipcRenderer.on('app:command', h)
+    ipcRenderer.send('app:ready') // ask for any command the app was launched with
+    return () => ipcRenderer.removeListener('app:command', h)
+  },
+  prefs: () => ipcRenderer.invoke('prefs:get'),
+  savePrefs: (prefs) => ipcRenderer.invoke('prefs:save', prefs),
+  desktopInfo: () => ipcRenderer.invoke('desktop:info'),
+  captureAdd: (text) => ipcRenderer.invoke('capture:add', text),
+  captureClose: () => ipcRenderer.send('capture:close'),
+  nudgeNow: () => ipcRenderer.invoke('nudge:now')
 }
 
 contextBridge.exposeInMainWorld('api', api)

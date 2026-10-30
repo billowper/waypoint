@@ -86,13 +86,13 @@ vault/
 - File history and diff view; conflict notice
 - **Checkpoint:** manual vs automatic syncing preference
 
-### Phase 5 — Windows 11 integration
+### Phase 5 — Windows 11 integration — BUILT (unattended), awaiting review
 - Jump list: recent projects/notes, "New note", "Quick capture", "Open Home"
 - Native toast notifications with action buttons
 - Tray icon, start with Windows (optional), global quick-capture hotkey
 - **Checkpoint:** what belongs in the jump list and tray
 
-### Phase 6 — Prodding / nudges
+### Phase 6 — Prodding / nudges — BUILT (unattended), awaiting review
 - Nudge engine: overdue/due-soon tasks, stale projects, "pick one thing" prompts
 - Configurable schedule, quiet hours, snooze, "don't nag about this"
 - Notification clicks deep-link into the right task/project
@@ -138,7 +138,10 @@ vault/
   due date, labels
 - 2026-10-30: Vault git: manual commit/pull/push + status; optional auto-commit every 15 min, off by
   default; push only when the vault already has a remote
+- 2026-10-30: Nudges show inside the app when its window is in front, else as a Windows toast. Toasts only
+  appear in the installed app (Windows drops them for apps without a Start-menu entry, e.g. dev builds)
+- 2026-10-30: Closing the window keeps Waypoint in the tray (setting, on by default) so hotkey + nudges work
 - 2026-10-30: Defaults chosen by Claude (Bill to veto at review): project YAML as drafted in Phase 2;
-  quick-capture hotkey Ctrl+Alt+Space; start-with-Windows off by default; nudges at most every 2 h,
+  quick-capture hotkey Ctrl+Alt+W (Ctrl+Alt+Space was already taken on Bill's PC); start-with-Windows off by default; nudges at most every 2 h,
   weekdays 09:00–18:00, snoozable; canvas = Excalidraw; Phase 8 adds light theme + settings page +
   vault zip backups, skips auto-update (needs a release server)

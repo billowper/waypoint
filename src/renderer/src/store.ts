@@ -1,6 +1,7 @@
 import { create } from 'zustand'
-import type { GitStatus, Project, Task, TaskFields, TreeNode, VaultInfo, VaultSettings, VaultStats } from '@shared/types'
+import type { GitStatus, NudgeInfo, Project, Task, TaskFields, TreeNode, VaultInfo, VaultSettings, VaultStats } from '@shared/types'
 import { baseName, movedPath } from '@shared/names'
+import type { Prefs } from '@shared/prefs'
 
 /** `docId` stays the same when the open file is renamed, so the editor isn't recreated. */
 export type View =
@@ -10,6 +11,7 @@ export type View =
   | { kind: 'board'; slug: string }
   /** Git history of one note, or of the whole vault when path is '' */
   | { kind: 'history'; path: string }
+  | { kind: 'settings' }
 
 export interface Tab {
   id: number
@@ -65,6 +67,9 @@ interface State {
   git: GitStatus | null
   gitBusy: string | null
   vaultSettings: VaultSettings | null
+  prefs: Prefs | null
+  /** The nudge Bill clicked through, shown as a banner until dismissed */
+  nudge: NudgeInfo | null
   backlinksOpen: boolean
   prompt: PromptState | null
   menu: MenuState | null
@@ -87,6 +92,9 @@ interface State {
   runGit(label: string, fn: () => Promise<unknown>): Promise<boolean>
   saveVaultSettings(settings: VaultSettings): Promise<void>
   openHistory(path: string, opts?: { newTab?: boolean }): void
+  openSettings(): void
+  savePrefs(prefs: Prefs): Promise<void>
+  setNudge(nudge: NudgeInfo | null): void
   newTab(): void
   closeTab(id: number): void
   activateTab(id: number): void
@@ -164,7 +172,9 @@ function saveTabs(vault: string | undefined, tabs: Tab[], activeTab: number) {
         ? t.view.path
         : t.view.kind === 'project' || t.view.kind === 'board'
           ? `${t.view.kind}:${t.view.slug}`
-          : null
+          : t.view.kind === 'settings'
+            ? 'settings'
+            : null
     )
     localStorage.setItem(tabsKey(vault), JSON.stringify({ paths, active: tabs.findIndex((t) => t.id === activeTab) }))
   } catch {
@@ -179,6 +189,7 @@ function loadTabs(vault: string, notes: string[], projects: Project[]): { tabs: 
     } | null
     if (!saved?.paths?.length) return null
     const tabs = saved.paths.map((p): Tab => {
+      if (p === 'settings') return { id: ++nextId, view: { kind: 'settings' } }
       const [, kind, slug] = /^(project|board):(.+)$/.exec(p ?? '') ?? []
       if (slug && projects.some((x) => x.slug === slug)) {
         return { id: ++nextId, view: { kind: kind as 'project' | 'board', slug } }
@@ -258,6 +269,8 @@ export const useStore = create<State>((set, get) => {
     git: null,
     gitBusy: null,
     vaultSettings: null,
+    prefs: null,
+    nudge: null,
     backlinksOpen: true,
     prompt: null,
     menu: null,
@@ -265,8 +278,8 @@ export const useStore = create<State>((set, get) => {
     reveal: null,
 
     async init() {
-      const vault = await window.api.getVault()
-      set({ vault })
+      const [vault, prefs] = await Promise.all([window.api.getVault(), window.api.prefs()])
+      set({ vault, prefs })
       if (!vault) return
       await get().refresh()
       const restored = loadTabs(vault.path, get().notes, get().projects)
@@ -420,6 +433,22 @@ ${(e as Error).message}`)
       setTabs([...tabs.slice(0, at), tab, ...tabs.slice(at)], tab.id)
     },
 
+    openSettings() {
+      const { tabs, activeTab } = get()
+      const existing = tabs.find((t) => t.view.kind === 'settings')
+      if (existing) return setTabs(tabs, existing.id)
+      const tab = { id: ++nextId, view: { kind: 'settings' } as View }
+      const at = tabs.findIndex((t) => t.id === activeTab) + 1
+      setTabs([...tabs.slice(0, at), tab, ...tabs.slice(at)], tab.id)
+    },
+
+    setNudge: (nudge) => set({ nudge }),
+
+    async savePrefs(prefs) {
+      set({ prefs })
+      set({ prefs: await window.api.savePrefs(prefs) })
+    },
+
     async createProject() {
       const name = await get().ask('New project', { placeholder: 'Project name', action: 'Create' })
       if (!name) return
@@ -464,6 +493,13 @@ ${(e as Error).message}`)
 
     async newNote(dir, name) {
       const target = dir ?? get().selectedDir
+      // "New note" while in a project's tasks folder means a new task there
+      const taskFolder = /^projects\/([^/]+)\/tasks(\/|$)/.exec(target)
+      if (taskFolder && !name) {
+        const task = await get().createTask(taskFolder[1], { title: 'New task' })
+        if (task) await get().openFile(task)
+        return task ?? ''
+      }
       const path = await window.api.createNote(target, name)
       await get().refresh()
       await get().openFile(path)

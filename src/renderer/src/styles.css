@@ -795,6 +795,10 @@ button.crumb.current:hover {
   margin-top: 4px;
 }
 
+.panel {
+  margin-bottom: 28px;
+}
+
 .panel h2 {
   font-size: 11px;
   letter-spacing: 0.08em;
@@ -1708,6 +1712,197 @@ button.crumb.current:hover {
 
 .diff .meta {
   color: var(--text-faint);
+}
+
+.nudge-banner {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  padding: 6px 12px 6px 20px;
+  background: color-mix(in srgb, var(--accent) 12%, var(--panel));
+  border-bottom: 1px solid color-mix(in srgb, var(--accent) 35%, var(--border));
+  font-size: 13px;
+  flex: none;
+}
+
+.nudge-mark {
+  color: var(--accent);
+}
+
+.nudge-text {
+  flex: 1;
+  color: var(--text-strong);
+}
+
+/* Quick capture window -------------------------------------------------- */
+
+body.capture-window {
+  background: var(--panel);
+}
+
+.capture {
+  height: 100%;
+  display: flex;
+  flex-direction: column;
+  padding: 12px 14px;
+  border: 1px solid var(--border);
+  border-radius: 10px;
+  -webkit-app-region: drag;
+}
+
+.capture-head {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  font-weight: 600;
+  color: var(--text-strong);
+  margin-bottom: 8px;
+}
+
+.capture-to {
+  font-weight: 400;
+  color: var(--text-faint);
+}
+
+.capture textarea {
+  flex: 1;
+  resize: none;
+  font: 15px/1.5 var(--sans);
+  color: var(--text-strong);
+  background: var(--bg);
+  border: 1px solid var(--accent);
+  border-radius: 8px;
+  padding: 8px 10px;
+  outline: none;
+  user-select: text;
+  -webkit-app-region: no-drag;
+}
+
+.capture-hint {
+  display: flex;
+  gap: 16px;
+  margin-top: 8px;
+  font-size: 12px;
+  color: var(--text-faint);
+}
+
+.capture-hint kbd {
+  margin: 0 4px 0 0;
+}
+
+/* Settings -------------------------------------------------------------- */
+
+.settings-btn {
+  margin-left: auto;
+}
+
+.settings-title {
+  font: 600 28px var(--display);
+  color: var(--text-strong);
+  margin: 0 0 18px;
+}
+
+.setting {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 16px;
+  padding: 8px 0;
+  border-bottom: 1px solid var(--border);
+}
+
+.setting:last-child {
+  border-bottom: 0;
+}
+
+.setting-name {
+  color: var(--text-strong);
+}
+
+.setting-help {
+  font-size: 12.5px;
+  color: var(--text-faint);
+  margin-top: 2px;
+}
+
+.setting-help .warn {
+  color: #ef6f6c;
+}
+
+.setting input[type='checkbox'] {
+  width: 16px;
+  height: 16px;
+  accent-color: var(--accent);
+  flex: none;
+}
+
+.setting select,
+.hotkey input {
+  font: inherit;
+  font-size: 13px;
+  color: var(--text-strong);
+  background: var(--bg);
+  border: 1px solid var(--border);
+  border-radius: 6px;
+  padding: 5px 8px;
+  outline: none;
+}
+
+.hotkey {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  flex: none;
+  color: var(--text-dim);
+}
+
+.hotkey input {
+  width: 190px;
+  text-align: center;
+  cursor: pointer;
+  caret-color: transparent;
+}
+
+.hotkey input.recording {
+  border-color: var(--accent);
+  color: var(--accent);
+}
+
+.segmented {
+  display: flex;
+  gap: 2px;
+  background: var(--bg);
+  border: 1px solid var(--border);
+  border-radius: 7px;
+  padding: 2px;
+}
+
+.segmented button {
+  padding: 4px 12px;
+  border-radius: 5px;
+  text-transform: capitalize;
+  color: var(--text-dim);
+  font-size: 13px;
+}
+
+.segmented button.on {
+  background: var(--active);
+  color: var(--text-strong);
+}
+
+.shortcuts {
+  border-collapse: collapse;
+  font-size: 13px;
+}
+
+.shortcuts td {
+  padding: 4px 16px 4px 0;
+}
+
+.shortcuts kbd {
+  margin: 0;
+  opacity: 0.9;
+  color: var(--text-strong);
 }
 
 /* Picker (Ctrl+P, Move to…) --------------------------------------------- */

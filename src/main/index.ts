@@ -1,4 +1,4 @@
-import { app, BrowserWindow, dialog, ipcMain, Menu, shell, nativeTheme } from 'electron'
+import { app, BrowserWindow, dialog, globalShortcut, ipcMain, Menu, shell, nativeTheme } from 'electron'
 import { basename, join } from 'path'
 import { existsSync } from 'fs'
 import { stat } from 'fs/promises'
@@ -9,7 +9,22 @@ import { createProject, knownExternalPaths, listProjects, saveProject } from './
 import { createTask, isTaskPath, listTasks, updateTask } from './tasks'
 import { VaultGit } from './git'
 import type { ProjectSettings, TaskFields, VaultSettings } from '@shared/types'
-import { loadConfig, saveConfig } from './config'
+import { loadConfig, prefs, saveConfig } from './config'
+import {
+  applyPrefs,
+  appIcon,
+  closeCapture,
+  commandFromArgv,
+  hotkeyRegistered,
+  openCapture,
+  preloadPath,
+  setupTray,
+  toast,
+  updateJumpList
+} from './desktop'
+import { withDefaults, type Prefs } from '@shared/prefs'
+import { startNudges } from './nudges'
+import type { AppCommand, DesktopInfo } from '@shared/types'
 import type { ChangeEvent, VaultInfo } from '@shared/types'
 import { movedPath } from '@shared/names'
 import { formatLink, linkTextFor, parseLinks, resolveLink } from '@shared/links'
@@ -173,6 +188,15 @@ async function relocate(rel: string, op: (v: Vault) => Promise<string>): Promise
   return to
 }
 
+/** Load the UI into a window; `hash` picks a mode (e.g. "capture" for the quick-capture window) */
+function loadPage(w: BrowserWindow, hash = '') {
+  if (!app.isPackaged && process.env['ELECTRON_RENDERER_URL']) {
+    w.loadURL(process.env['ELECTRON_RENDERER_URL'] + (hash ? `#${hash}` : ''))
+  } else {
+    w.loadFile(join(__dirname, '../renderer/index.html'), hash ? { hash } : undefined)
+  }
+}
+
 function createWindow() {
   const cfg = loadConfig()
   const b = cfg.bounds ?? { width: 1280, height: 820 }
@@ -184,10 +208,11 @@ function createWindow() {
     minHeight: 480,
     show: false,
     backgroundColor: '#17181b',
+    icon: appIcon(),
     titleBarStyle: 'hidden',
     titleBarOverlay: { color: '#17181b', symbolColor: '#c9c6bf', height: 38 },
     webPreferences: {
-      preload: join(__dirname, '../preload/index.js'),
+      preload: preloadPath(),
       contextIsolation: true,
       sandbox: true
     }
@@ -199,7 +224,19 @@ function createWindow() {
     if (!win) return
     saveConfig({ bounds: { ...win.getNormalBounds(), maximized: win.isMaximized() } })
   }
-  win.on('close', persist)
+  win.on('close', (e) => {
+    persist()
+    // Close-to-tray: hide instead, so the tray, hotkey and nudges keep working
+    if (!quitting && prefs().closeToTray) {
+      e.preventDefault()
+      win?.hide()
+      if (!loadConfig().trayHintShown) {
+        saveConfig({ trayHintShown: true })
+        toast('Waypoint is still running', 'It lives in the tray now. Right-click the ◆ icon to quit.', showMain)
+      }
+    }
+  })
+  win.on('closed', () => (win = null))
 
   // Open external links in the default browser, never inside the app
   win.webContents.setWindowOpenHandler(({ url }) => {
@@ -207,11 +244,7 @@ function createWindow() {
     return { action: 'deny' }
   })
 
-  if (!app.isPackaged && process.env['ELECTRON_RENDERER_URL']) {
-    win.loadURL(process.env['ELECTRON_RENDERER_URL'])
-  } else {
-    win.loadFile(join(__dirname, '../renderer/index.html'))
-  }
+  loadPage(win)
 }
 
 function registerIpc() {
@@ -361,20 +394,84 @@ function registerIpc() {
     const cfg = loadConfig()
     const list = [rel, ...(cfg.recent[v.root] ?? []).filter((r) => r !== rel)].slice(0, MAX_RECENT)
     saveConfig({ recent: { ...cfg.recent, [v.root]: list } })
+    updateJumpList(list)
     return list
   })
+
+  ipcMain.handle('prefs:get', () => prefs())
+  ipcMain.handle('prefs:save', (_e, p: Prefs) => {
+    saveConfig({ prefs: withDefaults(p) })
+    applyPrefs(prefs(), desktopHooks)
+    onPrefsChanged()
+    return prefs()
+  })
+  ipcMain.handle('desktop:info', (): DesktopInfo => ({ packaged: app.isPackaged, hotkey: hotkeyRegistered() }))
+  ipcMain.handle('capture:add', async (_e, text: string) => {
+    await requireVault().appendToInbox(text)
+    closeCapture()
+  })
+  ipcMain.on('capture:close', () => closeCapture())
+  // The UI asks for this once it's listening, so launch commands (jump list) aren't lost
+  ipcMain.on('app:ready', (e) => {
+    if (pendingCommand && e.sender === win?.webContents) {
+      e.sender.send('app:command', pendingCommand)
+      pendingCommand = null
+    }
+  })
+}
+
+/** Called when preferences change (nudges hook in here) */
+let onPrefsChanged = () => {}
+export const setOnPrefsChanged = (fn: () => void) => (onPrefsChanged = fn)
+
+let quitting = false
+let pendingCommand: AppCommand | null = null
+
+function showMain() {
+  if (!win || win.isDestroyed()) createWindow()
+  else {
+    if (win.isMinimized()) win.restore()
+    win.show()
+    win.focus()
+  }
+}
+
+/** Run a command from the jump list, tray, a toast or a second launch */
+function runCommand(c: AppCommand) {
+  if (c.kind === 'capture') {
+    if (!vault) return showMain() // nowhere to capture to yet
+    return openCapture(preloadPath(), loadPage)
+  }
+  if (c.kind === 'snooze') {
+    const p = prefs()
+    saveConfig({ prefs: { ...p, nudges: { ...p.nudges, snoozedUntil: Date.now() + c.minutes * 60_000 } } })
+    return toast('Nudges snoozed', `No nudges for ${c.minutes >= 60 ? `${c.minutes / 60} hour(s)` : `${c.minutes} minutes`}.`)
+  }
+  showMain()
+  if (win && !win.webContents.isLoading()) win.webContents.send('app:command', c)
+  else pendingCommand = c
+}
+
+const desktopHooks = {
+  showMain,
+  command: runCommand,
+  quit: () => {
+    quitting = true
+    app.quit()
+  }
 }
 
 const gotLock = app.requestSingleInstanceLock()
 if (!gotLock) {
   app.quit()
 } else {
-  app.on('second-instance', () => {
-    if (win) {
-      if (win.isMinimized()) win.restore()
-      win.focus()
-    }
+  app.on('second-instance', (_e, argv) => {
+    const c = commandFromArgv(argv)
+    if (c) runCommand(c)
+    else showMain()
   })
+
+  app.on('before-quit', () => (quitting = true))
 
   app.whenReady().then(async () => {
     app.setAppUserModelId('com.billlowe.waypoint')
@@ -384,11 +481,45 @@ if (!gotLock) {
     registerIpc()
     const last = loadConfig().vaultPath
     await setVault(last && existsSync(last) ? last : undefined)
-    createWindow()
+    setupTray(desktopHooks)
+    applyPrefs(prefs(), desktopHooks)
+    const nudges = startNudges({
+      vault: () => vault,
+      prefs,
+      lastNudge: () => ({ at: loadConfig().lastNudge ?? 0, key: loadConfig().lastNudgeKey ?? '' }),
+      setLastNudge: (at, key) => saveConfig({ lastNudge: at, lastNudgeKey: key }),
+      show: (n) => {
+        // In front: say it in the app. Otherwise a Windows notification (the installed app only:
+        // Windows drops toasts from apps without a Start-menu entry, e.g. this dev build)
+        if (win && win.isVisible() && win.isFocused()) {
+          win.webContents.send('app:command', {
+            kind: 'nudge',
+            nudge: { key: n.key, title: n.title, message: n.body, open: n.command }
+          } satisfies AppCommand)
+        } else toast(n.title, n.body, () => runCommand(n.command))
+      },
+      nothing: () => toast('Nothing to nudge about', 'No overdue, due-soon or waiting tasks, and no quiet projects. Nice.')
+    })
+    ipcMain.handle('nudge:now', () => nudges.now())
+    if (vault) updateJumpList(loadConfig().recent[vault.root] ?? [])
+    const hidden = process.argv.includes('--hidden') // started with Windows: tray only
+    pendingCommand = commandFromArgv(process.argv)
+    if (pendingCommand?.kind === 'capture') {
+      const c = pendingCommand
+      pendingCommand = null
+      runCommand(c)
+    } else if (!hidden || !prefs().closeToTray) {
+      createWindow()
+    }
   })
 
+  app.on('will-quit', () => globalShortcut.unregisterAll())
+
   app.on('window-all-closed', () => {
-    watcher?.close()
-    app.quit()
+    // With close-to-tray, the app keeps running (tray icon, hotkey, nudges) until Quit
+    if (quitting || !prefs().closeToTray) {
+      watcher?.close()
+      app.quit()
+    }
   })
 }

@@ -70,6 +70,17 @@ export class Vault {
     )
   }
 
+  /** Quick capture: add a bullet to inbox.md (created if missing), stamped with the time */
+  async appendToInbox(text: string): Promise<void> {
+    const clean = text.trim()
+    if (!clean) return
+    const file = join(this.root, 'inbox.md')
+    const current = await fs.readFile(file, 'utf8').catch(() => '# Inbox\n\n')
+    const when = new Date().toLocaleString('en-GB', { day: 'numeric', month: 'short', hour: '2-digit', minute: '2-digit' })
+    const entry = `- ${clean.replace(/\r?\n/g, '\n  ')} _(${when})_\n`
+    await fs.writeFile(file, (current.endsWith('\n') ? current : current + '\n') + entry, 'utf8')
+  }
+
   /** .app/settings.json, with defaults for anything missing (the file is optional) */
   async settings(): Promise<VaultSettings> {
     let data: Partial<VaultSettings> = {}

@@ -1,3 +1,5 @@
+import type { Prefs } from './prefs'
+
 export interface TreeNode {
   name: string
   /** Vault-relative path using forward slashes */
@@ -121,6 +123,33 @@ export interface VaultSettings {
   git: { autoCommit: boolean; intervalMinutes: number }
 }
 
+/** Things the main process asks the UI to do (jump list, tray, toasts, second launches) */
+/** Shown as a banner when Bill clicks a nudge, so he can mute or snooze it */
+export interface NudgeInfo {
+  key: string
+  message: string
+  /** Set for nudges shown inside the app (no toast was clicked yet) */
+  title?: string
+  open?: AppCommand
+}
+
+export type AppCommand =
+  | { kind: 'new-note' }
+  | { kind: 'home' }
+  | { kind: 'capture' }
+  | { kind: 'open'; path: string; nudge?: NudgeInfo }
+  | { kind: 'open-project'; slug: string; nudge?: NudgeInfo }
+  | { kind: 'open-board'; slug: string }
+  | { kind: 'snooze'; minutes: number }
+  /** Show a nudge as a banner in the app (used when the window is in front) */
+  | { kind: 'nudge'; nudge: NudgeInfo }
+
+export interface DesktopInfo {
+  packaged: boolean
+  /** The quick-capture hotkey actually registered ('' if none or taken by another app) */
+  hotkey: string
+}
+
 export interface Api {
   getVault(): Promise<VaultInfo | null>
   openVault(): Promise<VaultInfo | null>
@@ -172,4 +201,13 @@ export interface Api {
   onChanged(cb: (events: ChangeEvent[]) => void): () => void
   /** Fires after commits the app made by itself (auto-commit) */
   onGitChanged(cb: () => void): () => void
+  onCommand(cb: (c: AppCommand) => void): () => void
+  prefs(): Promise<Prefs>
+  savePrefs(prefs: Prefs): Promise<Prefs>
+  desktopInfo(): Promise<DesktopInfo>
+  /** Quick capture window: append to inbox.md, then close */
+  captureAdd(text: string): Promise<void>
+  captureClose(): void
+  /** Show a nudge right away (ignores timing rules; for trying it out) */
+  nudgeNow(): Promise<void>
 }
