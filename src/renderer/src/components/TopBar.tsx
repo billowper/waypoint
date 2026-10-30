@@ -118,13 +118,15 @@ export function TabBar() {
 
 /** Folder path, title (click to rename) and note actions for the open note */
 export function PathBar() {
-  const { view, activeTab, saveStates, rename, backlinksOpen, toggleBacklinks, openHistory, git, projects, openProject, revealFolder } =
+  const { view, activeTab, saveStates, rename, backlinksOpen, toggleBacklinks, openHistory, git, projects, openProject, openBoard, revealFolder } =
     useStore()
   if (view.kind !== 'file') return null
   const crumbs = view.path.replace(/\.md$/i, '').split('/')
   const saveState = saveStates[activeTab] ?? 'saved'
   // Folder crumbs: a project's own folder opens the project; any other folder is shown in the sidebar
   const folderAt = (i: number) => view.path.split('/').slice(0, i + 1).join('/')
+  // A project's tasks folder is its task board
+  const boardAt = (dir: string) => /^projects\/([^/]+)\/tasks$/.exec(dir)?.[1] ?? null
   const projectAt = (dir: string) => {
     const m = /^projects\/([^/]+)$/.exec(dir)
     return m && projects.some((p) => p.slug === m[1]) ? m[1] : null
@@ -146,8 +148,13 @@ export function PathBar() {
                 <button
                   key={i}
                   className="crumb link"
-                  title={slug ? 'Open the project' : 'Show this folder in the sidebar'}
-                  onClick={(e) => (slug ? openProject(slug, { newTab: e.ctrlKey }) : revealFolder(dir))}
+                  title={slug ? 'Open the project' : boardAt(dir) ? 'Open the task board' : 'Show this folder in the sidebar'}
+                  onClick={(e) => {
+                    const board = boardAt(dir)
+                    if (slug) openProject(slug, { newTab: e.ctrlKey })
+                    else if (board) openBoard(board, { newTab: e.ctrlKey })
+                    else revealFolder(dir)
+                  }}
                   onContextMenu={(e) => showMenu(e, slug ? projectMenu(slug) : treeMenu(dir, 'dir'))}
                 >
                   {slug ? (projects.find((p) => p.slug === slug)?.title ?? c) : c}

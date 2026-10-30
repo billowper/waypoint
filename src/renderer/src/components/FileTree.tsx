@@ -15,7 +15,8 @@ interface Props {
 const parentOf = (p: string) => (p.includes('/') ? p.slice(0, p.lastIndexOf('/')) : '')
 
 export default function FileTree({ nodes, depth }: Props) {
-  const { expanded, toggle, view, openFile, openCanvas, selectedDir, selectDir, move, tasks } = useStore()
+  const { expanded, toggle, view, openFile, openCanvas, openBoard, openInNewWindow, createTask, selectedDir, selectDir, move, tasks } =
+    useStore()
   const taskByPath = new Map(tasks.map((t) => [t.path, t]))
   const openPath = view.kind === 'file' ? view.path : null
   const [dropOn, setDropOn] = useState<string | null>(null)
@@ -64,6 +65,42 @@ export default function FileTree({ nodes, depth }: Props) {
     <ul className="tree">
       {nodes.map((n) => {
         const pad = { paddingLeft: 10 + depth * 14 }
+        // A project's tasks folder is its task board
+        const boardOf = n.type === 'dir' ? /^projects\/([^/]+)\/tasks$/.exec(n.path)?.[1] : undefined
+        if (boardOf) {
+          return (
+            <li key={n.path}>
+              <button
+                className={`tree-row dir task-board ${view.kind === 'board' && view.slug === boardOf ? 'active' : ''} ${dropOn === n.path ? 'drop-target' : ''}`}
+                style={pad}
+                data-path={n.path}
+                title="Open the task board"
+                onClick={(e) => openBoard(boardOf, { newTab: e.ctrlKey })}
+                onContextMenu={(e) =>
+                  showMenu(e, [
+                    { label: 'Open task board', run: () => openBoard(boardOf) },
+                    { label: 'Open task board in new tab', run: () => openBoard(boardOf, { newTab: true }) },
+                    { label: 'Open task board in new window', run: () => openInNewWindow({ kind: 'board', slug: boardOf }) },
+                    'separator',
+                    {
+                      label: 'New task',
+                      run: async () => {
+                        const p = await createTask(boardOf, { title: 'New task' })
+                        if (p) await openFile(p)
+                      }
+                    },
+                    { label: 'Show in Explorer', run: () => window.api.reveal(n.path) }
+                  ])
+                }
+                {...drag(n)}
+              >
+                <span className="chev spacer tree-icon">▦</span>
+                {n.name}
+                <span className="tree-count">{tasks.filter((t) => t.project === boardOf && t.status !== 'done').length || ''}</span>
+              </button>
+            </li>
+          )
+        }
         if (n.type === 'dir') {
           const isOpen = !!expanded[n.path]
           return (

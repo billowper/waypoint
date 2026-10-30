@@ -1106,6 +1106,19 @@ button.crumb.current:hover {
   margin: 0 0 4px;
 }
 
+.tree-row.task-board.active {
+  background: var(--active);
+  color: var(--text-strong);
+}
+
+/* Open-task count beside a project's tasks (board) */
+.tree-count {
+  margin-left: auto;
+  padding-left: 8px;
+  font-size: 11.5px;
+  color: var(--text-faint);
+}
+
 .tree-row.done {
   opacity: 0.5;
 }
