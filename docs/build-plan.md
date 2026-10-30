@@ -3,7 +3,7 @@
 Electron desktop app blending Obsidian (local markdown vault), Notion (nested pages, easy file ops), Miro (canvas boards) and Jira (tasks/boards), with git-backed data and Windows 11 integration.
 
 ## Guiding principles
-- **Plain files first.** Everything lives in a normal folder ("vault"): Markdown with YAML frontmatter for notes, wikis and tasks; small JSON files only where Markdown can't work (canvas boards, app settings). Any text editor and any git client can read it.
+- **Plain files first.** Everything lives in a normal folder ("vault"): Markdown with YAML frontmatter for notes, docs and tasks; small JSON files only where Markdown can't work (canvas boards, app settings). Any text editor and any git client can read it.
 - **Fast.** No database as source of truth — an in-memory index rebuilt from disk, kept fresh with a file watcher. Cache is disposable and git-ignored.
 - **Small phases, each one usable.** Every phase ends with a build you run, a short checklist of things to try, and a feedback round before moving on. Priorities can be reshuffled at any checkpoint.
 
@@ -23,7 +23,7 @@ vault/
   projects/
     <project-slug>/
       project.md             frontmatter = the project's settings (see Phase 2); body = overview
-      wiki/                  nested markdown pages
+      docs/                  nested markdown pages (older projects: wiki/)
       tasks/                 TASK-001.md … (frontmatter: status, priority, due, assignee)
       boards/                *.excalidraw canvas files
   inbox.md                   quick-capture target
@@ -51,7 +51,7 @@ vault/
   Obsidian-style tabs (click replaces, Ctrl/middle-click = new tab), restored on relaunch
 - **Checkpoint:** file handling vs Notion/Obsidian expectations
 
-### Phase 2 — Projects, wikis, resources, Home — BUILT (unattended), awaiting review
+### Phase 2 — Projects, docs, resources, Home — BUILT (unattended), awaiting review
 - Projects are a first-class type: "Create project" makes `projects/<slug>/project.md` with
   default folders; sidebar/Home list projects, not just folders
 - `project.md` frontmatter holds the project's settings, edited through a form in the app
@@ -69,14 +69,14 @@ vault/
     - { title: Designs, path: D:\Work\example\designs }
   ```
 - Project overview page: settings form + rendered overview + quick actions (open repo, links)
-- Project wiki (nested pages)
+- Project docs (nested pages; renamed from "wiki" at Bill's request)
 - Home/overview dashboard: active projects, recent notes, upcoming tasks
 - **Checkpoint:** is the project structure right before tasks build on it?
 
 ### Phase 3 — Tasks (Jira-lite) — BUILT (unattended), awaiting review
 - Tasks as markdown files with frontmatter; IDs per project
 - Kanban board (drag between statuses) and sortable list view
-- Priorities, due dates, labels, links to notes/wiki pages
+- Priorities, due dates, labels, links to notes/docs
 - Cross-project "My work" view on Home
 - **Checkpoint:** workflow states and fields actually wanted
 

@@ -1,5 +1,6 @@
 import { useEffect, useState } from 'react'
-import type { Prefs } from '@shared/prefs'
+import { DEFAULT_COLORS, DEFAULT_FONTS, type FontPrefs, type Prefs, type ThemeColors } from '@shared/prefs'
+import { palette } from '@shared/palette'
 
 const dark = () => window.matchMedia('(prefers-color-scheme: dark)')
 
@@ -15,11 +16,30 @@ export function useResolvedTheme(pref: Prefs['theme'] | undefined): 'dark' | 'li
   return pref === 'light' || pref === 'dark' ? pref : (system as 'dark' | 'light')
 }
 
-/** Put the theme on <html> so the CSS variables switch */
-export function useApplyTheme(pref: Prefs['theme'] | undefined) {
+const family = (name: string, fallback: string) => (name.trim() ? `'${name.trim().replace(/'/g, '')}', ${fallback}` : fallback)
+
+/**
+ * Put the theme on <html>: light/dark, the palette calculated from the two colours, and fonts.
+ * `colors` may be a project's own override.
+ */
+export function useApplyTheme(pref: Prefs['theme'] | undefined, colors?: ThemeColors, fonts?: FontPrefs) {
   const theme = useResolvedTheme(pref)
+  const c = colors ?? DEFAULT_COLORS
+  const f = fonts ?? DEFAULT_FONTS
   useEffect(() => {
-    document.documentElement.dataset.theme = theme
-  }, [theme])
+    const root = document.documentElement
+    root.dataset.theme = theme
+    const vars: Record<string, string> = {
+      ...palette(theme, c.primary, c.accent),
+      '--sans': family(f.ui, "'Segoe UI', system-ui, sans-serif"),
+      '--display': family(f.ui === DEFAULT_FONTS.ui ? 'Segoe UI Variable Display' : f.ui, "'Segoe UI', system-ui, sans-serif"),
+      '--editor-font': family(f.editor || f.ui, "'Segoe UI', system-ui, sans-serif"),
+      '--editor-size': `${f.size}px`,
+      '--mono': family(f.mono, "'Cascadia Mono', Consolas, monospace")
+    }
+    for (const [k, v] of Object.entries(vars)) root.style.setProperty(k, v)
+    // The Windows caption buttons are drawn by Windows; tell it our colours
+    window.api.setChrome?.(vars['--bg'], vars['--text'])
+  }, [theme, c.primary, c.accent, f.ui, f.editor, f.mono, f.size])
   return theme
 }

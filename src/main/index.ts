@@ -13,10 +13,10 @@ import { loadConfig, prefs, saveConfig } from './config'
 import {
   applyPrefs,
   appIcon,
-  closeCapture,
+  closePopup,
   commandFromArgv,
   hotkeyRegistered,
-  openCapture,
+  openPopup,
   preloadPath,
   setupTray,
   toast,
@@ -426,12 +426,36 @@ function registerIpc() {
     onPrefsChanged()
     return prefs()
   })
-  ipcMain.handle('desktop:info', (): DesktopInfo => ({ packaged: app.isPackaged, hotkey: hotkeyRegistered() }))
+  ipcMain.handle('desktop:info', (): DesktopInfo => ({
+    packaged: app.isPackaged,
+    hotkey: hotkeyRegistered('capture'),
+    searchHotkey: hotkeyRegistered('search')
+  }))
   ipcMain.handle('capture:add', async (_e, text: string) => {
     await requireVault().appendToInbox(text)
-    closeCapture()
+    closePopup('capture')
   })
-  ipcMain.on('capture:close', () => closeCapture())
+  ipcMain.on('capture:close', () => closePopup('capture'))
+  ipcMain.on('search:close', () => closePopup('search'))
+  ipcMain.on('popup:height', (e, px: number) => {
+    const w = BrowserWindow.fromWebContents(e.sender)
+    if (!w || w === win || !Number.isFinite(px)) return
+    const [width] = w.getSize()
+    w.setResizable(true)
+    w.setSize(width, Math.round(Math.min(Math.max(px, 60), 520)))
+    w.setResizable(false)
+  })
+  // A pick in the search popup opens in the main window
+  ipcMain.on('search:open', (_e, c: AppCommand) => {
+    closePopup('search')
+    if (c.kind === 'open' && vault && vault.isNote(c.path)) runCommand(c)
+  })
+  ipcMain.on('theme:chrome', (e, background: string, symbols: string) => {
+    const w = BrowserWindow.fromWebContents(e.sender)
+    if (!w || w.isDestroyed() || !/^#[0-9a-f]{6}$/i.test(background) || !/^#[0-9a-f]{6}$/i.test(symbols)) return
+    w.setBackgroundColor(background)
+    if (w === win) w.setTitleBarOverlay({ color: background, symbolColor: symbols, height: 38 })
+  })
   // The UI asks for this once it's listening, so launch commands (jump list) aren't lost
   ipcMain.on('app:ready', (e) => {
     if (pendingCommand && e.sender === win?.webContents) {
@@ -461,7 +485,11 @@ function showMain() {
 function runCommand(c: AppCommand) {
   if (c.kind === 'capture') {
     if (!vault) return showMain() // nowhere to capture to yet
-    return openCapture(preloadPath(), loadPage)
+    return openPopup('capture', preloadPath(), loadPage)
+  }
+  if (c.kind === 'search') {
+    if (!vault) return showMain()
+    return openPopup('search', preloadPath(), loadPage)
   }
   if (c.kind === 'snooze') {
     const p = prefs()

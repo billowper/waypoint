@@ -1,6 +1,6 @@
 # Waypoint
 
-Notes, projects, wikis and tasks in a plain-Markdown, git-friendly vault. Electron + React + TypeScript.
+Notes, projects, docs and tasks in a plain-Markdown, git-friendly vault. Electron + React + TypeScript.
 
 ## Run
 

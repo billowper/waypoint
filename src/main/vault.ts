@@ -63,7 +63,7 @@ export class Vault {
         'edit it anywhere and version it with git.',
         '',
         '- **notes/** — free-form notes, nest folders as deep as you like',
-        '- **projects/** — one folder per project (wikis, resources, tasks)',
+        '- **projects/** — one folder per project (docs, tasks, boards)',
         '- **inbox.md** — quick capture',
         ''
       ].join('\n')

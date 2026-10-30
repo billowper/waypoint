@@ -39,7 +39,6 @@ interface Hooks {
 
 let tray: Tray | null = null
 let captureWin: BrowserWindow | null = null
-let registeredHotkey = ''
 
 export function setupTray(h: Hooks) {
   if (tray) return
@@ -99,20 +98,24 @@ export function applyPrefs(p: Prefs, h: Hooks) {
     // Only the installed app registers itself; a dev build at login would be confusing
     app.setLoginItemSettings({ openAtLogin: p.startWithWindows, ...launchItem(['--hidden']) })
   }
-  if (registeredHotkey && registeredHotkey !== p.captureHotkey) {
-    globalShortcut.unregister(registeredHotkey)
-    registeredHotkey = ''
-  }
-  if (p.captureHotkey && !registeredHotkey) {
-    try {
-      if (globalShortcut.register(p.captureHotkey, () => h.command({ kind: 'capture' }))) {
-        registeredHotkey = p.captureHotkey
-      } else {
-        console.warn('[hotkey] already taken by another app:', p.captureHotkey)
-      }
-    } catch (e) {
-      console.warn('[hotkey] invalid:', p.captureHotkey, e)
-    }
+  bindHotkey('capture', p.captureHotkey, () => h.command({ kind: 'capture' }))
+  bindHotkey('search', p.searchHotkey, () => h.command({ kind: 'search' }))
+}
+
+/** Global hotkeys by purpose → the accelerator actually registered ('' if none / taken) */
+const hotkeys: Record<string, string> = {}
+
+function bindHotkey(purpose: string, accel: string, fn: () => void) {
+  const current = hotkeys[purpose] ?? ''
+  if (current === accel) return
+  if (current) globalShortcut.unregister(current)
+  hotkeys[purpose] = ''
+  if (!accel) return
+  try {
+    if (globalShortcut.register(accel, fn)) hotkeys[purpose] = accel
+    else console.warn(`[hotkey] ${purpose}: already taken by another app:`, accel)
+  } catch (e) {
+    console.warn(`[hotkey] ${purpose}: invalid:`, accel, e)
   }
 }
 
@@ -121,7 +124,7 @@ function launchItem(args: string[]) {
   return { path: l.program, args: l.args ? l.args.split(' ') : [] }
 }
 
-export const hotkeyRegistered = () => registeredHotkey
+export const hotkeyRegistered = (purpose: 'capture' | 'search' = 'capture') => hotkeys[purpose] ?? ''
 
 /** Windows toast; click runs the command */
 export function toast(title: string, body: string, onClick?: () => void) {
@@ -131,38 +134,49 @@ export function toast(title: string, body: string, onClick?: () => void) {
   n.show()
 }
 
-/** Small always-on-top window for jotting into the inbox from anywhere */
-export function openCapture(preload: string, loadPage: (w: BrowserWindow, hash: string) => void) {
-  if (captureWin && !captureWin.isDestroyed()) {
-    captureWin.show()
-    captureWin.focus()
+/** Launcher-style popups: quick capture (jot into the inbox) and quick search */
+const POPUPS = { capture: { width: 520, height: 190 }, search: { width: 640, height: 440 } }
+const popups: Partial<Record<keyof typeof POPUPS, BrowserWindow>> = {}
+
+export function openPopup(
+  kind: keyof typeof POPUPS,
+  preload: string,
+  loadPage: (w: BrowserWindow, hash: string) => void
+) {
+  const open = popups[kind]
+  if (open && !open.isDestroyed()) {
+    open.show()
+    open.focus()
     return
   }
   const { workArea } = screen.getDisplayNearestPoint(screen.getCursorScreenPoint())
-  const width = 520
-  const height = 190
-  captureWin = new BrowserWindow({
+  const { width, height } = POPUPS[kind]
+  const w = new BrowserWindow({
     width,
     height,
     x: Math.round(workArea.x + (workArea.width - width) / 2),
-    y: Math.round(workArea.y + workArea.height * 0.25),
+    y: Math.round(workArea.y + workArea.height * 0.2),
     frame: false,
     resizable: false,
     alwaysOnTop: true,
     skipTaskbar: true,
     show: false,
-    backgroundColor: '#212227',
+    transparent: kind === 'search', // rounded corners; the window is resized to fit the results
+    backgroundColor: kind === 'search' ? '#00000000' : '#212227',
     icon: appIcon(),
     webPreferences: { preload, contextIsolation: true, sandbox: true }
   })
-  captureWin.once('ready-to-show', () => captureWin?.show())
-  captureWin.on('blur', () => captureWin?.close()) // click away = cancel, like a launcher
-  captureWin.on('closed', () => (captureWin = null))
-  loadPage(captureWin, 'capture')
+  popups[kind] = w
+  w.once('ready-to-show', () => w.show())
+  w.on('blur', () => w.close()) // click away = cancel, like a launcher
+  w.on('closed', () => {
+    if (popups[kind] === w) delete popups[kind]
+  })
+  loadPage(w, kind)
 }
 
-export function closeCapture() {
-  captureWin?.close()
+export function closePopup(kind: keyof typeof POPUPS) {
+  popups[kind]?.close()
 }
 
 export const preloadPath = () => join(__dirname, '../preload/index.js')

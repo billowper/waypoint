@@ -1,6 +1,23 @@
 import { useEffect, useState } from 'react'
 import type { DesktopInfo } from '@shared/types'
-import type { Prefs } from '@shared/prefs'
+import { DEFAULT_COLORS, DEFAULT_FONTS, type Prefs } from '@shared/prefs'
+import ColorPair from './ColorPair'
+
+/** Fonts that come with Windows 11 (any installed font name can be typed in too) */
+const FONT_CHOICES = [
+  'Segoe UI Variable Text',
+  'Segoe UI',
+  'Aptos',
+  'Calibri',
+  'Bahnschrift',
+  'Georgia',
+  'Cambria',
+  'Constantia',
+  'Palatino Linotype',
+  'Verdana',
+  'Trebuchet MS'
+]
+const MONO_CHOICES = ['Cascadia Code', 'Cascadia Mono', 'Consolas', 'Lucida Console', 'Courier New']
 import { useStore } from '../store'
 
 /** Turn a key press into an Electron accelerator, e.g. "Control+Alt+Space" */
@@ -12,10 +29,50 @@ function accelerator(e: React.KeyboardEvent): string | null {
   return [...mods, key].join('+')
 }
 
+/** A global hotkey: click, press the keys; warns if another app already owns them */
+function HotkeySetting(p: { name: string; help: string; value: string; registered?: string; onChange(v: string): void }) {
+  const [recording, setRecording] = useState(false)
+  return (
+    <div className="setting">
+      <div>
+        <div className="setting-name">{p.name}</div>
+        <div className="setting-help">
+          {p.help}
+          {p.value && p.registered !== undefined && p.registered !== p.value && (
+            <span className="warn"> Another app is already using this shortcut. Pick a different one.</span>
+          )}
+        </div>
+      </div>
+      <div className="hotkey">
+        <input
+          readOnly
+          className={recording ? 'recording' : ''}
+          value={recording ? 'Press the keys…' : p.value.replace(/\+/g, ' + ') || 'Off'}
+          onFocus={() => setRecording(true)}
+          onBlur={() => setRecording(false)}
+          onKeyDown={(e) => {
+            e.preventDefault()
+            if (e.key === 'Escape') return (e.currentTarget as HTMLInputElement).blur()
+            const acc = accelerator(e)
+            if (acc) {
+              p.onChange(acc)
+              ;(e.currentTarget as HTMLInputElement).blur()
+            }
+          }}
+        />
+        {p.value && (
+          <button className="btn small" onClick={() => p.onChange('')}>
+            Turn off
+          </button>
+        )}
+      </div>
+    </div>
+  )
+}
+
 export default function Settings() {
   const { prefs, savePrefs, vault, openVault } = useStore()
   const [info, setInfo] = useState<DesktopInfo | null>(null)
-  const [recording, setRecording] = useState(false)
   const [backingUp, setBackingUp] = useState(false)
 
   useEffect(() => {
@@ -73,6 +130,72 @@ ${(e as Error).message}`)
             ))}
           </div>
         </div>
+        <div className="setting">
+          <div>
+            <div className="setting-name">Colours</div>
+            <div className="setting-help">
+              Primary is for buttons, links and the cursor; accent for highlights. Backgrounds, text and borders are
+              worked out from these. Projects can have their own (on the project page).
+            </div>
+          </div>
+          <div className="hotkey">
+            <ColorPair value={prefs.colors} onChange={(colors) => set({ colors })} />
+            {(prefs.colors.primary !== DEFAULT_COLORS.primary || prefs.colors.accent !== DEFAULT_COLORS.accent) && (
+              <button className="btn small" onClick={() => set({ colors: DEFAULT_COLORS })}>
+                Reset
+              </button>
+            )}
+          </div>
+        </div>
+      </section>
+
+      <section className="card">
+        <h2>Fonts</h2>
+        {(
+          [
+            ['ui', 'Interface', FONT_CHOICES],
+            ['editor', 'Notes', FONT_CHOICES],
+            ['mono', 'Code', MONO_CHOICES]
+          ] as const
+        ).map(([key, label, choices]) => (
+          <div className="setting" key={key}>
+            <div className="setting-name">{label}</div>
+            <div className="hotkey">
+              <input
+                className="font-input"
+                list={`fonts-${key}`}
+                value={prefs.fonts[key]}
+                placeholder={key === 'editor' ? 'Same as interface' : ''}
+                style={{ fontFamily: prefs.fonts[key] || undefined }}
+                onChange={(e) => set({ fonts: { ...prefs.fonts, [key]: e.target.value } })}
+              />
+              <datalist id={`fonts-${key}`}>
+                {choices.map((f) => (
+                  <option key={f} value={f} />
+                ))}
+              </datalist>
+            </div>
+          </div>
+        ))}
+        <div className="setting">
+          <div className="setting-name">Note text size</div>
+          <div className="hotkey">
+            <input
+              type="range"
+              min={12}
+              max={22}
+              step={0.5}
+              value={prefs.fonts.size}
+              onChange={(e) => set({ fonts: { ...prefs.fonts, size: Number(e.target.value) } })}
+            />
+            <span className="size-value">{prefs.fonts.size}px</span>
+            {JSON.stringify(prefs.fonts) !== JSON.stringify(DEFAULT_FONTS) && (
+              <button className="btn small" onClick={() => set({ fonts: DEFAULT_FONTS })}>
+                Reset
+              </button>
+            )}
+          </div>
+        </div>
       </section>
 
       <section className="card">
@@ -98,40 +221,20 @@ ${(e as Error).message}`)
             onChange={(e) => set({ startWithWindows: e.target.checked })}
           />
         </label>
-        <div className="setting">
-          <div>
-            <div className="setting-name">Quick-capture hotkey</div>
-            <div className="setting-help">
-              Opens a small box from anywhere that adds a line to inbox.md.
-              {prefs.captureHotkey && info && info.hotkey !== prefs.captureHotkey && (
-                <span className="warn"> Another app is already using this shortcut. Pick a different one.</span>
-              )}
-            </div>
-          </div>
-          <div className="hotkey">
-            <input
-              readOnly
-              className={recording ? 'recording' : ''}
-              value={recording ? 'Press the keys…' : prefs.captureHotkey.replace(/\+/g, ' + ') || 'Off'}
-              onFocus={() => setRecording(true)}
-              onBlur={() => setRecording(false)}
-              onKeyDown={(e) => {
-                e.preventDefault()
-                if (e.key === 'Escape') return (e.currentTarget as HTMLInputElement).blur()
-                const acc = accelerator(e)
-                if (acc) {
-                  set({ captureHotkey: acc })
-                  ;(e.currentTarget as HTMLInputElement).blur()
-                }
-              }}
-            />
-            {prefs.captureHotkey && (
-              <button className="btn small" onClick={() => set({ captureHotkey: '' })}>
-                Turn off
-              </button>
-            )}
-          </div>
-        </div>
+        <HotkeySetting
+          name="Quick-capture hotkey"
+          help="Opens a small box from anywhere that adds a line to inbox.md."
+          value={prefs.captureHotkey}
+          registered={info?.hotkey}
+          onChange={(captureHotkey) => set({ captureHotkey })}
+        />
+        <HotkeySetting
+          name="Search hotkey"
+          help="Opens a search box from anywhere; pick a result to open it here."
+          value={prefs.searchHotkey}
+          registered={info?.searchHotkey}
+          onChange={(searchHotkey) => set({ searchHotkey })}
+        />
       </section>
 
       <section className="card">
@@ -314,5 +417,6 @@ const SHORTCUTS: [string, string][] = [
   ['Ctrl Shift H', 'Home'],
   ['Ctrl ,', 'Settings'],
   ['Ctrl S', 'Save now (it autosaves anyway)'],
-  ['Ctrl Alt W', 'Quick capture from anywhere (changeable above)']
+  ['Ctrl Alt W', 'Quick capture from anywhere (changeable above)'],
+  ['Ctrl Alt F', 'Search from anywhere (changeable above)']
 ]

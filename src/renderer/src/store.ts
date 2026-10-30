@@ -132,6 +132,7 @@ const parentOf = (p: string) => (p.includes('/') ? p.slice(0, p.lastIndexOf('/')
 export const canRename = (p: string) => p !== '' && p !== 'projects'
 
 let nextId = 0
+let prefsTimer: ReturnType<typeof setTimeout> | null = null
 const homeTab = (): Tab => ({ id: ++nextId, view: { kind: 'home' } })
 
 // Saves and file operations run one at a time, in order, so a save never lands on a path that
@@ -488,8 +489,13 @@ ${(e as Error).message}`)
     },
 
     async savePrefs(prefs) {
+      // Show the change at once; write it once the colour picker / slider stops moving
       set({ prefs })
-      set({ prefs: await window.api.savePrefs(prefs) })
+      if (prefsTimer) clearTimeout(prefsTimer)
+      prefsTimer = setTimeout(async () => {
+        const saved = await window.api.savePrefs(prefs)
+        if (get().prefs === prefs) set({ prefs: saved })
+      }, 300)
     },
 
     async createProject() {

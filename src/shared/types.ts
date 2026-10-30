@@ -50,6 +50,8 @@ export interface ProjectSettings {
   repo: { path: string; remote: string }
   links: { title: string; url: string }[]
   bookmarks: { title: string; path: string }[]
+  /** The project's own colours (primary + accent); null = use the app's */
+  colors: { primary: string; accent: string } | null
 }
 
 export interface Project extends ProjectSettings {
@@ -137,7 +139,8 @@ export type AppCommand =
   | { kind: 'new-note' }
   | { kind: 'home' }
   | { kind: 'capture' }
-  | { kind: 'open'; path: string; nudge?: NudgeInfo }
+  | { kind: 'open'; path: string; nudge?: NudgeInfo; reveal?: { line: number; query?: string }; newTab?: boolean }
+  | { kind: 'search' }
   | { kind: 'open-project'; slug: string; nudge?: NudgeInfo }
   | { kind: 'open-board'; slug: string }
   | { kind: 'snooze'; minutes: number }
@@ -148,6 +151,7 @@ export interface DesktopInfo {
   packaged: boolean
   /** The quick-capture hotkey actually registered ('' if none or taken by another app) */
   hotkey: string
+  searchHotkey: string
 }
 
 export interface Api {
@@ -208,6 +212,13 @@ export interface Api {
   /** Quick capture window: append to inbox.md, then close */
   captureAdd(text: string): Promise<void>
   captureClose(): void
+  /** Search popup: open a result in the main window (closes the popup) */
+  searchOpen(path: string, reveal?: { line: number; query?: string }, newTab?: boolean): void
+  searchClose(): void
+  /** Fit the popup window to its content */
+  popupHeight(px: number): void
+  /** Match the native title-bar buttons to the page's colours */
+  setChrome(background: string, symbols: string): void
   /** Zip the vault into the backup folder now; returns the file written */
   backupNow(): Promise<string>
   /** New Excalidraw board in a folder; returns its path */

@@ -12,7 +12,7 @@ interface Item {
 const MAX_ITEMS = 60
 
 /** Subsequence match: consecutive letters and word starts score higher; null if no match. */
-function fuzzy(q: string, s: string): number | null {
+export function fuzzy(q: string, s: string): number | null {
   const t = s.toLowerCase()
   let qi = 0
   let score = 0

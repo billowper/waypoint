@@ -6,10 +6,10 @@ import { useApplyTheme } from '../theme'
 export default function Capture() {
   const [text, setText] = useState('')
   const [busy, setBusy] = useState(false)
-  const [theme, setTheme] = useState<Prefs['theme']>()
-  useApplyTheme(theme)
+  const [prefs, setPrefs] = useState<Prefs>()
+  useApplyTheme(prefs?.theme, prefs?.colors, prefs?.fonts)
   useEffect(() => {
-    window.api.prefs().then((p) => setTheme(p.theme))
+    window.api.prefs().then(setPrefs)
   }, [])
 
   const save = async () => {

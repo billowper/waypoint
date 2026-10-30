@@ -1,6 +1,7 @@
 import { useCallback, useEffect, useRef, useState } from 'react'
 import { PROJECT_STATUSES, TASK_STATUSES, TASK_STATUS_LABEL, type Project, type ProjectSettings } from '@shared/types'
 import { byUrgency, dueState, formatDue } from './Board'
+import ColorPair from './ColorPair'
 import { baseName } from '@shared/names'
 import { useStore } from '../store'
 
@@ -14,12 +15,14 @@ const settingsOf = (p: Project): ProjectSettings => ({
   created: p.created,
   repo: { ...p.repo },
   links: p.links.map((l) => ({ ...l })),
-  bookmarks: p.bookmarks.map((b) => ({ ...b }))
+  bookmarks: p.bookmarks.map((b) => ({ ...b })),
+  colors: p.colors ? { ...p.colors } : null
 })
 
 const fail = (what: string) => (e: unknown) => alert(`${what}\n\n${(e as Error).message}`)
 
 export default function ProjectPage({ slug }: { slug: string }) {
+  const prefs = useStore((st) => st.prefs)
   const { projects, notes, tasks, boards, openFile, newNote, refresh, openBoard, createTask, openCanvas, createBoard } =
     useStore()
   const project = projects.find((p) => p.slug === slug)
@@ -69,12 +72,13 @@ export default function ProjectPage({ slug }: { slug: string }) {
   }
 
   const inDir = (sub: string) => notes.filter((n) => n.startsWith(`${project.dir}/${sub}/`))
-  const wiki = inDir('wiki')
+  // Docs live in docs/; older projects used wiki/, which still counts
+  const docs = [...inDir('docs'), ...inDir('wiki')]
   const other = notes.filter(
     (n) =>
       n.startsWith(project.dir + '/') &&
       n !== `${project.dir}/project.md` &&
-      !/\/(wiki|tasks|boards)\//.test(n.slice(project.dir.length))
+      !/\/(docs|wiki|tasks|boards)\//.test(n.slice(project.dir.length))
   )
 
   return (
@@ -117,6 +121,17 @@ export default function ProjectPage({ slug }: { slug: string }) {
               onChange={(e) => update({ key: e.target.value.toUpperCase().replace(/[^A-Z0-9]/g, '').slice(0, 6) })}
             />
           </label>
+          <label className="project-colors" title="Give this project its own colours">
+            <input
+              type="checkbox"
+              checked={!!s.colors}
+              onChange={(e) =>
+                update({ colors: e.target.checked ? { ...(prefs?.colors ?? { primary: '#e6aa50', accent: '#e6aa50' }) } : null })
+              }
+            />
+            Own colours
+          </label>
+          {s.colors && <ColorPair value={s.colors} onChange={(colors) => update({ colors })} />}
           {s.created && <span className="created">Created {s.created}</span>}
         </div>
       </header>
@@ -313,18 +328,19 @@ export default function ProjectPage({ slug }: { slug: string }) {
 
       <section className="card">
         <div className="card-head">
-          <h2>Wiki</h2>
-          <button className="btn small" onClick={() => newNote(`${project.dir}/wiki`)}>
-            New page
+          <h2>Docs</h2>
+          <button className="btn small" onClick={() => newNote(`${project.dir}/docs`)}>
+            New doc
           </button>
         </div>
-        {wiki.length === 0 && <p className="empty">No wiki pages yet.</p>}
+        {docs.length === 0 && <p className="empty">No docs yet: specs, notes, how-tos…</p>}
         <ul className="page-list">
-          {wiki.map((n) => (
+          {docs.map((n) => (
             <li key={n}>
               <button onClick={(e) => openFile(n, { newTab: e.ctrlKey })}>
                 {baseName(n)}
-                <span className="recent-path">{n.slice(project.dir.length + 6, -baseName(n).length - 4)}</span>
+                {/* subfolder inside docs/, if any */}
+                <span className="recent-path">{n.slice(project.dir.length + 1).split('/').slice(1, -1).join('/')}</span>
               </button>
             </li>
           ))}

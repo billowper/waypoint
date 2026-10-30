@@ -59,9 +59,13 @@ const api: Api = {
   desktopInfo: () => ipcRenderer.invoke('desktop:info'),
   captureAdd: (text) => ipcRenderer.invoke('capture:add', text),
   captureClose: () => ipcRenderer.send('capture:close'),
+  searchOpen: (path, reveal, newTab) => ipcRenderer.send('search:open', { kind: 'open', path, reveal, newTab }),
+  searchClose: () => ipcRenderer.send('search:close'),
+  popupHeight: (px) => ipcRenderer.send('popup:height', px),
   nudgeNow: () => ipcRenderer.invoke('nudge:now'),
   createBoard: (dir, name) => ipcRenderer.invoke('boards:create', dir, name),
-  backupNow: () => ipcRenderer.invoke('backup:now')
+  backupNow: () => ipcRenderer.invoke('backup:now'),
+  setChrome: (background, symbols) => ipcRenderer.send('theme:chrome', background, symbols)
 }
 
 contextBridge.exposeInMainWorld('api', api)

@@ -43,7 +43,7 @@ const mdHighlight = HighlightStyle.define([
 const theme = EditorView.theme(
   {
     '&': { height: '100%', backgroundColor: 'transparent', color: 'var(--text)' },
-    '.cm-scroller': { fontFamily: 'var(--sans)', lineHeight: '1.7', overflow: 'auto' },
+    '.cm-scroller': { fontFamily: 'var(--editor-font)', lineHeight: '1.7', overflow: 'auto' },
     '.cm-content': {
       maxWidth: '760px',
       margin: '0 auto',
@@ -57,10 +57,10 @@ const theme = EditorView.theme(
     '&.cm-focused .cm-selectionBackground, .cm-selectionBackground, ::selection': {
       backgroundColor: 'var(--selection) !important'
     },
-    '.cm-selectionMatch': { backgroundColor: 'rgba(230, 170, 80, 0.12)' },
+    '.cm-selectionMatch': { backgroundColor: 'var(--highlight-soft)' },
     '.cm-placeholder': { color: 'var(--text-faint)' },
     '.cm-panels': { backgroundColor: 'var(--panel)', color: 'var(--text)', borderColor: 'var(--border)' },
-    '.cm-searchMatch': { backgroundColor: 'rgba(230, 170, 80, 0.25)' },
+    '.cm-searchMatch': { backgroundColor: 'var(--highlight-soft)' },
     '.cm-tooltip': {
       backgroundColor: 'var(--panel)',
       border: '1px solid var(--border)',
@@ -75,7 +75,7 @@ const theme = EditorView.theme(
       color: 'var(--text-strong)'
     },
     '.cm-completionDetail': { color: 'var(--text-faint)', fontStyle: 'normal', marginLeft: '10px' },
-    '.cm-completionMatchedText': { textDecoration: 'none', color: 'var(--accent)' }
+    '.cm-completionMatchedText': { textDecoration: 'none', color: 'var(--highlight)' }
   },
   { dark: true }
 )

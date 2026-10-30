@@ -38,7 +38,19 @@ const inTextField = () => {
 export default function App() {
   const { vault, view, tabs, activeTab, init, refresh, prompt, menu, backlinksOpen, git, setSidebarMode } = useStore()
 
-  useApplyTheme(useStore((s) => s.prefs?.theme))
+  // A project's own colours apply while you're in it (its page, board, notes, tasks)
+  const prefsNow = useStore((s) => s.prefs)
+  const projectColors = useStore((s) => {
+    const v = s.view
+    const slug =
+      v.kind === 'project' || v.kind === 'board'
+        ? v.slug
+        : (v.kind === 'file' || v.kind === 'canvas' || v.kind === 'history') && v.path.startsWith('projects/')
+          ? v.path.split('/')[1]
+          : null
+    return slug ? (s.projects.find((p) => p.slug === slug)?.colors ?? null) : null
+  })
+  useApplyTheme(prefsNow?.theme, projectColors ?? prefsNow?.colors, prefsNow?.fonts)
 
   useEffect(() => {
     init()
@@ -76,7 +88,7 @@ export default function App() {
       if (c.kind === 'nudge') return
       if (c.kind === 'new-note') s.newNote('notes') // from the jump list or tray: a plain note
       else if (c.kind === 'home') s.goHome()
-      else if (c.kind === 'open') s.notes.includes(c.path) && s.openFile(c.path)
+      else if (c.kind === 'open') s.notes.includes(c.path) && s.openFile(c.path, { newTab: c.newTab, reveal: c.reveal })
       else if (c.kind === 'open-project') s.openProject(c.slug)
       else if (c.kind === 'open-board') s.openBoard(c.slug)
     })

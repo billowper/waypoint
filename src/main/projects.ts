@@ -8,7 +8,7 @@ import { sanitize, titleOf } from '@shared/names'
 export const PROJECTS_DIR = 'projects'
 const PROJECT_FILE = 'project.md'
 /** Folders every new project starts with */
-const SUBFOLDERS = ['wiki', 'tasks', 'boards']
+const SUBFOLDERS = ['docs', 'tasks', 'boards']
 
 const today = () => new Date().toISOString().slice(0, 10)
 
@@ -33,7 +33,10 @@ function settingsFrom(data: Record<string, unknown>, fallbackTitle: string): Pro
   const status = str(data.status) as ProjectStatus
   const repo = (data.repo && typeof data.repo === 'object' ? data.repo : {}) as Record<string, unknown>
   const title = str(data.title, fallbackTitle) || fallbackTitle
+  const c = (data.colors && typeof data.colors === 'object' ? data.colors : null) as Record<string, unknown> | null
+  const hex = (v: unknown) => (typeof v === 'string' && /^#[0-9a-f]{6}$/i.test(v) ? v : '')
   return {
+    colors: c && hex(c.primary) ? { primary: hex(c.primary), accent: hex(c.accent) || hex(c.primary) } : null,
     title,
     status: PROJECT_STATUSES.includes(status) ? status : 'active',
     key: (str(data.key) || keyFor(title)).toUpperCase(),
@@ -57,6 +60,7 @@ function dataFrom(s: ProjectSettings): Record<string, unknown> {
   }
   if (s.links.length) data.links = s.links.map((l) => ({ title: l.title || l.url, url: l.url }))
   if (s.bookmarks.length) data.bookmarks = s.bookmarks.map((b) => ({ title: b.title || b.path, path: b.path }))
+  if (s.colors) data.colors = { primary: s.colors.primary, accent: s.colors.accent }
   return data
 }
 
@@ -107,11 +111,12 @@ export async function createProject(vault: Vault, name: string): Promise<string>
     created: today(),
     repo: { path: '', remote: '' },
     links: [],
-    bookmarks: []
+    bookmarks: [],
+    colors: null
   }
   const body = `# ${title}\n\nWhat this project is for, and what "done" looks like.\n`
   await fs.writeFile(vault.abs(`${dir}/${PROJECT_FILE}`), joinFrontmatter(dataFrom(settings), body), { flag: 'wx' })
-  await fs.writeFile(vault.abs(`${dir}/wiki/${title} wiki.md`), `# ${title} wiki\n\n`, { flag: 'wx' }).catch(() => {})
+  await fs.writeFile(vault.abs(`${dir}/docs/${title} overview.md`), `# ${title} overview\n\n`, { flag: 'wx' }).catch(() => {})
   return slug
 }
 
@@ -122,7 +127,7 @@ export async function saveProject(vault: Vault, slug: string, settings: ProjectS
   const { data, body } = splitFrontmatter(text ?? '')
   // Keep any extra keys Bill (or another tool) added by hand
   const merged = { ...data, ...dataFrom(settings) }
-  for (const k of ['tags', 'repo', 'links', 'bookmarks']) if (!(k in dataFrom(settings))) delete merged[k]
+  for (const k of ['tags', 'repo', 'links', 'bookmarks', 'colors']) if (!(k in dataFrom(settings))) delete merged[k]
   await vault.write(rel, joinFrontmatter(merged, text === null ? `# ${settings.title}\n\n` : body))
 }
 
