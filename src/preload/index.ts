@@ -1,5 +1,6 @@
 import { contextBridge, ipcRenderer, type IpcRendererEvent } from 'electron'
 import type { Api, AppCommand, ChangeEvent } from '../shared/types'
+import type { Prefs } from '../shared/prefs'
 
 const api: Api = {
   getVault: () => ipcRenderer.invoke('vault:get'),
@@ -66,7 +67,37 @@ const api: Api = {
   createBoard: (dir, name) => ipcRenderer.invoke('boards:create', dir, name),
   backupNow: () => ipcRenderer.invoke('backup:now'),
   setChrome: (background, symbols) => ipcRenderer.send('theme:chrome', background, symbols),
-  installedFonts: () => ipcRenderer.invoke('fonts:list')
+  installedFonts: () => ipcRenderer.invoke('fonts:list'),
+  openWindow: (views, atCursor) => ipcRenderer.invoke('window:open', views, atCursor),
+  windowInfo: () => ipcRenderer.invoke('window:info'),
+  claimOpen: (path) => ipcRenderer.invoke('window:claim', path),
+  reportWindowState: (state) => ipcRenderer.send('window:state', state),
+  showMain: () => ipcRenderer.send('window:showMain'),
+  closeWindow: () => ipcRenderer.send('window:close'),
+  onMoved: (cb) => {
+    const h = (_e: IpcRendererEvent, from: string, to: string) => cb(from, to)
+    ipcRenderer.on('vault:moved', h)
+    return () => ipcRenderer.removeListener('vault:moved', h)
+  },
+  onRemoved: (cb) => {
+    const h = (_e: IpcRendererEvent, path: string) => cb(path)
+    ipcRenderer.on('vault:removed', h)
+    return () => ipcRenderer.removeListener('vault:removed', h)
+  },
+  onFlushRequest: (cb) => {
+    const h = async (_e: IpcRendererEvent, token: string) => {
+      await cb().catch(() => undefined)
+      ipcRenderer.send('editors:flushed', token)
+    }
+    ipcRenderer.on('editors:flush', h)
+    return () => ipcRenderer.removeListener('editors:flush', h)
+  },
+  onPrefsChanged: (cb) => {
+    const h = (_e: IpcRendererEvent, prefs: Prefs) => cb(prefs)
+    ipcRenderer.on('prefs:changed', h)
+    return () => ipcRenderer.removeListener('prefs:changed', h)
+  },
+  editAction: (action) => ipcRenderer.send('edit:action', action)
 }
 
 contextBridge.exposeInMainWorld('api', api)

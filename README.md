@@ -23,6 +23,8 @@ npm run dist       # Windows installer in dist/
 - `[[Note name]]` links with autocomplete; click to follow, click a dim one to create that note;
   "Linked from" panel on the right; links update when notes are renamed or moved
 - Tabs: click opens in the current tab, Ctrl+click or middle-click opens a new one; restored on relaunch
+- Any tab can have its own window: right-click → Move to new window, or drag the tab out of the window
+  (drop it on another window's tabs to move it there). Right-click menus throughout
 - Ctrl+P finds (or creates) a note; Ctrl+Shift+F searches the text of every note
 - Edits made outside the app (other editors, git) show up live
 - Home page: recent notes, counts, quick actions

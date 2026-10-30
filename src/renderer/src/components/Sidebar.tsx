@@ -2,6 +2,7 @@ import { useState, type DragEvent } from 'react'
 import { useStore } from '../store'
 import FileTree, { DRAG_TYPE } from './FileTree'
 import SearchPanel from './SearchPanel'
+import { projectMenu, showMenu } from '../menus'
 import GitPanel, { GitIndicator } from './GitPanel'
 
 export default function Sidebar() {
@@ -76,6 +77,7 @@ export default function Sidebar() {
             className={`nav-item ${view.kind === 'project' && view.slug === p.slug ? 'active' : ''} ${p.status === 'done' ? 'done' : ''}`}
             title={`${p.title} · ${p.status}`}
             onClick={(e) => openProject(p.slug, { newTab: e.ctrlKey })}
+            onContextMenu={(e) => showMenu(e, projectMenu(p.slug))}
           >
             <span className={`status-dot status-${p.status}`} />
             <span className="nav-label">{p.title}</span>

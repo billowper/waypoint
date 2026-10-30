@@ -2,6 +2,7 @@ import { app } from 'electron'
 import { readFileSync, writeFileSync, mkdirSync } from 'fs'
 import { join, dirname } from 'path'
 import { withDefaults, type Prefs } from '@shared/prefs'
+import type { ViewRef } from '@shared/types'
 
 export interface AppConfig {
   vaultPath?: string
@@ -14,6 +15,8 @@ export interface AppConfig {
   lastNudge?: number
   /** What the last nudge was about, so the next one says something different */
   lastNudgeKey?: string
+  /** Content windows (beyond the main one) open at last quit, to reopen */
+  windows?: { views: ViewRef[]; bounds: { x: number; y: number; width: number; height: number } }[]
 }
 
 export const prefs = (): Prefs => withDefaults(loadConfig().prefs)

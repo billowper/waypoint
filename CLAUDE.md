@@ -25,6 +25,9 @@ Full phased plan: `docs/build-plan.md`. Keep its Decisions log and phase status 
 - Layout gotcha: only panes scroll. Keep `.app { grid-template-rows: minmax(0, 1fr) }`, the `min-height: 0`s,
   and `overflow: clip` on html/body/#root, or long notes stop scrolling and the window gets shifted
   out of reach when the editor scrolls the cursor into view.
+- Multi-window: content windows (src/main/windows.ts) each run their own store/tabs. A note/board is only open in
+  one window (`claimOpen`); renames/moves/deletes are broadcast (vault:moved/removed) after flushing other
+  windows; file events go to every window. Dev builds use AUMID com.billlowe.waypoint.dev (never the real one).
 - Renames/moves go through `relocate()` in main (recent list, link rewriting, index rebuild). In the renderer,
   file ops call `flushEditors()` then `enqueue()` so saves never land on a path that just moved.
 

@@ -2,6 +2,7 @@ import { useEffect, useMemo, useRef, useState, type KeyboardEvent, type ReactNod
 import type { SearchHit } from '@shared/types'
 import { baseName } from '@shared/names'
 import { useStore } from '../store'
+import { noteMenu, showMenu } from '../menus'
 
 const DEBOUNCE = 150
 const CONTEXT = 40 // characters shown before the first match on long lines
@@ -104,6 +105,7 @@ export default function SearchPanel() {
             <li key={h.path}>
               <button
                 className={`search-note ${index === noteRow ? 'selected' : ''}`}
+                onContextMenu={(e) => showMenu(e, noteMenu(h.path))}
                 data-row={noteRow}
                 title={h.path}
                 onClick={(e) => open(noteRow, e.ctrlKey)}

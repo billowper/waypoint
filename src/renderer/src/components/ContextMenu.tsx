@@ -1,8 +1,9 @@
 import { useEffect, useLayoutEffect, useRef, useState } from 'react'
-import { canRename, useStore, type MenuState } from '../store'
+import { useStore, type MenuState } from '../store'
 
-export default function ContextMenu({ x, y, path, type }: MenuState) {
-  const { closeMenu, rename, newNote, newFolder, openFile, duplicate, remove, openPicker } = useStore()
+/** Renders whichever right-click menu is open (items come from menus.ts) */
+export default function ContextMenu({ x, y, items }: MenuState) {
+  const closeMenu = useStore((s) => s.closeMenu)
   const ref = useRef<HTMLDivElement>(null)
   const [pos, setPos] = useState({ left: x, top: y })
 
@@ -12,8 +13,8 @@ export default function ContextMenu({ x, y, path, type }: MenuState) {
     if (!el) return
     const { width, height } = el.getBoundingClientRect()
     setPos({
-      left: Math.min(x, window.innerWidth - width - 8),
-      top: Math.min(y, window.innerHeight - height - 8)
+      left: Math.max(4, Math.min(x, window.innerWidth - width - 8)),
+      top: Math.max(4, Math.min(y, window.innerHeight - height - 8))
     })
   }, [x, y])
 
@@ -27,49 +28,26 @@ export default function ContextMenu({ x, y, path, type }: MenuState) {
     }
   }, [closeMenu])
 
-  const run = (fn: () => unknown) => () => {
-    closeMenu()
-    fn()
-  }
-  const isMd = type === 'file' && path.toLowerCase().endsWith('.md')
-  const editable = canRename(path)
-
   return (
-    <div className="menu-backdrop" onMouseDown={closeMenu} onContextMenu={(e) => e.preventDefault()}>
+    <div className="menu-backdrop" onMouseDown={closeMenu} onContextMenu={(e) => (e.preventDefault(), closeMenu())}>
       <div className="menu" ref={ref} style={pos} onMouseDown={(e) => e.stopPropagation()}>
-        {isMd && (
-          <>
-            <button onClick={run(() => openFile(path))}>Open</button>
-            <button onClick={run(() => openFile(path, { newTab: true }))}>
-              Open in new tab <kbd>Ctrl click</kbd>
+        {items.map((it, i) =>
+          it === 'separator' ? (
+            <hr key={i} />
+          ) : (
+            <button
+              key={i}
+              className={it.danger ? 'danger' : ''}
+              disabled={it.disabled}
+              onClick={() => {
+                closeMenu()
+                it.run()
+              }}
+            >
+              {it.label}
+              {it.kbd && <kbd>{it.kbd}</kbd>}
             </button>
-            <hr />
-          </>
-        )}
-        {type === 'dir' && (
-          <>
-            <button onClick={run(() => newNote(path))}>New note here</button>
-            <button onClick={run(() => newFolder(path))}>New folder here</button>
-            <hr />
-          </>
-        )}
-        {editable && (
-          <>
-            <button onClick={run(() => rename(path))}>
-              Rename <kbd>F2</kbd>
-            </button>
-            <button onClick={run(() => openPicker({ kind: 'move', path }))}>Move to…</button>
-            <button onClick={run(() => duplicate(path))}>Duplicate</button>
-          </>
-        )}
-        <button onClick={run(() => window.api.reveal(path))}>Show in Explorer</button>
-        {editable && (
-          <>
-            <hr />
-            <button className="danger" onClick={run(() => remove(path))}>
-              Delete <kbd>Del</kbd>
-            </button>
-          </>
+          )
         )}
       </div>
     </div>

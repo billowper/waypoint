@@ -126,6 +126,16 @@ export interface VaultSettings {
 }
 
 /** Things the main process asks the UI to do (jump list, tray, toasts, second launches) */
+/** A tab's content in a form that can travel between windows (and be saved for next launch) */
+export type ViewRef =
+  | { kind: 'home' }
+  | { kind: 'settings' }
+  | { kind: 'file'; path: string }
+  | { kind: 'canvas'; path: string }
+  | { kind: 'history'; path: string }
+  | { kind: 'project'; slug: string }
+  | { kind: 'board'; slug: string }
+
 /** Shown as a banner when Bill clicks a nudge, so he can mute or snooze it */
 export interface NudgeInfo {
   key: string
@@ -217,6 +227,26 @@ export interface Api {
   searchClose(): void
   /** Fit the popup window to its content */
   popupHeight(px: number): void
+  /** Open views in a new window of their own (under the pointer when a tab is dragged out) */
+  openWindow(views: ViewRef[], atCursor?: boolean): Promise<void>
+  /** Which window this is */
+  windowInfo(): Promise<{ id: number; main: boolean }>
+  /** If another window already has this note/board open, switch to it there and resolve true */
+  claimOpen(path: string): Promise<boolean>
+  /** Tell the main process what this window has open */
+  reportWindowState(state: { views: ViewRef[]; paths: string[] }): void
+  showMain(): void
+  /** Close this window (content windows only) */
+  closeWindow(): void
+  /** Another window renamed/moved something */
+  onMoved(cb: (from: string, to: string) => void): () => void
+  /** Another window deleted something */
+  onRemoved(cb: (path: string) => void): () => void
+  /** Another window is about to rename/move/delete: save unsaved edits now */
+  onFlushRequest(cb: () => Promise<void>): () => void
+  onPrefsChanged(cb: (prefs: Prefs) => void): () => void
+  /** Clipboard and selection actions for context menus */
+  editAction(action: 'cut' | 'copy' | 'paste' | 'selectAll'): void
   /** Font families installed on this PC (sorted) */
   installedFonts(): Promise<string[]>
   /** Match the native title-bar buttons to the page's colours */

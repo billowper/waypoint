@@ -1,6 +1,7 @@
 import { useRef, useState, type DragEvent, type MouseEvent } from 'react'
 import type { TreeNode } from '@shared/types'
 import { canRename, useStore } from '../store'
+import { showMenu, treeMenu } from '../menus'
 
 export const DRAG_TYPE = 'application/x-waypoint-path'
 /** Hovering a closed folder while dragging opens it after this long */
@@ -14,15 +15,12 @@ interface Props {
 const parentOf = (p: string) => (p.includes('/') ? p.slice(0, p.lastIndexOf('/')) : '')
 
 export default function FileTree({ nodes, depth }: Props) {
-  const { expanded, toggle, view, openFile, openCanvas, selectedDir, selectDir, openMenu, move } = useStore()
+  const { expanded, toggle, view, openFile, openCanvas, selectedDir, selectDir, move } = useStore()
   const openPath = view.kind === 'file' ? view.path : null
   const [dropOn, setDropOn] = useState<string | null>(null)
   const expandTimer = useRef<ReturnType<typeof setTimeout> | null>(null)
 
-  const menu = (n: TreeNode) => (e: MouseEvent) => {
-    e.preventDefault()
-    openMenu({ x: e.clientX, y: e.clientY, path: n.path, type: n.type })
-  }
+  const menu = (n: TreeNode) => (e: MouseEvent) => showMenu(e, treeMenu(n.path, n.type))
 
   // Drag a note or folder onto a folder (or onto a note, meaning its folder) to move it there
   const drag = (n: TreeNode) => ({

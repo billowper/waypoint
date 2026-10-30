@@ -127,6 +127,31 @@ kbd {
   overflow: auto;
 }
 
+/* A window of its own for a note/board: no sidebar */
+.app.content-window {
+  grid-template-columns: minmax(0, 1fr);
+}
+
+.window-home {
+  align-self: center;
+  margin: 0 4px 0 2px;
+  color: var(--icon);
+  flex: none;
+}
+
+.tabbar.drop-tabs {
+  box-shadow: inset 0 -2px 0 var(--accent);
+}
+
+.menu button:disabled {
+  opacity: 0.4;
+  cursor: default;
+}
+
+.menu button:disabled:hover {
+  background: none;
+}
+
 /* Native Win11 caption buttons sit top-right; keep the strip draggable */
 .tabbar,
 .sidebar-head,

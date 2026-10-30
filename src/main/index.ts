@@ -1,4 +1,4 @@
-import { app, BrowserWindow, dialog, globalShortcut, ipcMain, Menu, shell, nativeTheme } from 'electron'
+import { app, BrowserWindow, dialog, globalShortcut, ipcMain, Menu, screen, shell, nativeTheme } from 'electron'
 import { basename, join } from 'path'
 import { existsSync } from 'fs'
 import { stat } from 'fs/promises'
@@ -26,6 +26,18 @@ import { withDefaults, type Prefs } from '@shared/prefs'
 import { startNudges } from './nudges'
 import { backupNow } from './backups'
 import { installedFonts } from './fonts'
+import {
+  appWindows,
+  broadcast,
+  flushOthers,
+  flushWindow,
+  initWindows,
+  isContentWindow,
+  openContentWindow,
+  restoreWindows,
+  windowHolding
+} from './windows'
+import type { ViewRef } from '@shared/types'
 import type { AppCommand, DesktopInfo } from '@shared/types'
 import type { ChangeEvent, VaultInfo } from '@shared/types'
 import { movedPath } from '@shared/names'
@@ -71,7 +83,7 @@ async function scheduleAutoCommit() {
     if (vault !== v || !git?.isRepo()) return
     try {
       if (await git.commitIfChanged(`Auto-commit ${new Date().toLocaleString('en-GB')}`)) {
-        win?.webContents.send('git:changed')
+        broadcast('git:changed', [])
       }
     } catch (e) {
       console.error('[auto-commit]', e) // e.g. conflicts: leave it for Bill to sort out
@@ -93,8 +105,9 @@ async function setVault(path: string | undefined) {
   scheduleAutoCommit()
 }
 
+/** File changes go to every Waypoint window (each has its own tree, editors, search) */
 function notify(events: ChangeEvent[]) {
-  if (events.length) win?.webContents.send('vault:changed', events)
+  if (events.length) broadcast('vault:changed', [events])
 }
 
 function startWatching(v: Vault) {
@@ -176,14 +189,16 @@ async function updateLinks(v: Vault, before: string[], from: string, to: string)
 }
 
 /** Rename or move: pause the watcher for folders, then fix up recent list, links and index. */
-async function relocate(rel: string, op: (v: Vault) => Promise<string>): Promise<string> {
+async function relocate(rel: string, op: (v: Vault) => Promise<string>, sender?: Electron.WebContents): Promise<string> {
   const v = requireVault()
   const index = requireIndex()
+  await flushOthers(sender) // unsaved edits in other windows land before anything moves
   await index.idle()
   const before = index.paths()
   const to = await withFolderUnlocked(v, rel, () => op(v))
   if (to === rel) return to
   updateRecent(v, (r) => movedPath(r, rel, to) ?? r)
+  broadcast('vault:moved', [rel, to], sender) // other windows' editors and tabs follow
   const changed = await updateLinks(v, before, rel, to)
   await index.rebuild()
   notify(changed.map((path) => ({ event: 'change', path })))
@@ -210,45 +225,71 @@ function chrome() {
 function applyTheme() {
   nativeTheme.themeSource = prefs().theme
   const c = chrome()
-  if (win && !win.isDestroyed()) {
-    win.setBackgroundColor(c.background)
-    win.setTitleBarOverlay(c.overlay)
+  for (const w of appWindows()) {
+    w.setBackgroundColor(c.background)
+    w.setTitleBarOverlay(c.overlay)
   }
 }
 
 /** UI scale: zoom the page; the Windows caption strip has to grow with it to line up */
-let chromeColors: { color: string; symbolColor: string } | null = null
-function applyScale() {
-  if (!win || win.isDestroyed()) return
+const chromeColors = new Map<number, { color: string; symbolColor: string }>() // per window (project colours)
+function applyScale(w?: BrowserWindow | null) {
+  const targets = w ? [w] : appWindows()
   const scale = Math.min(2, Math.max(0.6, prefs().uiScale || 1))
-  win.webContents.setZoomFactor(scale)
-  const base = chrome().overlay
-  win.setTitleBarOverlay({ ...base, ...(chromeColors ?? {}), height: Math.round(38 * scale) })
+  for (const t of targets) {
+    if (t.isDestroyed()) continue
+    t.webContents.setZoomFactor(scale)
+    t.setTitleBarOverlay({ ...chrome().overlay, ...(chromeColors.get(t.id) ?? {}), height: Math.round(38 * scale) })
+  }
+}
+
+/** Common setup for the main window and content windows */
+function makeAppWindow(opts: Electron.BrowserWindowConstructorOptions, hash = ''): BrowserWindow {
+  const c = chrome()
+  const w = new BrowserWindow({
+    width: 1100,
+    height: 760,
+    minWidth: 520,
+    minHeight: 360,
+    ...opts,
+    show: false,
+    backgroundColor: c.background,
+    icon: appIcon(),
+    titleBarStyle: 'hidden',
+    titleBarOverlay: c.overlay,
+    webPreferences: { preload: preloadPath(), contextIsolation: true, sandbox: true }
+  })
+  w.once('ready-to-show', () => w.show())
+  w.webContents.on('did-finish-load', () => applyScale(w))
+  // Let the page save what's being typed before the window goes (registered first, so it runs
+  // before the main window's close-to-tray handler)
+  let flushed = false
+  w.on('close', (e) => {
+    if (flushed || quitting) return // quitting saves every window up front (see before-quit)
+    e.preventDefault()
+    flushWindow(w).finally(() => {
+      flushed = true
+      if (!w.isDestroyed()) w.close()
+      setImmediate(() => (flushed = false)) // still open (hidden to the tray): flush again next time
+    })
+  })
+  // Open external links in the default browser, never inside the app
+  w.webContents.setWindowOpenHandler(({ url }) => {
+    if (/^https?:/.test(url)) shell.openExternal(url)
+    return { action: 'deny' }
+  })
+  w.on('closed', () => chromeColors.delete(w.id))
+  loadPage(w, hash)
+  return w
 }
 
 function createWindow() {
   const cfg = loadConfig()
   const b = cfg.bounds ?? { width: 1280, height: 820 }
   nativeTheme.themeSource = prefs().theme
-  const c = chrome()
 
-  win = new BrowserWindow({
-    ...b,
-    minWidth: 720,
-    minHeight: 480,
-    show: false,
-    backgroundColor: c.background,
-    icon: appIcon(),
-    titleBarStyle: 'hidden',
-    titleBarOverlay: c.overlay,
-    webPreferences: {
-      preload: preloadPath(),
-      contextIsolation: true,
-      sandbox: true
-    }
-  })
+  win = makeAppWindow({ ...b, minWidth: 720, minHeight: 480 })
   if (b.maximized) win.maximize()
-  win.once('ready-to-show', () => win?.show())
 
   const persist = () => {
     if (!win) return
@@ -267,15 +308,6 @@ function createWindow() {
     }
   })
   win.on('closed', () => (win = null))
-  win.webContents.on('did-finish-load', applyScale)
-
-  // Open external links in the default browser, never inside the app
-  win.webContents.setWindowOpenHandler(({ url }) => {
-    if (/^https?:/.test(url)) shell.openExternal(url)
-    return { action: 'deny' }
-  })
-
-  loadPage(win)
 }
 
 function registerIpc() {
@@ -318,21 +350,22 @@ function registerIpc() {
   ipcMain.handle('file:createFolder', (_e, dir: string, name: string) =>
     requireVault().createFolder(dir, name)
   )
-  ipcMain.handle('file:rename', (_e, rel: string, name: string, syncHeading: boolean) =>
-    relocate(rel, (v) => v.rename(rel, name, syncHeading))
+  ipcMain.handle('file:rename', (e, rel: string, name: string, syncHeading: boolean) =>
+    relocate(rel, (v) => v.rename(rel, name, syncHeading), e.sender)
   )
-  ipcMain.handle('file:move', (_e, rel: string, destDir: string) => relocate(rel, (v) => v.move(rel, destDir)))
+  ipcMain.handle('file:move', (e, rel: string, destDir: string) => relocate(rel, (v) => v.move(rel, destDir), e.sender))
   ipcMain.handle('file:duplicate', async (_e, rel: string) => {
     const to = await requireVault().duplicate(rel)
     await requireIndex().rebuild()
     return to
   })
-  ipcMain.handle('file:trash', async (_e, rel: string) => {
+  ipcMain.handle('file:trash', async (e, rel: string) => {
     const v = requireVault()
     const abs = v.abs(rel)
     if (abs === v.root) throw new Error('Cannot delete the vault itself')
     const isDir = (await stat(abs)).isDirectory()
-    const { response } = await dialog.showMessageBox(win!, {
+    const asker = BrowserWindow.fromWebContents(e.sender) ?? win!
+    const { response } = await dialog.showMessageBox(asker, {
       type: 'warning',
       buttons: ['Move to Recycle Bin', 'Cancel'],
       defaultId: 0,
@@ -344,6 +377,9 @@ function registerIpc() {
         : 'You can restore it from the Recycle Bin.'
     })
     if (response !== 0) return false
+    // Other windows stop editing (and saving) it before it goes
+    await flushOthers(e.sender)
+    broadcast('vault:removed', [rel], e.sender)
     await withFolderUnlocked(v, rel, () => shell.trashItem(abs))
     updateRecent(v, (r) => (movedPath(r, rel, rel) ? null : r))
     await requireIndex().remove(rel)
@@ -436,6 +472,7 @@ function registerIpc() {
     applyPrefs(prefs(), desktopHooks)
     applyTheme()
     applyScale()
+    broadcast('prefs:changed', [prefs()]) // theme, fonts, scale follow in every window
     onPrefsChanged()
     return prefs()
   })
@@ -464,12 +501,38 @@ function registerIpc() {
     if (c.kind === 'open' && vault && vault.isNote(c.path)) runCommand(c)
   })
   ipcMain.handle('fonts:list', () => installedFonts())
+
+  // Windows: open content in a window of its own; one editor per note across all windows
+  ipcMain.handle('window:open', (_e, views: ViewRef[], atCursor?: boolean) => {
+    if (views.length) openContentWindow(views, atCursor ? screen.getCursorScreenPoint() : undefined)
+  })
+  ipcMain.handle('window:info', (e) => ({ id: e.sender.id, main: e.sender === win?.webContents }))
+  ipcMain.handle('window:claim', (e, path: string) => {
+    const other = windowHolding(path, e.sender)
+    if (!other) return false
+    if (other.isMinimized()) other.restore()
+    other.show()
+    other.focus()
+    other.webContents.send('app:command', { kind: 'open', path } satisfies AppCommand)
+    return true
+  })
+  ipcMain.on('window:showMain', () => showMain())
+  ipcMain.on('edit:action', (e, action: string) => {
+    if (action === 'cut') e.sender.cut()
+    else if (action === 'copy') e.sender.copy()
+    else if (action === 'paste') e.sender.paste()
+    else if (action === 'selectAll') e.sender.selectAll()
+  })
+  ipcMain.on('window:close', (e) => {
+    const w = BrowserWindow.fromWebContents(e.sender)
+    if (w && isContentWindow(w)) w.close()
+  })
   ipcMain.on('theme:chrome', (e, background: string, symbols: string) => {
     const w = BrowserWindow.fromWebContents(e.sender)
     if (!w || w.isDestroyed() || !/^#[0-9a-f]{6}$/i.test(background) || !/^#[0-9a-f]{6}$/i.test(symbols)) return
     w.setBackgroundColor(background)
-    chromeColors = { color: background, symbolColor: symbols }
-    if (w === win) applyScale()
+    chromeColors.set(w.id, { color: background, symbolColor: symbols })
+    applyScale(w)
   })
   // The UI asks for this once it's listening, so launch commands (jump list) aren't lost
   ipcMain.on('app:ready', (e) => {
@@ -535,7 +598,17 @@ if (!gotLock) {
     else showMain()
   })
 
-  app.on('before-quit', () => (quitting = true))
+  // Save what's being typed in every window, then quit (holding a window's close would cancel it)
+  let quitFlushed = false
+  app.on('before-quit', (e) => {
+    quitting = true
+    if (quitFlushed) return
+    e.preventDefault()
+    flushOthers().finally(() => {
+      quitFlushed = true
+      app.quit()
+    })
+  })
   nativeTheme.on('updated', () => applyTheme()) // Windows switched light/dark while on "system"
 
   app.whenReady().then(async () => {
@@ -547,6 +620,11 @@ if (!gotLock) {
     // shortcuts and a reload can drop an unsaved edit. Keep them in dev for reload/DevTools.
     if (app.isPackaged) Menu.setApplicationMenu(null)
     registerIpc()
+    initWindows({
+      main: () => win,
+      create: (opts, hash) => makeAppWindow(opts, hash),
+      quitting: () => quitting
+    })
     const last = loadConfig().vaultPath
     await setVault(last && existsSync(last) ? last : undefined)
     setupTray(desktopHooks)
@@ -597,6 +675,7 @@ if (!gotLock) {
     } else if (!hidden || !prefs().closeToTray) {
       createWindow()
     }
+    if (vault && !hidden) restoreWindows() // content windows open at last quit
   })
 
   app.on('will-quit', () => globalShortcut.unregisterAll())

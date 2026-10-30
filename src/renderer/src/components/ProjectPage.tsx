@@ -4,6 +4,7 @@ import { byUrgency, dueState, formatDue } from './Board'
 import AccentPicker from './AccentPicker'
 import { baseName } from '@shared/names'
 import { useStore } from '../store'
+import { noteMenu, showMenu } from '../menus'
 
 const SAVE_DELAY = 500
 
@@ -178,7 +179,7 @@ export default function ProjectPage({ slug }: { slug: string }) {
             .slice(0, 6)
             .map((t) => (
               <li key={t.path}>
-                <button onClick={(e) => openFile(t.path, { newTab: e.ctrlKey })}>
+                <button onClick={(e) => openFile(t.path, { newTab: e.ctrlKey })} onContextMenu={(e) => showMenu(e, noteMenu(t.path))}>
                   <span className="task-id">{t.id}</span>
                   {t.title}
                   {t.due && <span className={`due ${dueState(t)}`}>{formatDue(t.due)}</span>}
@@ -318,7 +319,7 @@ export default function ProjectPage({ slug }: { slug: string }) {
         <ul className="page-list">
           {projectBoards.map((b) => (
             <li key={b}>
-              <button onClick={(e) => openCanvas(b, { newTab: e.ctrlKey })}>
+              <button onClick={(e) => openCanvas(b, { newTab: e.ctrlKey })} onContextMenu={(e) => showMenu(e, noteMenu(b))}>
                 ✎ {baseName(b).replace(/.excalidraw$/i, '')}
               </button>
             </li>
@@ -337,7 +338,7 @@ export default function ProjectPage({ slug }: { slug: string }) {
         <ul className="page-list">
           {docs.map((n) => (
             <li key={n}>
-              <button onClick={(e) => openFile(n, { newTab: e.ctrlKey })}>
+              <button onClick={(e) => openFile(n, { newTab: e.ctrlKey })} onContextMenu={(e) => showMenu(e, noteMenu(n))}>
                 {baseName(n)}
                 {/* subfolder inside docs/, if any */}
                 <span className="recent-path">{n.slice(project.dir.length + 1).split('/').slice(1, -1).join('/')}</span>
@@ -353,7 +354,9 @@ export default function ProjectPage({ slug }: { slug: string }) {
           <ul className="page-list">
             {other.map((n) => (
               <li key={n}>
-                <button onClick={(e) => openFile(n, { newTab: e.ctrlKey })}>{baseName(n)}</button>
+                <button onClick={(e) => openFile(n, { newTab: e.ctrlKey })} onContextMenu={(e) => showMenu(e, noteMenu(n))}>
+                  {baseName(n)}
+                </button>
               </li>
             ))}
           </ul>

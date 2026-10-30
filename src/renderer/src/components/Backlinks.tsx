@@ -2,6 +2,7 @@ import { useEffect, useState } from 'react'
 import type { Backlink } from '@shared/types'
 import { baseName } from '@shared/names'
 import { useStore } from '../store'
+import { noteMenu, showMenu } from '../menus'
 
 /** Show a line of markdown roughly as it reads: link text instead of [[link|syntax]] */
 const readable = (line: string) =>
@@ -40,7 +41,12 @@ export default function Backlinks({ path }: { path: string }) {
       <ul>
         {links?.map((b) => (
           <li key={b.path}>
-            <button className="bl-note" title={b.path} onClick={(e) => openFile(b.path, { newTab: e.ctrlKey })}>
+            <button
+              className="bl-note"
+              title={b.path}
+              onClick={(e) => openFile(b.path, { newTab: e.ctrlKey })}
+              onContextMenu={(e) => showMenu(e, noteMenu(b.path))}
+            >
               {baseName(b.path)}
             </button>
             {b.lines.map((l) => (

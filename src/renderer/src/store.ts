@@ -1,4 +1,5 @@
 import { create } from 'zustand'
+import type { ViewRef } from '@shared/types'
 import type { GitStatus, NudgeInfo, Project, Task, TaskFields, TreeNode, VaultInfo, VaultSettings, VaultStats } from '@shared/types'
 import { baseName, movedPath } from '@shared/names'
 import type { Prefs } from '@shared/prefs'
@@ -30,11 +31,15 @@ interface PromptState {
   resolve: (value: string | null) => void
 }
 
+export type MenuItem =
+  | { label: string; run: () => unknown; kbd?: string; danger?: boolean; disabled?: boolean }
+  | 'separator'
+
+/** A right-click menu at a point (items built by menus.ts) */
 export interface MenuState {
   x: number
   y: number
-  path: string
-  type: 'file' | 'dir'
+  items: MenuItem[]
 }
 
 /** Ctrl+P note switcher, or the folder chooser for "Move to…" */
@@ -84,7 +89,7 @@ interface State {
   openVault(): Promise<void>
   refresh(): Promise<void>
   /** Opens in the current tab, or a new one; switches to the tab if the note is already open. */
-  openFile(path: string, opts?: { newTab?: boolean; reveal?: Omit<Reveal, 'path'> }): Promise<void>
+  openFile(path: string, opts?: { newTab?: boolean; reveal?: Omit<Reveal, 'path'>; force?: boolean }): Promise<void>
   goHome(): void
   openProject(slug: string, opts?: { newTab?: boolean }): void
   createProject(): Promise<void>
@@ -97,12 +102,19 @@ interface State {
   saveVaultSettings(settings: VaultSettings): Promise<void>
   openHistory(path: string, opts?: { newTab?: boolean }): void
   openSettings(): void
-  openCanvas(path: string, opts?: { newTab?: boolean }): void
+  openCanvas(path: string, opts?: { newTab?: boolean; force?: boolean }): Promise<void>
   createBoard(dir: string): Promise<void>
   savePrefs(prefs: Prefs): Promise<void>
   setNudge(nudge: NudgeInfo | null): void
   newTab(): void
   closeTab(id: number): void
+  closeOtherTabs(id: number): void
+  closeTabsToRight(id: number): void
+  /** Pop a tab out into a window of its own (at a screen point when dragged out) */
+  moveTabToWindow(id: number, atCursor?: boolean): Promise<void>
+  openInNewWindow(ref: ViewRef): Promise<void>
+  /** A tab dropped here from another window */
+  receiveTab(ref: ViewRef): void
   activateTab(id: number): void
   cycleTab(step: 1 | -1): void
   toggle(dir: string): void
@@ -156,7 +168,7 @@ export function registerEditor(hooks: EditorHooks): () => void {
   editors.add(hooks)
   return () => editors.delete(hooks)
 }
-const flushEditors = () => Promise.all([...editors].map((e) => e.flush()))
+export const flushEditors = () => Promise.all([...editors].map((e) => e.flush()))
 
 function flatten(nodes: TreeNode[], notes: string[], folders: string[], boards: string[]) {
   for (const n of nodes) {
@@ -172,9 +184,32 @@ function flatten(nodes: TreeNode[], notes: string[], folders: string[], boards: 
 }
 
 // Open tabs are remembered per vault between launches (best effort: storage may be unavailable)
+/**
+ * This window's role: the main window (sidebar, remembered tabs) or a content window opened for
+ * a note/board/etc. (its first tabs arrive in the URL; the main process remembers it).
+ */
+const windowHash = location.hash.startsWith('#window=') ? location.hash.slice('#window='.length) : null
+export const isContentWindow = windowHash !== null
+const initialViews: ViewRef[] = (() => {
+  try {
+    return windowHash ? (JSON.parse(decodeURIComponent(windowHash)) as ViewRef[]) : []
+  } catch {
+    return []
+  }
+})()
+
+export function toRef(v: View): ViewRef {
+  return v.kind === 'file' ? { kind: 'file', path: v.path } : v
+}
+function fromRef(r: ViewRef): View {
+  return r.kind === 'file' ? { kind: 'file', path: r.path, docId: ++nextId } : r
+}
+/** The note or board a view edits, if any (only one window may edit it at a time) */
+export const viewPath = (v: View | ViewRef): string | null => (v.kind === 'file' || v.kind === 'canvas' ? v.path : null)
+
 const tabsKey = (vault: string) => `waypoint:tabs:${vault}`
 function saveTabs(vault: string | undefined, tabs: Tab[], activeTab: number) {
-  if (!vault) return
+  if (!vault || isContentWindow) return // content windows are remembered by the main process
   try {
     const paths = tabs.map((t) =>
       t.view.kind === 'file'
@@ -221,6 +256,10 @@ export const useStore = create<State>((set, get) => {
     const active = tabs.find((t) => t.id === activeTab) ?? tabs[0]
     set({ tabs, activeTab: active.id, view: active.view, ...extra })
     saveTabs(get().vault?.path, tabs, active.id)
+    window.api.reportWindowState({
+      views: tabs.map((t) => toRef(t.view)),
+      paths: tabs.map((t) => viewPath(t.view)).filter((p): p is string => !!p)
+    })
   }
 
   /** Point every open tab (and tree state) at where things moved to. */
@@ -245,6 +284,31 @@ export const useStore = create<State>((set, get) => {
   }
 
   const isOpen = (path: string) => get().tabs.some((t) => t.view.kind === 'file' && t.view.path === path)
+
+  /** Follow renames, moves and deletes made in other windows; save when they ask */
+  let listening = false
+  const listenToOtherWindows = () => {
+    if (listening) return
+    listening = true
+    window.api.onMoved((from, to) => {
+      editors.forEach((e) => e.renamed(from, to))
+      applyMove(from, to)
+    })
+    window.api.onRemoved((path) => {
+      editors.forEach((e) => e.removed(path))
+      const { tabs, activeTab } = get()
+      const keep = tabs.filter((t) => {
+        const p = viewPath(t.view)
+        return !(p && movedPath(p, path, path))
+      })
+      if (!keep.length && isContentWindow) return window.api.closeWindow()
+      setTabs(keep, keep.some((t) => t.id === activeTab) ? activeTab : (keep[0]?.id ?? 0))
+    })
+    window.api.onFlushRequest(async () => {
+      await flushEditors()
+    })
+    window.api.onPrefsChanged((prefs) => set({ prefs }))
+  }
 
   /** Show a project page or board: switch to its tab if open, else replace the current tab or add one */
   const openView = (view: Extract<View, { slug: string }>, newTab?: boolean) => {
@@ -295,6 +359,11 @@ export const useStore = create<State>((set, get) => {
       set({ vault, prefs })
       if (!vault) return
       await get().refresh()
+      listenToOtherWindows()
+      if (isContentWindow) {
+        const tabs = initialViews.map((r) => ({ id: ++nextId, view: fromRef(r) }))
+        return setTabs(tabs, tabs[0]?.id ?? 0)
+      }
       const restored = loadTabs(vault.path, get().notes, get().projects)
       if (restored) setTabs(restored.tabs, restored.activeTab)
       else setTabs([homeTab()], 0)
@@ -306,6 +375,11 @@ export const useStore = create<State>((set, get) => {
       set({ vault, tree: [], recent: [] })
       if (!vault) return
       await get().refresh()
+      listenToOtherWindows()
+      if (isContentWindow) {
+        const tabs = initialViews.map((r) => ({ id: ++nextId, view: fromRef(r) }))
+        return setTabs(tabs, tabs[0]?.id ?? 0)
+      }
       const restored = loadTabs(vault.path, get().notes, get().projects)
       if (restored) setTabs(restored.tabs, restored.activeTab)
       else setTabs([homeTab()], 0)
@@ -339,6 +413,8 @@ export const useStore = create<State>((set, get) => {
       const existing = tabs.find((t) => t.view.kind === 'file' && t.view.path === path)
       if (existing) {
         setTabs(tabs, existing.id, extra)
+      } else if (!opts.force && (await window.api.claimOpen(path))) {
+        return // already open in another window, which has been brought forward
       } else {
         const view: View = { kind: 'file', path, docId: ++nextId }
         const current = tabs.find((t) => t.id === activeTab)
@@ -458,10 +534,11 @@ ${(e as Error).message}`)
 
     setNudge: (nudge) => set({ nudge }),
 
-    openCanvas(path, opts = {}) {
+    async openCanvas(path, opts = {}) {
       const { tabs, activeTab } = get()
       const existing = tabs.find((t) => t.view.kind === 'canvas' && t.view.path === path)
       if (existing) return setTabs(tabs, existing.id)
+      if (!opts.force && (await window.api.claimOpen(path))) return // open in another window
       const view: View = { kind: 'canvas', path }
       if (opts.newTab || !tabs.length) {
         const tab = { id: ++nextId, view }
@@ -525,8 +602,54 @@ ${(e as Error).message}`)
       const i = tabs.findIndex((t) => t.id === id)
       if (i === -1) return
       const rest = tabs.filter((t) => t.id !== id)
+      if (!rest.length && isContentWindow) {
+        set({ tabs: [] })
+        window.api.reportWindowState({ views: [], paths: [] })
+        return window.api.closeWindow()
+      }
       const next = id === activeTab ? (rest[i] ?? rest[i - 1])?.id : activeTab
       setTabs(rest, next ?? 0)
+    },
+
+    closeOtherTabs(id) {
+      const keep = get().tabs.filter((t) => t.id === id)
+      if (keep.length) setTabs(keep, id)
+    },
+
+    closeTabsToRight(id) {
+      const { tabs, activeTab } = get()
+      const i = tabs.findIndex((t) => t.id === id)
+      const keep = tabs.slice(0, i + 1)
+      setTabs(keep, keep.some((t) => t.id === activeTab) ? activeTab : id)
+    },
+
+    async moveTabToWindow(id, atCursor) {
+      const tab = get().tabs.find((t) => t.id === id)
+      if (!tab) return
+      // A content window's only tab is already its own window
+      if (isContentWindow && get().tabs.length === 1 && !atCursor) return
+      const ref = toRef(tab.view)
+      await flushEditors()
+      get().closeTab(id) // its editor saves and lets go of the note first
+      await window.api.openWindow([ref], atCursor)
+    },
+
+    async openInNewWindow(ref) {
+      const p = viewPath(ref)
+      const here = get().tabs.find((t) => p && viewPath(t.view) === p)
+      if (here) return get().moveTabToWindow(here.id)
+      if (p && (await window.api.claimOpen(p))) return // already in a window of its own
+      await window.api.openWindow([ref])
+    },
+
+    receiveTab(ref) {
+      // The window it came from closes its tab once the drop lands, so don't send it back there
+      if (ref.kind === 'file') return get().openFile(ref.path, { newTab: true, force: true })
+      if (ref.kind === 'canvas') return get().openCanvas(ref.path, { newTab: true, force: true })
+      const { tabs, activeTab } = get()
+      const tab = { id: ++nextId, view: fromRef(ref) }
+      const at = tabs.findIndex((t) => t.id === activeTab) + 1
+      setTabs([...tabs.slice(0, at), tab, ...tabs.slice(at)], tab.id)
     },
 
     activateTab: (id) => setTabs(get().tabs, id),

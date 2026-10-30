@@ -1,6 +1,20 @@
 import { useRef, useState, type MouseEvent, type PointerEvent } from 'react'
 import { PRIORITIES, TASK_STATUSES, TASK_STATUS_LABEL, type Task, type TaskStatus } from '@shared/types'
 import { useStore } from '../store'
+import { noteMenu, showMenu } from '../menus'
+
+/** A task's menu: open it anywhere, or move it to another column */
+function taskMenu(t: Task) {
+  const s = useStore.getState()
+  return [
+    ...noteMenu(t.path),
+    'separator' as const,
+    ...TASK_STATUSES.filter((st) => st !== t.status).map((st) => ({
+      label: `Move to ${TASK_STATUS_LABEL[st]}`,
+      run: () => s.updateTask(t.path, { status: st })
+    }))
+  ]
+}
 
 /** Pixels the pointer must move before a press on a card becomes a drag */
 const DRAG_THRESHOLD = 5
@@ -209,6 +223,7 @@ export default function Board({ slug }: { slug: string }) {
                     key={t.path}
                     className={`task-card priority-${t.priority} ${drag?.task.path === t.path ? 'dragging' : ''}`}
                     onPointerDown={onCardPointerDown(t)}
+                    onContextMenu={(e) => showMenu(e, taskMenu(t))}
                     onClick={(e) => {
                       if (suppressClick.current) return void (suppressClick.current = false)
                       open(t)(e)
@@ -272,7 +287,7 @@ export default function Board({ slug }: { slug: string }) {
                 <tr key={t.path}>
                   <td className="task-id">{t.id}</td>
                   <td>
-                    <button className="row-title" onClick={open(t)}>
+                    <button className="row-title" onClick={open(t)} onContextMenu={(e) => showMenu(e, taskMenu(t))}>
                       {t.title}
                     </button>
                   </td>

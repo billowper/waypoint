@@ -1,4 +1,5 @@
 import { useStore } from '../store'
+import { noteMenu, projectMenu, showMenu } from '../menus'
 import { byUrgency, dueState, formatDue } from './Board'
 
 function greeting() {
@@ -68,7 +69,10 @@ export default function Home() {
           <ul className="recent">
             {myWork.slice(0, 12).map((t) => (
               <li key={t.path}>
-                <button onClick={(e) => openFile(t.path, { newTab: e.ctrlKey })}>
+                <button
+                  onClick={(e) => openFile(t.path, { newTab: e.ctrlKey })}
+                  onContextMenu={(e) => showMenu(e, noteMenu(t.path))}
+                >
                   <span className="task-id">{t.id}</span>
                   <span className="recent-name">{t.title}</span>
                   <span className="recent-path">
@@ -90,7 +94,10 @@ export default function Home() {
           <ul className="project-cards">
             {active.map((p) => (
               <li key={p.slug}>
-                <button onClick={(e) => openProject(p.slug, { newTab: e.ctrlKey })}>
+                <button
+                  onClick={(e) => openProject(p.slug, { newTab: e.ctrlKey })}
+                  onContextMenu={(e) => showMenu(e, projectMenu(p.slug))}
+                >
                   <span className="recent-name">{p.title}</span>
                   <span className="recent-path">
                     {p.tags.join(' · ')}
@@ -111,7 +118,7 @@ export default function Home() {
           <ul className="recent">
             {recent.filter((r) => notes.includes(r)).slice(0, 10).map((r) => (
               <li key={r}>
-                <button onClick={() => openFile(r)}>
+                <button onClick={(e) => openFile(r, { newTab: e.ctrlKey })} onContextMenu={(e) => showMenu(e, noteMenu(r))}>
                   <span className="recent-name">{r.split('/').pop()!.replace(/\.md$/, '')}</span>
                   <span className="recent-path">{r.includes('/') ? r.slice(0, r.lastIndexOf('/')) : ''}</span>
                 </button>

@@ -1,5 +1,8 @@
 import { lazy, Suspense, useEffect } from 'react'
-import { canRename, useStore } from './store'
+import { canRename, isContentWindow, useStore } from './store'
+import { editMenu, noteMenu, showMenu } from './menus'
+import { resolveLink } from '@shared/links'
+import { tabTitle } from './components/TopBar'
 import { useApplyTheme } from './theme'
 import Sidebar from './components/Sidebar'
 import { PathBar, TabBar } from './components/TopBar'
@@ -55,6 +58,36 @@ export default function App() {
   useEffect(() => {
     init()
   }, [init])
+
+  // The OS window title (taskbar, Alt+Tab) follows the active tab
+  const title = useStore((s) => {
+    const t = s.tabs.find((x) => x.id === s.activeTab)
+    return t ? tabTitle(t, s.projects) : ''
+  })
+  useEffect(() => {
+    document.title = title ? `${title} — Waypoint` : 'Waypoint'
+  }, [title])
+
+  useEffect(() => {
+    // Right-click anywhere nothing else handles: links in notes, then Cut/Copy/Paste for text
+    const onContext = (e: MouseEvent) => {
+      if (e.defaultPrevented) return
+      const target = e.target as HTMLElement
+      const s = useStore.getState()
+      const wiki = target.closest('[data-wikilink]')?.getAttribute('data-wikilink')
+      const from = s.view.kind === 'file' ? s.view.path : ''
+      const linked = wiki ? resolveLink(wiki, from, s.notes) : null
+      const editable = !!target.closest('input, textarea, [contenteditable="true"], .cm-content')
+      const selection = (window.getSelection()?.toString() ?? '').length > 0 ||
+        (target instanceof HTMLInputElement || target instanceof HTMLTextAreaElement
+          ? (target.selectionEnd ?? 0) > (target.selectionStart ?? 0)
+          : false)
+      const items = [...(linked ? [...noteMenu(linked), 'separator' as const] : []), ...(editable || selection ? editMenu(selection, editable) : [])]
+      if (items.length) showMenu(e, items)
+    }
+    window.addEventListener('contextmenu', onContext)
+    return () => window.removeEventListener('contextmenu', onContext)
+  }, [])
 
   useEffect(() => {
     // Refresh the tree, projects and tasks when files appear, vanish or project data changes.
@@ -153,8 +186,8 @@ export default function App() {
   if (!vault) return <Welcome />
 
   return (
-    <div className="app">
-      <Sidebar />
+    <div className={`app ${isContentWindow ? 'content-window' : ''}`}>
+      {!isContentWindow && <Sidebar />}
       <main className="main">
         <TabBar />
         {git && git.conflicted.length > 0 && (
