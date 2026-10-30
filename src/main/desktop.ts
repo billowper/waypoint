@@ -141,7 +141,9 @@ const popups: Partial<Record<keyof typeof POPUPS, BrowserWindow>> = {}
 export function openPopup(
   kind: keyof typeof POPUPS,
   preload: string,
-  loadPage: (w: BrowserWindow, hash: string) => void
+  loadPage: (w: BrowserWindow, hash: string) => void,
+  /** The main window, to centre over */
+  over?: BrowserWindow | null
 ) {
   const open = popups[kind]
   if (open && !open.isDestroyed()) {
@@ -149,20 +151,27 @@ export function openPopup(
     open.focus()
     return
   }
-  const { workArea } = screen.getDisplayNearestPoint(screen.getCursorScreenPoint())
   const { width, height } = POPUPS[kind]
+  // Centred over Waypoint when its window is showing, otherwise on the screen under the mouse
+  const area =
+    over && over.isVisible() && !over.isMinimized()
+      ? over.getBounds()
+      : screen.getDisplayNearestPoint(screen.getCursorScreenPoint()).workArea
   const w = new BrowserWindow({
     width,
     height,
-    x: Math.round(workArea.x + (workArea.width - width) / 2),
-    y: Math.round(workArea.y + workArea.height * 0.2),
+    x: Math.round(area.x + (area.width - width) / 2),
+    y: Math.round(area.y + Math.max(40, area.height * 0.15)),
     frame: false,
     resizable: false,
     alwaysOnTop: true,
     skipTaskbar: true,
     show: false,
-    transparent: kind === 'search', // rounded corners; the window is resized to fit the results
-    backgroundColor: kind === 'search' ? '#00000000' : '#212227',
+    // A solid frameless window: Windows 11 gives it rounded corners and a real drop shadow
+    // (a transparent window's CSS shadow gets clipped at the window edge)
+    roundedCorners: true,
+    hasShadow: true,
+    backgroundColor: '#212227',
     icon: appIcon(),
     webPreferences: { preload, contextIsolation: true, sandbox: true }
   })

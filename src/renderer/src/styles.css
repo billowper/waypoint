@@ -1924,9 +1924,11 @@ body.capture-window {
 
 /* Quick search popup -------------------------------------------------- */
 
+/* The popup window is solid and sized to the box; Windows draws its corners and shadow */
 body.search-window,
 body.search-window #root {
-  background: transparent;
+  background: var(--panel);
+  height: auto;
 }
 
 .quick-search {
@@ -1934,11 +1936,7 @@ body.search-window #root {
   display: flex;
   flex-direction: column;
   background: var(--panel);
-  border: 1px solid var(--border);
-  border-radius: 12px;
   overflow: hidden;
-  /* No drop shadow: the popup window is exactly the box's size, so a shadow gets clipped into a
-     visible rectangle at the window edge */
 }
 
 .quick-search input {

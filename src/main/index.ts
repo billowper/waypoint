@@ -500,11 +500,11 @@ function showMain() {
 function runCommand(c: AppCommand) {
   if (c.kind === 'capture') {
     if (!vault) return showMain() // nowhere to capture to yet
-    return openPopup('capture', preloadPath(), loadPage)
+    return openPopup('capture', preloadPath(), loadPage, win)
   }
   if (c.kind === 'search') {
     if (!vault) return showMain()
-    return openPopup('search', preloadPath(), loadPage)
+    return openPopup('search', preloadPath(), loadPage, win)
   }
   if (c.kind === 'snooze') {
     const p = prefs()
