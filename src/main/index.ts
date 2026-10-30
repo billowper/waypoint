@@ -5,7 +5,7 @@ import { stat } from 'fs/promises'
 import { watch, type FSWatcher } from 'chokidar'
 import { Vault } from './vault'
 import { NotesIndex } from './notesIndex'
-import { createProject, knownExternalPaths, listProjects, saveProject } from './projects'
+import { createBoard, createProject, knownExternalPaths, listProjects, saveProject } from './projects'
 import { createTask, isTaskPath, listTasks, updateTask } from './tasks'
 import { VaultGit } from './git'
 import type { ProjectSettings, TaskFields, VaultSettings } from '@shared/types'
@@ -353,6 +353,7 @@ function registerIpc() {
     if (!isTaskPath(rel)) throw new Error('Not a task')
     return updateTask(requireVault(), rel, patch)
   })
+  ipcMain.handle('boards:create', (_e, dir: string, name: string) => createBoard(requireVault(), dir, name))
   ipcMain.handle('projects:list', () => listProjects(requireVault()))
   ipcMain.handle('projects:create', async (_e, name: string) => {
     const slug = await createProject(requireVault(), name)

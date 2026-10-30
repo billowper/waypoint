@@ -59,7 +59,8 @@ const api: Api = {
   desktopInfo: () => ipcRenderer.invoke('desktop:info'),
   captureAdd: (text) => ipcRenderer.invoke('capture:add', text),
   captureClose: () => ipcRenderer.send('capture:close'),
-  nudgeNow: () => ipcRenderer.invoke('nudge:now')
+  nudgeNow: () => ipcRenderer.invoke('nudge:now'),
+  createBoard: (dir, name) => ipcRenderer.invoke('boards:create', dir, name)
 }
 
 contextBridge.exposeInMainWorld('api', api)

@@ -20,9 +20,11 @@ const settingsOf = (p: Project): ProjectSettings => ({
 const fail = (what: string) => (e: unknown) => alert(`${what}\n\n${(e as Error).message}`)
 
 export default function ProjectPage({ slug }: { slug: string }) {
-  const { projects, notes, tasks, openFile, newNote, refresh, openBoard, createTask } = useStore()
+  const { projects, notes, tasks, boards, openFile, newNote, refresh, openBoard, createTask, openCanvas, createBoard } =
+    useStore()
   const project = projects.find((p) => p.slug === slug)
   const projectTasks = tasks.filter((t) => t.project === slug)
+  const projectBoards = boards.filter((b) => b.startsWith(`projects/${slug}/`))
   const [s, setS] = useState<ProjectSettings | null>(project ? settingsOf(project) : null)
   const [tagText, setTagText] = useState(project?.tags.join(', ') ?? '')
   const pending = useRef<ReturnType<typeof setTimeout> | null>(null)
@@ -288,6 +290,25 @@ export default function ProjectPage({ slug }: { slug: string }) {
             </button>
           </div>
         ))}
+      </section>
+
+      <section className="card">
+        <div className="card-head">
+          <h2>Boards</h2>
+          <button className="btn small" onClick={() => createBoard(`${project.dir}/boards`)}>
+            New board
+          </button>
+        </div>
+        {projectBoards.length === 0 && <p className="empty">Whiteboards for sketching, mapping and planning.</p>}
+        <ul className="page-list">
+          {projectBoards.map((b) => (
+            <li key={b}>
+              <button onClick={(e) => openCanvas(b, { newTab: e.ctrlKey })}>
+                ✎ {baseName(b).replace(/.excalidraw$/i, '')}
+              </button>
+            </li>
+          ))}
+        </ul>
       </section>
 
       <section className="card">

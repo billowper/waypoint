@@ -12,6 +12,8 @@ export type View =
   /** Git history of one note, or of the whole vault when path is '' */
   | { kind: 'history'; path: string }
   | { kind: 'settings' }
+  /** An Excalidraw board file (.excalidraw) */
+  | { kind: 'canvas'; path: string }
 
 export interface Tab {
   id: number
@@ -50,6 +52,8 @@ interface State {
   tree: TreeNode[]
   /** Every .md note in the vault, for links, Ctrl+P and autocomplete */
   notes: string[]
+  /** Every .excalidraw board in the vault */
+  boards: string[]
   folders: string[]
   projects: Project[]
   tasks: Task[]
@@ -93,6 +97,8 @@ interface State {
   saveVaultSettings(settings: VaultSettings): Promise<void>
   openHistory(path: string, opts?: { newTab?: boolean }): void
   openSettings(): void
+  openCanvas(path: string, opts?: { newTab?: boolean }): void
+  createBoard(dir: string): Promise<void>
   savePrefs(prefs: Prefs): Promise<void>
   setNudge(nudge: NudgeInfo | null): void
   newTab(): void
@@ -151,13 +157,15 @@ export function registerEditor(hooks: EditorHooks): () => void {
 }
 const flushEditors = () => Promise.all([...editors].map((e) => e.flush()))
 
-function flatten(nodes: TreeNode[], notes: string[], folders: string[]) {
+function flatten(nodes: TreeNode[], notes: string[], folders: string[], boards: string[]) {
   for (const n of nodes) {
     if (n.type === 'dir') {
       folders.push(n.path)
-      flatten(n.children ?? [], notes, folders)
+      flatten(n.children ?? [], notes, folders, boards)
     } else if (n.name.toLowerCase().endsWith('.md')) {
       notes.push(n.path)
+    } else if (n.name.toLowerCase().endsWith('.excalidraw')) {
+      boards.push(n.path)
     }
   }
 }
@@ -174,7 +182,9 @@ function saveTabs(vault: string | undefined, tabs: Tab[], activeTab: number) {
           ? `${t.view.kind}:${t.view.slug}`
           : t.view.kind === 'settings'
             ? 'settings'
-            : null
+            : t.view.kind === 'canvas'
+              ? `canvas:${t.view.path}`
+              : null
     )
     localStorage.setItem(tabsKey(vault), JSON.stringify({ paths, active: tabs.findIndex((t) => t.id === activeTab) }))
   } catch {
@@ -190,6 +200,7 @@ function loadTabs(vault: string, notes: string[], projects: Project[]): { tabs: 
     if (!saved?.paths?.length) return null
     const tabs = saved.paths.map((p): Tab => {
       if (p === 'settings') return { id: ++nextId, view: { kind: 'settings' } }
+      if (p?.startsWith('canvas:')) return { id: ++nextId, view: { kind: 'canvas', path: p.slice(7) } }
       const [, kind, slug] = /^(project|board):(.+)$/.exec(p ?? '') ?? []
       if (slug && projects.some((x) => x.slug === slug)) {
         return { id: ++nextId, view: { kind: kind as 'project' | 'board', slug } }
@@ -225,7 +236,7 @@ export const useStore = create<State>((set, get) => {
           ? { ...t, view: { kind: t.view.kind, slug: moved.slice('projects/'.length) } }
           : { ...t, view: { kind: 'home' } }
       }
-      if (t.view.kind !== 'file') return t
+      if (t.view.kind !== 'file' && t.view.kind !== 'canvas') return t
       const moved = movedPath(t.view.path, from, to)
       return moved ? { ...t, view: { ...t.view, path: moved } } : t
     })
@@ -254,6 +265,7 @@ export const useStore = create<State>((set, get) => {
     vault: null,
     tree: [],
     notes: [],
+    boards: [],
     folders: [],
     projects: [],
     tasks: [],
@@ -309,8 +321,9 @@ export const useStore = create<State>((set, get) => {
       ])
       const notes: string[] = []
       const folders: string[] = []
-      flatten(tree, notes, folders)
-      set({ tree, stats, recent, notes, folders, projects, tasks })
+      const boards: string[] = []
+      flatten(tree, notes, folders, boards)
+      set({ tree, stats, recent, notes, folders, boards, projects, tasks })
       get().refreshGit()
     },
 
@@ -443,6 +456,36 @@ ${(e as Error).message}`)
     },
 
     setNudge: (nudge) => set({ nudge }),
+
+    openCanvas(path, opts = {}) {
+      const { tabs, activeTab } = get()
+      const existing = tabs.find((t) => t.view.kind === 'canvas' && t.view.path === path)
+      if (existing) return setTabs(tabs, existing.id)
+      const view: View = { kind: 'canvas', path }
+      if (opts.newTab || !tabs.length) {
+        const tab = { id: ++nextId, view }
+        const at = tabs.findIndex((t) => t.id === activeTab) + 1
+        return setTabs([...tabs.slice(0, at), tab, ...tabs.slice(at)], tab.id)
+      }
+      setTabs(
+        tabs.map((t) => (t.id === activeTab ? { ...t, view } : t)),
+        activeTab
+      )
+    },
+
+    async createBoard(dir) {
+      const name = await get().ask('New board', { placeholder: 'Board name', action: 'Create' })
+      if (!name) return
+      try {
+        const path = await window.api.createBoard(dir, name)
+        await get().refresh()
+        get().openCanvas(path)
+      } catch (e) {
+        alert(`Couldn't create the board.
+
+${(e as Error).message}`)
+      }
+    },
 
     async savePrefs(prefs) {
       set({ prefs })

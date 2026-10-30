@@ -1,4 +1,4 @@
-import { useEffect } from 'react'
+import { lazy, Suspense, useEffect } from 'react'
 import { canRename, useStore } from './store'
 import Sidebar from './components/Sidebar'
 import { PathBar, TabBar } from './components/TopBar'
@@ -15,6 +15,9 @@ import TaskBar from './components/TaskBar'
 import History from './components/History'
 import Settings from './components/Settings'
 import NudgeBanner from './components/NudgeBanner'
+
+// Excalidraw is large; only load it when a board is opened
+const Canvas = lazy(() => import('./components/Canvas'))
 
 /** F2 / Delete act on the keyboard-focused tree item, else the open note (else selected folder for F2) */
 function fileTarget(fallbackToFolder: boolean): string | null {
@@ -132,6 +135,16 @@ export default function App() {
             {view.kind === 'board' && <Board key={view.slug} slug={view.slug} />}
             {view.kind === 'history' && <History key={view.path} path={view.path} />}
             {view.kind === 'settings' && <Settings />}
+            {tabs.some((t) => t.view.kind === 'canvas') && (
+              <Suspense fallback={<p className="empty pad">Loading board…</p>}>
+                {/* Boards stay mounted like editors, so switching tabs keeps their state */}
+                {tabs.map((t) =>
+                  t.view.kind === 'canvas' ? (
+                    <Canvas key={t.view.path} path={t.view.path} active={t.id === activeTab} />
+                  ) : null
+                )}
+              </Suspense>
+            )}
             {/* Every open note keeps its editor (and undo history); only the active one shows */}
             {tabs.map((t) =>
               t.view.kind === 'file' ? (

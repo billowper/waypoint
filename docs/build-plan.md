@@ -98,7 +98,7 @@ vault/
 - Notification clicks deep-link into the right task/project
 - **Checkpoint:** tune frequency and tone so it helps without annoying
 
-### Phase 7 — Canvas boards (Miro-like)
+### Phase 7 — Canvas boards (Miro-like) — BUILT (unattended), awaiting review
 - Excalidraw boards per project
 - Drop notes/tasks onto a board as linked cards
 - **Checkpoint:** how much whiteboard is needed
@@ -141,6 +141,8 @@ vault/
 - 2026-10-30: Nudges show inside the app when its window is in front, else as a Windows toast. Toasts only
   appear in the installed app (Windows drops them for apps without a Start-menu entry, e.g. dev builds)
 - 2026-10-30: Closing the window keeps Waypoint in the tray (setting, on by default) so hotkey + nudges work
+- 2026-10-30: Boards are .excalidraw JSON files (Excalidraw 0.18, lazy-loaded, fonts served locally); note/task
+  cards link back with waypoint://open/<path>. Vulnerable Excalidraw sub-deps pinned via npm overrides
 - 2026-10-30: Defaults chosen by Claude (Bill to veto at review): project YAML as drafted in Phase 2;
   quick-capture hotkey Ctrl+Alt+W (Ctrl+Alt+Space was already taken on Bill's PC); start-with-Windows off by default; nudges at most every 2 h,
   weekdays 09:00–18:00, snoozable; canvas = Excalidraw; Phase 8 adds light theme + settings page +

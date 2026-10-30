@@ -14,7 +14,7 @@ interface Props {
 const parentOf = (p: string) => (p.includes('/') ? p.slice(0, p.lastIndexOf('/')) : '')
 
 export default function FileTree({ nodes, depth }: Props) {
-  const { expanded, toggle, view, openFile, selectedDir, selectDir, openMenu, move } = useStore()
+  const { expanded, toggle, view, openFile, openCanvas, selectedDir, selectDir, openMenu, move } = useStore()
   const openPath = view.kind === 'file' ? view.path : null
   const [dropOn, setDropOn] = useState<string | null>(null)
   const expandTimer = useRef<ReturnType<typeof setTimeout> | null>(null)
@@ -88,20 +88,28 @@ export default function FileTree({ nodes, depth }: Props) {
           )
         }
         const isMd = n.name.toLowerCase().endsWith('.md')
+        const isBoard = n.name.toLowerCase().endsWith('.excalidraw')
         return (
           <li key={n.path}>
             <button
-              className={`tree-row file ${openPath === n.path ? 'active' : ''} ${isMd ? '' : 'other'}`}
+              className={`tree-row file ${openPath === n.path || (view.kind === 'canvas' && view.path === n.path) ? 'active' : ''} ${isMd || isBoard ? '' : 'other'}`}
               style={pad}
               data-path={n.path}
-              onClick={(e) => (isMd ? openFile(n.path, { newTab: e.ctrlKey }) : window.api.reveal(n.path))}
+              onClick={(e) =>
+                isMd
+                  ? openFile(n.path, { newTab: e.ctrlKey })
+                  : isBoard
+                    ? openCanvas(n.path, { newTab: e.ctrlKey })
+                    : window.api.reveal(n.path)
+              }
               onAuxClick={(e) => e.button === 1 && isMd && openFile(n.path, { newTab: true })}
               onContextMenu={menu(n)}
               title={isMd ? n.path : `${n.path} — opens in Explorer`}
               {...drag(n)}
             >
               <span className="chev spacer" />
-              {isMd ? n.name.slice(0, -3) : n.name}
+              {isBoard && <span className="tree-icon">✎</span>}
+              {isMd ? n.name.slice(0, -3) : isBoard ? n.name.slice(0, -'.excalidraw'.length) : n.name}
             </button>
           </li>
         )

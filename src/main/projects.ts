@@ -126,6 +126,22 @@ export async function saveProject(vault: Vault, slug: string, settings: ProjectS
   await vault.write(rel, joinFrontmatter(merged, text === null ? `# ${settings.title}\n\n` : body))
 }
 
+/** A new, empty Excalidraw board in projects/<slug>/boards/ (or any folder); returns its path */
+export async function createBoard(vault: Vault, dir: string, name: string): Promise<string> {
+  await fs.mkdir(vault.abs(dir), { recursive: true })
+  const base = sanitize(name) || 'Board'
+  for (let i = 0; ; i++) {
+    const rel = `${dir}/${i ? `${base} ${i}` : base}.excalidraw`
+    const empty = { type: 'excalidraw', version: 2, source: 'waypoint', elements: [], appState: {}, files: {} }
+    try {
+      await fs.writeFile(vault.abs(rel), JSON.stringify(empty, null, 2), { flag: 'wx' })
+      return rel
+    } catch (e: any) {
+      if (e.code !== 'EEXIST') throw e
+    }
+  }
+}
+
 /** Paths a project lists (repo folder, bookmarks): the only outside-the-vault paths the app opens. */
 export async function knownExternalPaths(vault: Vault): Promise<Set<string>> {
   const out = new Set<string>()
