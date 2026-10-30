@@ -1,5 +1,6 @@
 import { useCallback, useEffect, useRef, useState } from 'react'
-import { PROJECT_STATUSES, type Project, type ProjectSettings } from '@shared/types'
+import { PROJECT_STATUSES, TASK_STATUSES, TASK_STATUS_LABEL, type Project, type ProjectSettings } from '@shared/types'
+import { byUrgency, dueState, formatDue } from './Board'
 import { baseName } from '@shared/names'
 import { useStore } from '../store'
 
@@ -19,8 +20,9 @@ const settingsOf = (p: Project): ProjectSettings => ({
 const fail = (what: string) => (e: unknown) => alert(`${what}\n\n${(e as Error).message}`)
 
 export default function ProjectPage({ slug }: { slug: string }) {
-  const { projects, notes, openFile, newNote, refresh } = useStore()
+  const { projects, notes, tasks, openFile, newNote, refresh, openBoard, createTask } = useStore()
   const project = projects.find((p) => p.slug === slug)
+  const projectTasks = tasks.filter((t) => t.project === slug)
   const [s, setS] = useState<ProjectSettings | null>(project ? settingsOf(project) : null)
   const [tagText, setTagText] = useState(project?.tags.join(', ') ?? '')
   const pending = useRef<ReturnType<typeof setTimeout> | null>(null)
@@ -127,6 +129,46 @@ export default function ProjectPage({ slug }: { slug: string }) {
           )}
         </div>
         <p className="overview">{project.overview || 'No overview yet.'}</p>
+      </section>
+
+      <section className="card">
+        <div className="card-head">
+          <h2>Tasks</h2>
+          <button
+            className="btn small"
+            onClick={async () => {
+              const path = await createTask(slug, { title: 'New task' })
+              if (path) await openFile(path)
+            }}
+          >
+            New task
+          </button>
+          <button className="btn small primary" onClick={(e) => openBoard(slug, { newTab: e.ctrlKey })}>
+            Open board
+          </button>
+        </div>
+        <div className="task-counts">
+          {TASK_STATUSES.map((st) => (
+            <span key={st}>
+              <b>{projectTasks.filter((t) => t.status === st).length}</b> {TASK_STATUS_LABEL[st]}
+            </span>
+          ))}
+        </div>
+        <ul className="page-list">
+          {projectTasks
+            .filter((t) => t.status === 'doing' || t.status === 'todo')
+            .sort(byUrgency)
+            .slice(0, 6)
+            .map((t) => (
+              <li key={t.path}>
+                <button onClick={(e) => openFile(t.path, { newTab: e.ctrlKey })}>
+                  <span className="task-id">{t.id}</span>
+                  {t.title}
+                  {t.due && <span className={`due ${dueState(t)}`}>{formatDue(t.due)}</span>}
+                </button>
+              </li>
+            ))}
+        </ul>
       </section>
 
       <section className="card">

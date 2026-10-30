@@ -1,4 +1,5 @@
 import { useStore } from '../store'
+import { byUrgency, dueState, formatDue } from './Board'
 
 function greeting() {
   const h = new Date().getHours()
@@ -6,8 +7,16 @@ function greeting() {
 }
 
 export default function Home() {
-  const { stats, recent, openFile, newNote, tree, projects, openProject, createProject } = useStore()
+  const { stats, recent, openFile, newNote, tree, projects, openProject, createProject, tasks } = useStore()
   const active = projects.filter((p) => p.status === 'active')
+  // My work: open tasks in projects that aren't finished, overdue first
+  const liveProjects = new Set(projects.filter((p) => p.status !== 'done').map((p) => p.slug))
+  const open = tasks.filter((t) => t.status !== 'done' && t.status !== 'backlog' && liveProjects.has(t.project))
+  const myWork = [...open].sort(
+    (a, b) => (a.due || '9999').localeCompare(b.due || '9999') || byUrgency(a, b)
+  )
+  const dueSoon = open.filter((t) => ['overdue', 'today', 'soon'].includes(dueState(t))).length
+  const projectTitle = (slug: string) => projects.find((p) => p.slug === slug)?.title ?? slug
   const hasInbox = tree.some((n) => n.path === 'inbox.md')
   const date = new Date().toLocaleDateString(undefined, {
     weekday: 'long',
@@ -45,10 +54,32 @@ export default function Home() {
           <span className="stat-num">{stats.projects}</span>
           <span className="stat-label">projects</span>
         </div>
-        <div className="stat muted">
-          <span className="stat-num">—</span>
-          <span className="stat-label">tasks due · phase 3</span>
+        <div className={`stat ${dueSoon ? 'alert' : ''}`}>
+          <span className="stat-num">{dueSoon}</span>
+          <span className="stat-label">tasks due soon or overdue</span>
         </div>
+      </section>
+
+      <section className="panel">
+        <h2>My work</h2>
+        {myWork.length === 0 ? (
+          <p className="empty">Nothing to do in To do or Doing. Enjoy it.</p>
+        ) : (
+          <ul className="recent">
+            {myWork.slice(0, 12).map((t) => (
+              <li key={t.path}>
+                <button onClick={(e) => openFile(t.path, { newTab: e.ctrlKey })}>
+                  <span className="task-id">{t.id}</span>
+                  <span className="recent-name">{t.title}</span>
+                  <span className="recent-path">
+                    {projectTitle(t.project)} · {t.status === 'doing' ? 'doing' : 'to do'}
+                  </span>
+                  {t.due && <span className={`due ${dueState(t)}`}>{formatDue(t.due)}</span>}
+                </button>
+              </li>
+            ))}
+          </ul>
+        )}
       </section>
 
       <section className="panel">

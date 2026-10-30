@@ -10,8 +10,9 @@ export function TabBar() {
   const tabTitle = (t: Tab) =>
     t.view.kind === 'file'
       ? baseName(t.view.path)
-      : t.view.kind === 'project'
-        ? (projects.find((p) => t.view.kind === 'project' && p.slug === t.view.slug)?.title ?? t.view.slug)
+      : t.view.kind === 'project' || t.view.kind === 'board'
+        ? (projects.find((p) => 'slug' in t.view && p.slug === t.view.slug)?.title ?? t.view.slug) +
+          (t.view.kind === 'board' ? ' · tasks' : '')
         : 'Home'
   const onMouseDown = (t: Tab) => (e: MouseEvent) => {
     if (e.button === 1) {
@@ -32,6 +33,7 @@ export function TabBar() {
             <button className="tab-title" onClick={() => activateTab(t.id)}>
               {t.view.kind === 'home' && <span className="tab-icon">⌂</span>}
               {t.view.kind === 'project' && <span className="tab-icon">◇</span>}
+              {t.view.kind === 'board' && <span className="tab-icon">▦</span>}
               {tabTitle(t)}
             </button>
             <button className="tab-close" title="Close tab (Ctrl+W)" onClick={() => closeTab(t.id)}>

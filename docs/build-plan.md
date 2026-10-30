@@ -73,7 +73,7 @@ vault/
 - Home/overview dashboard: active projects, recent notes, upcoming tasks
 - **Checkpoint:** is the project structure right before tasks build on it?
 
-### Phase 3 — Tasks (Jira-lite)
+### Phase 3 — Tasks (Jira-lite) — BUILT (unattended), awaiting review
 - Tasks as markdown files with frontmatter; IDs per project
 - Kanban board (drag between statuses) and sortable list view
 - Priorities, due dates, labels, links to notes/wiki pages

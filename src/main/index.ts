@@ -6,7 +6,8 @@ import { watch, type FSWatcher } from 'chokidar'
 import { Vault } from './vault'
 import { NotesIndex } from './notesIndex'
 import { createProject, knownExternalPaths, listProjects, saveProject } from './projects'
-import type { ProjectSettings } from '@shared/types'
+import { createTask, isTaskPath, listTasks, updateTask } from './tasks'
+import type { ProjectSettings, TaskFields } from '@shared/types'
 import { loadConfig, saveConfig } from './config'
 import type { ChangeEvent, VaultInfo } from '@shared/types'
 import { movedPath } from '@shared/names'
@@ -262,6 +263,16 @@ function registerIpc() {
   ipcMain.handle('index:backlinks', async (_e, rel: string) => {
     await requireIndex().idle()
     return requireIndex().backlinks(rel)
+  })
+  ipcMain.handle('tasks:list', (_e, project?: string) => listTasks(requireVault(), project))
+  ipcMain.handle('tasks:create', async (_e, project: string, fields: Partial<TaskFields>) => {
+    const rel = await createTask(requireVault(), project, fields)
+    await requireIndex().update(rel)
+    return rel
+  })
+  ipcMain.handle('tasks:update', (_e, rel: string, patch: Partial<TaskFields>) => {
+    if (!isTaskPath(rel)) throw new Error('Not a task')
+    return updateTask(requireVault(), rel, patch)
   })
   ipcMain.handle('projects:list', () => listProjects(requireVault()))
   ipcMain.handle('projects:create', async (_e, name: string) => {

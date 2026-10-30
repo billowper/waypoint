@@ -62,6 +62,38 @@ export interface Project extends ProjectSettings {
   hasFile: boolean
 }
 
+export const TASK_STATUSES = ['backlog', 'todo', 'doing', 'done'] as const
+export type TaskStatus = (typeof TASK_STATUSES)[number]
+export const TASK_STATUS_LABEL: Record<TaskStatus, string> = {
+  backlog: 'Backlog',
+  todo: 'To do',
+  doing: 'Doing',
+  done: 'Done'
+}
+export const PRIORITIES = ['low', 'medium', 'high', 'urgent'] as const
+export type Priority = (typeof PRIORITIES)[number]
+
+/** Editable task fields (frontmatter of projects/<slug>/tasks/<ID>.md) */
+export interface TaskFields {
+  title: string
+  status: TaskStatus
+  priority: Priority
+  /** YYYY-MM-DD or '' */
+  due: string
+  labels: string[]
+}
+
+export interface Task extends TaskFields {
+  /** Vault-relative path of the task note */
+  path: string
+  /** e.g. WR-001 */
+  id: string
+  project: string
+  created: string
+  /** Set when the task moved to Done (YYYY-MM-DD) */
+  completed: string
+}
+
 export interface Api {
   getVault(): Promise<VaultInfo | null>
   openVault(): Promise<VaultInfo | null>
@@ -91,6 +123,11 @@ export interface Api {
   revealPath(path: string): Promise<void>
   openInCode(path: string): Promise<void>
   pickPath(kind: 'file' | 'folder'): Promise<string | null>
+  /** All tasks, or one project's */
+  tasks(project?: string): Promise<Task[]>
+  /** Returns the new task's path */
+  createTask(project: string, fields: Partial<TaskFields>): Promise<string>
+  updateTask(rel: string, patch: Partial<TaskFields>): Promise<Task>
   recent(): Promise<string[]>
   touchRecent(rel: string): Promise<string[]>
   reveal(rel: string): Promise<void>
