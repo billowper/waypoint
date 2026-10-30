@@ -539,7 +539,10 @@ if (!gotLock) {
   nativeTheme.on('updated', () => applyTheme()) // Windows switched light/dark while on "system"
 
   app.whenReady().then(async () => {
-    app.setAppUserModelId('com.billlowe.waypoint')
+    // Windows picks taskbar icons and toast identity by this id. Dev builds get their own, or they
+    // claim the installed app's id (Electron then makes an "Electron" Start-menu shortcut for it,
+    // and the installed Waypoint shows Electron's icon in the taskbar)
+    app.setAppUserModelId(app.isPackaged ? 'com.billlowe.waypoint' : 'com.billlowe.waypoint.dev')
     // The default menu's accelerators (Ctrl+R reload, Ctrl+W close) fight the app's own
     // shortcuts and a reload can drop an unsaved edit. Keep them in dev for reload/DevTools.
     if (app.isPackaged) Menu.setApplicationMenu(null)
