@@ -523,6 +523,7 @@ function registerIpc() {
     return true
   })
   ipcMain.on('window:showMain', () => showMain())
+  ipcMain.on('window:revealInMain', (_e, path: string) => runCommand({ kind: 'reveal', path }))
   ipcMain.on('edit:action', (e, action: string) => {
     if (action === 'cut') e.sender.cut()
     else if (action === 'copy') e.sender.copy()

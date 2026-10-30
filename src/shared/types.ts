@@ -154,6 +154,7 @@ export type AppCommand =
   | { kind: 'open-project'; slug: string; nudge?: NudgeInfo }
   | { kind: 'open-board'; slug: string }
   | { kind: 'snooze'; minutes: number }
+  | { kind: 'reveal'; path: string }
   /** Show a nudge as a banner in the app (used when the window is in front) */
   | { kind: 'nudge'; nudge: NudgeInfo }
 
@@ -236,6 +237,8 @@ export interface Api {
   /** Tell the main process what this window has open */
   reportWindowState(state: { views: ViewRef[]; paths: string[] }): void
   showMain(): void
+  /** From a content window: bring up the main window with this folder shown in its sidebar */
+  revealInMain(path: string): void
   /** Close this window (content windows only) */
   closeWindow(): void
   /** Another window renamed/moved something */

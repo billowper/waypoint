@@ -6,7 +6,7 @@ import SearchPanel from './SearchPanel'
 import { projectMenu, showMenu, treeMenu } from '../menus'
 import GitPanel, { GitIndicator } from './GitPanel'
 
-/** General notes live here; inbox.md (quick captures) is what the Inbox item opens */
+/** General notes live here (the Notes item); inbox.md (quick captures) is pinned at the top */
 const NOTES_DIR = 'notes'
 const INBOX_NOTE = 'inbox.md'
 /** Project folders shown first, in this order */
@@ -80,7 +80,7 @@ export default function Sidebar() {
     if (path && e.target === e.currentTarget) move(path, '')
   }
 
-  /** Inbox and project rows accept notes dragged onto them: move them into that place */
+  /** Notes and project rows accept notes dragged onto them: move them into that place */
   const dropInto = (key: string, dir: string) => ({
     onDragOver: (e: DragEvent) => {
       if (!e.dataTransfer.types.includes(DRAG_TYPE)) return
@@ -122,10 +122,7 @@ export default function Sidebar() {
             <span className="nav-icon">⌂</span> Home
           </button>
 
-          <div
-            className={`nav-row ${inboxActive ? 'active' : ''} ${dropRow === 'inbox' ? 'drop-target' : ''}`}
-            {...dropInto('inbox', NOTES_DIR)}
-          >
+          <div className={`nav-row ${dropRow === 'notes' ? 'drop-target' : ''}`} {...dropInto('notes', NOTES_DIR)}>
             <button
               className="nav-chev"
               title={sidebarOpen.inbox ? 'Hide notes' : 'Show notes'}
@@ -135,18 +132,30 @@ export default function Sidebar() {
             </button>
             <button
               className="nav-item"
-              title="Inbox: quick captures land here; general notes live under it"
-              onClick={(e) => (notes.includes(INBOX_NOTE) ? openFile(INBOX_NOTE, { newTab: e.ctrlKey }) : newNote('', 'inbox'))}
+              title="General notes (the notes folder)"
+              onClick={() => toggleSection('inbox')}
               onContextMenu={(e) => showMenu(e, treeMenu(NOTES_DIR, 'dir'))}
             >
-              <span className="nav-icon">✉</span> Inbox
+              <span className="nav-icon">✎</span> Notes
             </button>
-            <button className="icon-btn row-add" title="New note in the inbox (Ctrl+N)" onClick={() => newNote(NOTES_DIR)}>
+            <button className="icon-btn row-add" title="New note (Ctrl+N)" onClick={() => newNote(NOTES_DIR)}>
               ＋
             </button>
           </div>
-          {sidebarOpen.inbox && inboxKids.length > 0 && (
+          {sidebarOpen.inbox && (
             <div className="nav-tree">
+              {/* Quick captures land in inbox.md: always first under Notes */}
+              <button
+                className={`tree-row file pinned ${inboxActive ? 'active' : ''}`}
+                style={{ paddingLeft: 24 }}
+                title="Quick captures land here (Ctrl+Alt+W)"
+                onClick={(e) => (notes.includes(INBOX_NOTE) ? openFile(INBOX_NOTE, { newTab: e.ctrlKey }) : newNote('', 'inbox'))}
+                onContextMenu={(e) => notes.includes(INBOX_NOTE) && showMenu(e, treeMenu(INBOX_NOTE, 'file'))}
+              >
+                <span className="chev spacer" />
+                <span className="tree-icon">✉</span>
+                Inbox
+              </button>
               <FileTree nodes={inboxKids} depth={1} />
             </div>
           )}

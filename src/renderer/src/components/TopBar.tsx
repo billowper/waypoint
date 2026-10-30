@@ -2,7 +2,7 @@ import { useState, type DragEvent, type MouseEvent } from 'react'
 import { baseName } from '@shared/names'
 import type { Project, ViewRef } from '@shared/types'
 import { flushEditors, isContentWindow, toRef, useStore, type Tab } from '../store'
-import { showMenu, tabMenu } from '../menus'
+import { projectMenu, showMenu, tabMenu, treeMenu } from '../menus'
 
 const SAVE_LABEL = { saved: 'Saved', saving: 'Saving…', unsaved: 'Edited', error: 'Save failed' }
 
@@ -118,10 +118,17 @@ export function TabBar() {
 
 /** Folder path, title (click to rename) and note actions for the open note */
 export function PathBar() {
-  const { view, activeTab, saveStates, rename, backlinksOpen, toggleBacklinks, openHistory, git } = useStore()
+  const { view, activeTab, saveStates, rename, backlinksOpen, toggleBacklinks, openHistory, git, projects, openProject, revealFolder } =
+    useStore()
   if (view.kind !== 'file') return null
   const crumbs = view.path.replace(/\.md$/i, '').split('/')
   const saveState = saveStates[activeTab] ?? 'saved'
+  // Folder crumbs: a project's own folder opens the project; any other folder is shown in the sidebar
+  const folderAt = (i: number) => view.path.split('/').slice(0, i + 1).join('/')
+  const projectAt = (dir: string) => {
+    const m = /^projects\/([^/]+)$/.exec(dir)
+    return m && projects.some((p) => p.slug === m[1]) ? m[1] : null
+  }
 
   return (
     <div className="pathbar">
@@ -132,9 +139,21 @@ export function PathBar() {
               {c}
             </button>
           ) : (
-            <span key={i} className="crumb">
-              {c}
-            </span>
+            (() => {
+              const dir = folderAt(i)
+              const slug = projectAt(dir)
+              return (
+                <button
+                  key={i}
+                  className="crumb link"
+                  title={slug ? 'Open the project' : 'Show this folder in the sidebar'}
+                  onClick={(e) => (slug ? openProject(slug, { newTab: e.ctrlKey }) : revealFolder(dir))}
+                  onContextMenu={(e) => showMenu(e, slug ? projectMenu(slug) : treeMenu(dir, 'dir'))}
+                >
+                  {slug ? (projects.find((p) => p.slug === slug)?.title ?? c) : c}
+                </button>
+              )
+            })()
           )
         )}
       </nav>

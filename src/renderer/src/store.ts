@@ -137,6 +137,8 @@ interface State {
   closePicker(): void
   setSidebarMode(mode: State['sidebarMode']): void
   toggleSection(section: 'files' | 'inbox'): void
+  /** Show a folder in the sidebar: open its section, expand down to it, scroll to it */
+  revealFolder(path: string): void
   /** Open or close a project's tree in the sidebar */
   setProjectOpen(slug: string, open: boolean): void
   toggleBacklinks(): void
@@ -809,6 +811,36 @@ ${(e as Error).message}`)
       const sidebarOpen = { ...get().sidebarOpen, files: true }
       saveSidebar(sidebarOpen)
       set({ sidebarMode, sidebarOpen })
+    },
+
+    revealFolder(path) {
+      if (isContentWindow) return window.api.revealInMain(path) // no sidebar here
+      const s = get()
+      const expanded = { ...s.expanded }
+      for (let dir = path; dir; dir = parentOf(dir)) expanded[dir] = true
+      const sidebarOpen = { ...s.sidebarOpen, projects: { ...s.sidebarOpen.projects } }
+      const project = /^projects\/([^/]+)/.exec(path)?.[1]
+      let mode = s.sidebarMode
+      if (project && path !== `projects/${project}`) sidebarOpen.projects[project] = true
+      else if (path === 'notes' || path.startsWith('notes/')) sidebarOpen.inbox = true
+      else {
+        sidebarOpen.files = true
+        mode = 'files'
+      }
+      saveSidebar(sidebarOpen)
+      set({ expanded, sidebarOpen, sidebarMode: mode, selectedDir: path })
+      // Once it's drawn: scroll to the folder's row and flash it
+      requestAnimationFrame(() =>
+        requestAnimationFrame(() => {
+          const rows = document.querySelectorAll<HTMLElement>(`[data-path="${CSS.escape(path)}"]`)
+          const row = rows[0]
+          if (!row) return
+          row.scrollIntoView({ block: 'nearest' })
+          row.classList.remove('flash')
+          void row.offsetWidth // restart the animation
+          row.classList.add('flash')
+        })
+      )
     },
 
     toggleSection(section) {

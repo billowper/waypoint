@@ -73,6 +73,7 @@ const api: Api = {
   claimOpen: (path) => ipcRenderer.invoke('window:claim', path),
   reportWindowState: (state) => ipcRenderer.send('window:state', state),
   showMain: () => ipcRenderer.send('window:showMain'),
+  revealInMain: (path) => ipcRenderer.send('window:revealInMain', path),
   closeWindow: () => ipcRenderer.send('window:close'),
   onMoved: (cb) => {
     const h = (_e: IpcRendererEvent, from: string, to: string) => cb(from, to)

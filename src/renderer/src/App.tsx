@@ -124,6 +124,7 @@ export default function App() {
       else if (c.kind === 'open') s.notes.includes(c.path) && s.openFile(c.path, { newTab: c.newTab, reveal: c.reveal })
       else if (c.kind === 'open-project') s.openProject(c.slug)
       else if (c.kind === 'open-board') s.openBoard(c.slug)
+      else if (c.kind === 'reveal') s.revealFolder(c.path)
     })
   }, [])
 
