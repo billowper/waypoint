@@ -50,8 +50,8 @@ export interface ProjectSettings {
   repo: { path: string; remote: string }
   links: { title: string; url: string }[]
   bookmarks: { title: string; path: string }[]
-  /** The project's own colours (primary + accent); null = use the app's */
-  colors: { primary: string; accent: string } | null
+  /** The project's own accent colour; null = use the app's */
+  colors: { accent: string } | null
 }
 
 export interface Project extends ProjectSettings {

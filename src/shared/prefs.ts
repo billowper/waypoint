@@ -7,7 +7,7 @@ export interface Prefs {
   captureHotkey: string
   nudges: NudgePrefs
   theme: 'dark' | 'light' | 'system'
-  /** The two picked colours; everything else is calculated (see palette.ts) */
+  /** The picked colour; everything else is calculated (see palette.ts) */
   colors: ThemeColors
   fonts: FontPrefs
   /** Zoom for the whole interface (1 = 100%) */
@@ -18,9 +18,7 @@ export interface Prefs {
 }
 
 export interface ThemeColors {
-  /** Buttons, links, cursor, focus */
-  primary: string
-  /** Highlights: bullets, search hits, badges, icons */
+  /** Buttons, links, cursor, focus, highlights */
   accent: string
 }
 
@@ -35,7 +33,7 @@ export interface FontPrefs {
   size: number
 }
 
-export const DEFAULT_COLORS: ThemeColors = { primary: '#e6aa50', accent: '#e6aa50' }
+export const DEFAULT_COLORS: ThemeColors = { accent: '#e6aa50' }
 export const DEFAULT_FONTS: FontPrefs = { ui: 'Segoe UI Variable Text', editor: '', mono: 'Cascadia Code', size: 15.5 }
 
 export interface BackupPrefs {
@@ -93,7 +91,10 @@ export function withDefaults(p: Partial<Prefs> | undefined): Prefs {
     ...p,
     nudges: { ...DEFAULT_PREFS.nudges, ...p?.nudges },
     backup: { ...DEFAULT_PREFS.backup, ...p?.backup },
-    colors: { ...DEFAULT_COLORS, ...p?.colors },
+    // Older settings had primary + accent; the primary was the main colour
+    colors: {
+      accent: (p?.colors as { primary?: string } | undefined)?.primary ?? p?.colors?.accent ?? DEFAULT_COLORS.accent
+    },
     fonts: { ...DEFAULT_FONTS, ...p?.fonts }
   }
 }

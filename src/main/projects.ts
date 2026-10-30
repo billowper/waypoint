@@ -36,7 +36,8 @@ function settingsFrom(data: Record<string, unknown>, fallbackTitle: string): Pro
   const c = (data.colors && typeof data.colors === 'object' ? data.colors : null) as Record<string, unknown> | null
   const hex = (v: unknown) => (typeof v === 'string' && /^#[0-9a-f]{6}$/i.test(v) ? v : '')
   return {
-    colors: c && hex(c.primary) ? { primary: hex(c.primary), accent: hex(c.accent) || hex(c.primary) } : null,
+    // (older files may have primary + accent; the primary was the main colour)
+    colors: c && (hex(c.primary) || hex(c.accent)) ? { accent: hex(c.primary) || hex(c.accent) } : null,
     title,
     status: PROJECT_STATUSES.includes(status) ? status : 'active',
     key: (str(data.key) || keyFor(title)).toUpperCase(),
@@ -60,7 +61,7 @@ function dataFrom(s: ProjectSettings): Record<string, unknown> {
   }
   if (s.links.length) data.links = s.links.map((l) => ({ title: l.title || l.url, url: l.url }))
   if (s.bookmarks.length) data.bookmarks = s.bookmarks.map((b) => ({ title: b.title || b.path, path: b.path }))
-  if (s.colors) data.colors = { primary: s.colors.primary, accent: s.colors.accent }
+  if (s.colors) data.colors = { accent: s.colors.accent }
   return data
 }
 

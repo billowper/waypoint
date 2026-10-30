@@ -1,7 +1,7 @@
 import { useEffect, useState } from 'react'
 import type { DesktopInfo } from '@shared/types'
 import { DEFAULT_COLORS, DEFAULT_FONTS, type Prefs } from '@shared/prefs'
-import ColorPair from './ColorPair'
+import AccentPicker from './AccentPicker'
 import FontSelect from './FontSelect'
 
 /** Fonts that come with Windows 11 (any installed font name can be typed in too) */
@@ -133,15 +133,15 @@ ${(e as Error).message}`)
         </div>
         <div className="setting">
           <div>
-            <div className="setting-name">Colours</div>
+            <div className="setting-name">Accent colour</div>
             <div className="setting-help">
-              Primary is for buttons, links and the cursor; accent for highlights. Backgrounds, text and borders are
-              worked out from these. Projects can have their own (on the project page).
+              Used for buttons, links, the cursor and highlights. Backgrounds, text and borders are worked out from it.
+              Projects can have their own (on the project page).
             </div>
           </div>
           <div className="hotkey">
-            <ColorPair value={prefs.colors} onChange={(colors) => set({ colors })} />
-            {(prefs.colors.primary !== DEFAULT_COLORS.primary || prefs.colors.accent !== DEFAULT_COLORS.accent) && (
+            <AccentPicker value={prefs.colors.accent} onChange={(accent) => set({ colors: { accent } })} />
+            {prefs.colors.accent !== DEFAULT_COLORS.accent && (
               <button className="btn small" onClick={() => set({ colors: DEFAULT_COLORS })}>
                 Reset
               </button>

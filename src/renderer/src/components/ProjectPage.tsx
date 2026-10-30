@@ -1,7 +1,7 @@
 import { useCallback, useEffect, useRef, useState } from 'react'
 import { PROJECT_STATUSES, TASK_STATUSES, TASK_STATUS_LABEL, type Project, type ProjectSettings } from '@shared/types'
 import { byUrgency, dueState, formatDue } from './Board'
-import ColorPair from './ColorPair'
+import AccentPicker from './AccentPicker'
 import { baseName } from '@shared/names'
 import { useStore } from '../store'
 
@@ -121,17 +121,17 @@ export default function ProjectPage({ slug }: { slug: string }) {
               onChange={(e) => update({ key: e.target.value.toUpperCase().replace(/[^A-Z0-9]/g, '').slice(0, 6) })}
             />
           </label>
-          <label className="project-colors" title="Give this project its own colours">
+          <label className="project-colors" title="Give this project its own accent colour">
             <input
               type="checkbox"
               checked={!!s.colors}
               onChange={(e) =>
-                update({ colors: e.target.checked ? { ...(prefs?.colors ?? { primary: '#e6aa50', accent: '#e6aa50' }) } : null })
+                update({ colors: e.target.checked ? { accent: prefs?.colors.accent ?? '#e6aa50' } : null })
               }
             />
-            Own colours
+            Own colour
           </label>
-          {s.colors && <ColorPair value={s.colors} onChange={(colors) => update({ colors })} />}
+          {s.colors && <AccentPicker value={s.colors.accent} onChange={(accent) => update({ colors: { accent } })} />}
           {s.created && <span className="created">Created {s.created}</span>}
         </div>
       </header>

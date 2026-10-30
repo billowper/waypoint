@@ -1,8 +1,7 @@
 /**
- * Builds the app's whole colour palette (the CSS variables in styles.css) from two picks:
- * primary (buttons, links, cursor, focus) and accent (highlights: bullets, search hits, badges, icons).
- * Surfaces and text are near-neutral greys tinted with the primary's hue; both colours are nudged
- * lighter/darker until they stay readable on the background.
+ * Builds the app's whole colour palette (the CSS variables in styles.css) from one accent colour
+ * (buttons, links, cursor, focus, highlights) and light/dark. Surfaces and text are near-neutral
+ * greys tinted with the accent's hue; the accent is nudged lighter/darker until it stays readable.
  */
 
 type Rgb = [number, number, number]
@@ -65,9 +64,9 @@ function readable(color: string, bg: string, target: number, mode: 'dark' | 'lig
 
 const rgba = (hex: string, a: number) => `rgba(${hexToRgb(hex).join(', ')}, ${a})`
 
-export function palette(mode: 'dark' | 'light', primary: string, accent: string): Record<string, string> {
-  const [h, s] = rgbToHsl(hexToRgb(primary))
-  // Just a hint of the primary's hue in the greys
+export function palette(mode: 'dark' | 'light', accent: string): Record<string, string> {
+  const [h, s] = rgbToHsl(hexToRgb(accent))
+  // Just a hint of the accent's hue in the greys
   const t = Math.min(s, 0.6) * (mode === 'dark' ? 0.12 : 0.16)
   const g = (l: number, sat = t) => hsl(h, sat, l)
   const surfaces =
@@ -78,9 +77,8 @@ export function palette(mode: 'dark' | 'light', primary: string, accent: string)
     mode === 'dark'
       ? { text: g(0.83, t * 0.7), strong: g(0.94, t * 0.5), dim: g(0.6, t * 0.6), faint: g(0.41, t * 0.6) }
       : { text: g(0.2, t * 0.8), strong: g(0.08, t * 0.6), dim: g(0.42, t * 0.7), faint: g(0.62, t * 0.6) }
-  const p = readable(primary, surfaces.bg, 3, mode)
-  const a = readable(accent, surfaces.bg, 3, mode)
-  const [ah, as] = rgbToHsl(hexToRgb(a))
+  const p = readable(accent, surfaces.bg, 3, mode)
+  const [ah, as] = rgbToHsl(hexToRgb(p))
   const ink = contrast('#ffffff', p) >= contrast('#111111', p) ? '#ffffff' : '#141210'
   return {
     '--bg': surfaces.bg,
@@ -96,8 +94,8 @@ export function palette(mode: 'dark' | 'light', primary: string, accent: string)
     '--accent': p,
     '--accent-ink': ink,
     '--selection': rgba(p, mode === 'dark' ? 0.22 : 0.2),
-    '--highlight': a,
-    '--highlight-soft': rgba(a, mode === 'dark' ? 0.26 : 0.22),
+    '--highlight': p,
+    '--highlight-soft': rgba(p, mode === 'dark' ? 0.26 : 0.22),
     '--code': hsl(ah, Math.min(as, 0.7), mode === 'dark' ? 0.74 : 0.34),
     '--tint': mode === 'dark' ? 'rgba(255, 255, 255, 0.06)' : 'rgba(0, 0, 0, 0.05)',
     '--scrollbar': mode === 'dark' ? g(0.24) : g(0.78),

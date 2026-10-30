@@ -19,7 +19,7 @@ export function useResolvedTheme(pref: Prefs['theme'] | undefined): 'dark' | 'li
 const family = (name: string, fallback: string) => (name.trim() ? `'${name.trim().replace(/'/g, '')}', ${fallback}` : fallback)
 
 /**
- * Put the theme on <html>: light/dark, the palette calculated from the two colours, and fonts.
+ * Put the theme on <html>: light/dark, the palette calculated from the accent colour, and fonts.
  * `colors` may be a project's own override.
  */
 export function useApplyTheme(pref: Prefs['theme'] | undefined, colors?: ThemeColors, fonts?: FontPrefs) {
@@ -30,7 +30,7 @@ export function useApplyTheme(pref: Prefs['theme'] | undefined, colors?: ThemeCo
     const root = document.documentElement
     root.dataset.theme = theme
     const vars: Record<string, string> = {
-      ...palette(theme, c.primary, c.accent),
+      ...palette(theme, c.accent),
       '--sans': family(f.ui, "'Segoe UI', system-ui, sans-serif"),
       '--display': family(f.ui === DEFAULT_FONTS.ui ? 'Segoe UI Variable Display' : f.ui, "'Segoe UI', system-ui, sans-serif"),
       '--editor-font': family(f.editor || f.ui, "'Segoe UI', system-ui, sans-serif"),
@@ -40,6 +40,6 @@ export function useApplyTheme(pref: Prefs['theme'] | undefined, colors?: ThemeCo
     for (const [k, v] of Object.entries(vars)) root.style.setProperty(k, v)
     // The Windows caption buttons are drawn by Windows; tell it our colours
     window.api.setChrome?.(vars['--bg'], vars['--text'])
-  }, [theme, c.primary, c.accent, f.ui, f.editor, f.mono, f.size])
+  }, [theme, c.accent, f.ui, f.editor, f.mono, f.size])
   return theme
 }
