@@ -181,6 +181,7 @@ export class Vault {
     if (src === this.root) throw new Error('Cannot move the vault itself')
     if (destDir === src || destDir.startsWith(src + sep)) throw new Error("Can't move a folder into itself")
     if (dirname(src) === destDir) return rel
+    await fs.mkdir(destDir, { recursive: true })
     const isFile = (await fs.stat(src)).isFile()
     const ext = isFile ? extname(src) : ''
     const final = await uniqueName(destDir, basename(src, ext), ext)

@@ -1,7 +1,7 @@
 /**
- * Waypoint's MCP server: lets Claude Code sessions read (and, from M2, keep up to date) the projects,
+ * Waypoint's MCP server: lets Claude Code sessions read and keep up to date the projects,
  * tasks and notes in a Waypoint vault. It works on the vault files directly, so the app doesn't need
- * to be open, and the app picks up any changes through its file watcher.
+ * to be open; when it is, renames/moves and saves go through it (see src/main/bridge.ts).
  *
  * Runs over stdio. Started by Claude Code as:
  *   Waypoint.exe <path-to>/out/main/mcp.js        (with ELECTRON_RUN_AS_NODE=1, so no Node install needed)
@@ -11,126 +11,16 @@
 import { McpServer } from '@modelcontextprotocol/sdk/server/mcp.js'
 import { StdioServerTransport } from '@modelcontextprotocol/sdk/server/stdio.js'
 import { z } from 'zod'
-import { existsSync, readFileSync } from 'fs'
-import { join, resolve, sep } from 'path'
-import { homedir } from 'os'
-import { Vault } from '../main/vault'
+import type { Vault } from '../main/vault'
 import { listProjects, readProject } from '../main/projects'
 import { listTasks } from '../main/tasks'
 import { NotesIndex } from '../main/notesIndex'
-import { TASK_STATUSES, TASK_STATUS_LABEL, type Project, type Task, type TaskStatus } from '@shared/types'
-import { baseName } from '@shared/names'
+import { TASK_STATUSES, type Project, type TaskStatus } from '@shared/types'
 import { splitFrontmatter } from '@shared/frontmatter'
+import { findNote, findTask, openVault, pickProject, projectForFolder, projectSummary, safely, sessionFolders, taskLine } from './common'
+import { registerWriteTools } from './writeTools'
 
-const VERSION = '0.1.0'
-
-// --- Which vault ---------------------------------------------------------------------------
-
-function argValue(name: string): string | undefined {
-  const i = process.argv.indexOf(name)
-  return i !== -1 ? process.argv[i + 1] : undefined
-}
-
-/** Waypoint's own settings file, to follow whichever vault the app has open */
-function appConfigVault(): string | undefined {
-  const appData = process.env.APPDATA ?? join(homedir(), 'AppData', 'Roaming')
-  try {
-    return JSON.parse(readFileSync(join(appData, 'Waypoint', 'config.json'), 'utf8')).vaultPath
-  } catch {
-    return undefined
-  }
-}
-
-function openVault(): Vault {
-  const path = argValue('--vault') ?? process.env.WAYPOINT_VAULT ?? appConfigVault()
-  if (!path || !existsSync(path)) {
-    throw new Error('No Waypoint vault found. Open one in Waypoint, or start this server with --vault <folder>.')
-  }
-  return new Vault(path)
-}
-
-// --- Which project ---------------------------------------------------------------------------
-
-const norm = (p: string) => resolve(p).toLowerCase().replace(/[\\/]+$/, '')
-
-/** The project whose repo folder contains `folder` (deepest match wins) */
-function projectForFolder(projects: Project[], folder: string): Project | null {
-  const f = norm(folder)
-  let best: Project | null = null
-  for (const p of projects) {
-    if (!p.repo.path) continue
-    const r = norm(p.repo.path)
-    if ((f === r || f.startsWith(r + sep)) && (!best || r.length > norm(best.repo.path).length)) best = p
-  }
-  return best
-}
-
-/** Folders the session is working in: the folder Claude Code started us in, plus any roots it reports */
-async function sessionFolders(server: McpServer): Promise<string[]> {
-  const folders = [process.cwd()]
-  try {
-    if (server.server.getClientCapabilities()?.roots) {
-      const { roots } = await server.server.listRoots()
-      for (const r of roots) if (r.uri.startsWith('file:')) folders.push(decodeURIComponent(new URL(r.uri).pathname).replace(/^\/([A-Za-z]:)/, '$1'))
-    }
-  } catch {
-    /* the client doesn't do roots: the start folder is enough */
-  }
-  return folders
-}
-
-/** Resolve a project argument (slug or title, any case), or the session's own project when omitted */
-async function pickProject(server: McpServer, vault: Vault, arg?: string): Promise<Project> {
-  const projects = await listProjects(vault)
-  if (arg) {
-    const a = arg.trim().toLowerCase()
-    const found = projects.find((p) => p.slug.toLowerCase() === a || p.title.toLowerCase() === a)
-    if (found) return found
-    throw new Error(`No project "${arg}". Projects: ${projects.map((p) => `${p.title} (${p.slug})`).join(', ') || 'none'}`)
-  }
-  for (const folder of await sessionFolders(server)) {
-    const p = projectForFolder(projects, folder)
-    if (p) return p
-  }
-  throw new Error(
-    'This session isn\'t linked to a Waypoint project (no project has this folder as its repo). ' +
-      'Pass a project name, or set the repo folder on the project page in Waypoint. ' +
-      `Projects: ${projects.map((p) => `${p.title} (${p.slug})`).join(', ') || 'none'}`
-  )
-}
-
-// --- Formatting ------------------------------------------------------------------------------
-
-const today = () => new Date().toISOString().slice(0, 10)
-
-function taskLine(t: Task): string {
-  const bits = [`${t.id}`, t.title, `[${TASK_STATUS_LABEL[t.status]}]`]
-  if (t.priority !== 'medium') bits.push(`priority ${t.priority}`)
-  if (t.due) bits.push(t.due < today() && t.status !== 'done' ? `OVERDUE (due ${t.due})` : `due ${t.due}`)
-  if (t.labels.length) bits.push(`labels: ${t.labels.join(', ')}`)
-  return `- ${bits.join(' · ')}  (${t.path})`
-}
-
-function projectSummary(p: Project, tasks: Task[]): string {
-  const mine = tasks.filter((t) => t.project === p.slug)
-  const counts = TASK_STATUSES.map((s) => `${TASK_STATUS_LABEL[s]} ${mine.filter((t) => t.status === s).length}`).join(', ')
-  const overdue = mine.filter((t) => t.status !== 'done' && t.due && t.due < today()).length
-  return `${p.title} (slug: ${p.slug}, status: ${p.status})${p.tags.length ? ` tags: ${p.tags.join(', ')}` : ''}\n  tasks: ${counts}${overdue ? `, ${overdue} overdue` : ''}${p.repo.path ? `\n  repo: ${p.repo.path}` : ''}`
-}
-
-const text = (t: string) => ({ content: [{ type: 'text' as const, text: t }] })
-const fail = (e: unknown) => ({ content: [{ type: 'text' as const, text: `Error: ${(e as Error).message}` }], isError: true })
-
-/** Run a tool body, turning thrown errors into readable tool errors */
-const safely =
-  <A>(fn: (args: A) => Promise<string>) =>
-  async (args: A) => {
-    try {
-      return text(await fn(args))
-    } catch (e) {
-      return fail(e)
-    }
-  }
+const VERSION = '0.2.0'
 
 // --- Server ----------------------------------------------------------------------------------
 
@@ -140,7 +30,10 @@ const server = new McpServer(
     instructions:
       'Waypoint is the user\'s notes/projects/tasks app. Its vault is plain markdown: projects live in projects/<slug>/ ' +
       '(project.md = settings + overview, docs/, tasks/<KEY>-NNN.md, boards/). Start with waypoint_overview to see the ' +
-      'project this session belongs to and what is open. Task statuses: backlog, todo, doing, done.'
+      'project this session belongs to and what is open. Task statuses: backlog, todo, doing, done. ' +
+      'You can also keep things up to date: move tasks as work progresses (doing when you start, done when finished), ' +
+      'add tasks for follow-ups, and record decisions and docs in the project\'s docs. Edit notes with small exact edits ' +
+      'rather than rewrites. Nothing can be deleted through these tools; every change is logged for the user.'
   }
 )
 const READ_ONLY = { readOnlyHint: true, openWorldHint: false }
@@ -268,9 +161,7 @@ server.registerTool(
   },
   safely(async ({ task }: { task: string }) => {
     const vault = openVault()
-    const tasks = await listTasks(vault)
-    const t = tasks.find((x) => x.id.toLowerCase() === task.trim().toLowerCase() || x.path === task.trim())
-    if (!t) throw new Error(`No task "${task}"`)
+    const t = await findTask(vault, task)
     const { body } = splitFrontmatter(await vault.read(t.path))
     return `${taskLine(t)}\nproject: ${t.project} · created ${t.created || '?'}${t.completed ? ` · completed ${t.completed}` : ''}\n\n${body.trim() || '(no description)'}`
   })
@@ -286,15 +177,7 @@ server.registerTool(
   },
   safely(async ({ note }: { note: string }) => {
     const vault = openVault()
-    let path = note.trim().replace(/\\/g, '/')
-    if (!vault.isNote(path)) {
-      // A name rather than a path: find it
-      const name = path.replace(/\.md$/i, '').toLowerCase()
-      const matches = (await vault.notePaths()).filter((p) => baseName(p).toLowerCase() === name)
-      if (matches.length > 1) throw new Error(`Several notes are called "${note}": ${matches.join(', ')}`)
-      if (!matches[0]) throw new Error(`No note "${note}"`)
-      path = matches[0]
-    }
+    const path = await findNote(vault, note)
     return `${path}\n\n${await vault.read(path)}`
   })
 )
@@ -354,6 +237,8 @@ server.registerTool(
     return vault.read('inbox.md').catch(() => 'The inbox is empty (no inbox.md).')
   })
 )
+
+registerWriteTools(server)
 
 server.connect(new StdioServerTransport()).catch((e) => {
   console.error('[waypoint-mcp]', e) // stderr: stdout is the protocol channel

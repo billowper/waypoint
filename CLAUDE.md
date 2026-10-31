@@ -18,8 +18,10 @@ Full phased plan: `docs/build-plan.md`. Keep its Decisions log and phase status 
 - **Phase 1 built and tested in the app** (2026-10-30): delete/duplicate, drag-drop + "Move to…", [[wiki links]]
   with autocomplete/backlinks/link rewriting on rename+move, Ctrl+P, full-text search, tabs.
   Phases 2–8 then built unattended overnight (2026-10-30); see the review checklist at the end of docs/build-plan.md. **Awaiting Bill’s review of Phases 1–8.**
-- **Claude Code connector M1 built** (2026-10-31, 0.6.0): read-only MCP server `src/mcp/server.ts` (reuses
-  src/main vault/projects/tasks/notesIndex — keep those free of Electron imports). M2–M5 in the build plan.
+- **Claude Code connector M1+M2 built** (2026-10-31, 0.7.0): MCP server `src/mcp/` (server.ts read tools, writeTools.ts,
+  common.ts). Reuses src/main vault/projects/tasks/notesIndex/iconMap/relink/bridge — keep those free of Electron imports.
+  While the app has a vault open it serves a named pipe (bridge.ts) so the connector can flush editors and relocate via
+  the app. Claude stays optional: the app must never depend on or call Claude. M3–M5 in the build plan.
 - Then: Phase 2 with Bill's project spec (settings in `project.md` frontmatter — see build plan; confirm the
   YAML shape with him first).
 - Windows gotcha: chokidar holds handles on watched folders, so any folder rename/move/delete must run inside

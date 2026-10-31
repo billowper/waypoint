@@ -108,7 +108,7 @@ vault/
 - Performance pass on large vaults
 - Installer, auto-update, backups
 
-### Claude Code connector (MCP) — M1 BUILT (0.6.0), awaiting feedback
+### Claude Code connector (MCP) — M1 + M2 BUILT (0.7.0), awaiting feedback
 A local MCP server bundled with Waypoint (runs via Waypoint.exe in node mode, no Node install, no hosting) that
 works directly on the vault, so Claude Code sessions in a project's repo can read and keep its tasks and docs up to date.
 - **M1 Read-only:** list/get projects, list/get tasks, read/list/search notes, inbox; current project = the session's
@@ -181,3 +181,12 @@ works directly on the vault, so Claude Code sessions in a project's repo can rea
 - 2026-10-31: M1 server is src/mcp/server.ts, built to out/main/mcp.js and run as `Waypoint.exe <app.asar>/out/main/mcp.js`
   with ELECTRON_RUN_AS_NODE=1 over stdio. Vault from --vault, WAYPOINT_VAULT, else the app's config.json. Registered by
   hand with `claude mcp add` until M3 adds the button
+- 2026-10-31: Claude is an optional add-on, never a dependency (Bill): Waypoint never calls Claude, every feature works
+  without it, and there is no in-app "Ask Claude". The connector is a separate script Claude Code starts; the app only
+  answers a local pipe (src/main/bridge.ts) that nothing else uses
+- 2026-10-31: M2 write tools: create/update tasks (status, fields, dated progress notes), create/edit (exact replacements,
+  all-or-nothing)/append (optionally under a heading)/rewrite notes, inbox, create/update projects, rename/move with link
+  and icon updates. No delete tool; .app/, dot-folders and the vault layout (projects/, notes/, inbox.md, project.md,
+  tasks/) are refused. Every change appended to .app/claude-log.jsonl (for the M5 feed). With the app open, the connector
+  saves open editors first and asks the app to do renames/moves (tabs follow; no watcher lock on folders)
+

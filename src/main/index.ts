@@ -42,13 +42,16 @@ import type { ViewRef } from '@shared/types'
 import type { AppCommand, DesktopInfo } from '@shared/types'
 import type { ChangeEvent, VaultInfo } from '@shared/types'
 import { movedPath } from '@shared/names'
-import { formatLink, linkTextFor, parseLinks, resolveLink } from '@shared/links'
+import { updateLinks } from './relink'
+import { serveBridge, type BridgeRequest } from './bridge'
+import type { Server } from 'net'
 
 let win: BrowserWindow | null = null
 let vault: Vault | null = null
 let notes: NotesIndex | null = null
 let git: VaultGit | null = null
 let watcher: FSWatcher | null = null
+let bridge: Server | null = null
 
 const MAX_RECENT = 20
 
@@ -95,6 +98,8 @@ async function scheduleAutoCommit() {
 async function setVault(path: string | undefined) {
   await watcher?.close()
   watcher = null
+  bridge?.close()
+  bridge = null
   vault = path ? new Vault(path) : null
   notes = vault ? new NotesIndex(vault) : null
   git = vault ? new VaultGit(vault.root) : null
@@ -102,6 +107,7 @@ async function setVault(path: string | undefined) {
   if (vault) {
     notes!.rebuild()
     startWatching(vault)
+    bridge = serveBridge(vault.root, answerConnector)
   }
   scheduleAutoCommit()
 }
@@ -159,36 +165,6 @@ function updateRecent(v: Vault, map: (r: string) => string | null) {
   saveConfig({ recent: { ...cfg.recent, [v.root]: list } })
 }
 
-/** Rewrite [[links]] that pointed at notes under `from` so they point at `to` instead. */
-async function updateLinks(v: Vault, before: string[], from: string, to: string): Promise<string[]> {
-  const moved = new Map<string, string>()
-  for (const p of before) {
-    const dest = movedPath(p, from, to)
-    if (dest) moved.set(p, dest)
-  }
-  if (!moved.size) return []
-  const after = before.map((p) => moved.get(p) ?? p)
-  const changed: string[] = []
-  for (const oldPath of requireIndex().linkersOf(new Set(moved.keys()), before)) {
-    const path = moved.get(oldPath) ?? oldPath
-    const text = await v.read(path).catch(() => null)
-    if (text === null) continue
-    let out = text
-    for (const l of parseLinks(text).reverse()) {
-      const target = resolveLink(l.target, oldPath, before)
-      const dest = target ? moved.get(target) : undefined
-      // Name-only links usually still work after a folder move; only rewrite the ones that break
-      if (!dest || resolveLink(l.target, path, after) === dest) continue
-      out = out.slice(0, l.from) + formatLink(linkTextFor(dest, after), l.heading, l.alias) + out.slice(l.to)
-    }
-    if (out !== text) {
-      await v.write(path, out)
-      changed.push(path)
-    }
-  }
-  return changed
-}
-
 /** Rename or move: pause the watcher for folders, then fix up recent list, links and index. */
 async function relocate(rel: string, op: (v: Vault) => Promise<string>, sender?: Electron.WebContents): Promise<string> {
   const v = requireVault()
@@ -201,10 +177,24 @@ async function relocate(rel: string, op: (v: Vault) => Promise<string>, sender?:
   updateRecent(v, (r) => movedPath(r, rel, to) ?? r)
   broadcast('vault:moved', [rel, to], sender) // other windows' editors and tabs follow
   if (await moveIcons(v, rel, to)) broadcast('icons:changed', [])
-  const changed = await updateLinks(v, before, rel, to)
+  const changed = await updateLinks(v, index, before, rel, to)
   await index.rebuild()
   notify(changed.map((path) => ({ event: 'change', path })))
   return to
+}
+
+/** Requests from the Claude Code connector (src/mcp) while this vault is open */
+async function answerConnector(req: BridgeRequest): Promise<unknown> {
+  switch (req.op) {
+    case 'flush':
+      return flushOthers() // so the connector edits what's on screen, and editors don't overwrite it
+    case 'rename':
+      return relocate(req.path, (v) => v.rename(req.path, req.name, true))
+    case 'move':
+      return relocate(req.path, (v) => v.move(req.path, req.dest))
+    default:
+      throw new Error('Unknown request')
+  }
 }
 
 /** Load the UI into a window; `hash` picks a mode (e.g. "capture" for the quick-capture window) */
