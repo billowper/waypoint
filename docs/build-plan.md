@@ -108,6 +108,18 @@ vault/
 - Performance pass on large vaults
 - Installer, auto-update, backups
 
+### Claude Code connector (MCP) — M1 BUILT (0.6.0), awaiting feedback
+A local MCP server bundled with Waypoint (runs via Waypoint.exe in node mode, no Node install, no hosting) that
+works directly on the vault, so Claude Code sessions in a project's repo can read and keep its tasks and docs up to date.
+- **M1 Read-only:** list/get projects, list/get tasks, read/list/search notes, inbox; current project = the session's
+  folder matched against project repo paths. Checkpoint: ask Claude "what's open on this project?"
+- **M2 Write:** create/update tasks, create/edit/append notes, inbox, project settings, rename/move with link updates;
+  never deletes; every change logged. Checkpoint: Claude moves a task and the board updates live
+- **M3 Connect:** "Connect to Claude Code" on the project page (registers the server for the Code tab and terminal,
+  writes an uncommitted CLAUDE.local.md naming the project + standing instructions); "Open in Claude Code"
+- **M4 Memory + session logs:** per-project claude/ notes Claude reads and keeps; dated session entries
+- **M5 Visibility:** "Changed by Claude" feed on the project page and Home; undo via vault git
+
 ## Feedback loop at every checkpoint
 1. Deliver the build + a 5-minute "try this" checklist
 2. Bill reports what feels off, what's missing, what to drop
@@ -163,3 +175,9 @@ vault/
 - 2026-10-30: Icons for every content type live in .app/icons.json (path → emoji or img:<file>), pictures in
   .app/icons/ (copied from a file or downloaded once from a URL), served via wp-icon://; picking uses Windows' emoji
   panel (app.showEmojiPanel). Icons follow renames/moves and are dropped on delete
+- 2026-10-31: Claude Code integration via a local MCP server (M1–M5 above). Local sessions only (no cloud). Claude may
+  write tasks/docs/settings but never deletes. Bill uses the desktop app's Code tab mostly; terminal should work too.
+  Costs nothing extra beyond normal Claude usage (tool lists/results are a little context per session)
+- 2026-10-31: M1 server is src/mcp/server.ts, built to out/main/mcp.js and run as `Waypoint.exe <app.asar>/out/main/mcp.js`
+  with ELECTRON_RUN_AS_NODE=1 over stdio. Vault from --vault, WAYPOINT_VAULT, else the app's config.json. Registered by
+  hand with `claude mcp add` until M3 adds the button
