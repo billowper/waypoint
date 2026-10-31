@@ -6,6 +6,7 @@ import Icon from './Icon'
 import { baseName } from '@shared/names'
 import { useStore } from '../store'
 import { noteMenu, showMenu } from '../menus'
+import { ClaudeProjectCard } from './ClaudeCode'
 
 const SAVE_DELAY = 500
 
@@ -244,6 +245,8 @@ export default function ProjectPage({ slug }: { slug: string }) {
           )}
         </div>
       </section>
+
+      {prefs?.claudeCode && <ClaudeProjectCard slug={slug} repo={project?.repo.path ?? ''} />}
 
       <section className="card">
         <div className="card-head">

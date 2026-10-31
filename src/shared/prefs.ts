@@ -15,6 +15,8 @@ export interface Prefs {
   /** Electron accelerator for the global search popup; '' turns it off */
   searchHotkey: string
   backup: BackupPrefs
+  /** Show the optional Claude Code controls (project page, Settings) */
+  claudeCode: boolean
 }
 
 export interface ThemeColors {
@@ -81,7 +83,8 @@ export const DEFAULT_PREFS: Prefs = {
   fonts: DEFAULT_FONTS,
   uiScale: 1,
   searchHotkey: 'Control+Alt+F',
-  backup: { dir: '', daily: true, keep: 14, last: 0 }
+  backup: { dir: '', daily: true, keep: 14, last: 0 },
+  claudeCode: true
 }
 
 /** Fill in anything missing (older config files, hand edits) */

@@ -5,7 +5,8 @@ import { stat } from 'fs/promises'
 import { watch, type FSWatcher } from 'chokidar'
 import { Vault } from './vault'
 import { NotesIndex } from './notesIndex'
-import { createBoard, createProject, knownExternalPaths, listProjects, saveProject } from './projects'
+import { createBoard, createProject, knownExternalPaths, listProjects, readProject, saveProject } from './projects'
+import { claudeStatus, connectClaude, disconnectClaude, openInClaudeApp, openInClaudeTerminal, writeInstructions } from './claudeCode'
 import { createTask, isTaskPath, listTasks, updateTask } from './tasks'
 import { VaultGit } from './git'
 import type { ProjectSettings, TaskFields, VaultSettings } from '@shared/types'
@@ -451,6 +452,26 @@ function registerIpc() {
       properties: [kind === 'folder' ? 'openDirectory' : 'openFile']
     })
     return r.canceled ? null : (r.filePaths[0] ?? null)
+  })
+
+  // Optional Claude Code integration: repo folders come from the project file, never from the page
+  const repoOf = async (slug: string) => {
+    const p = await readProject(requireVault(), slug)
+    if (!p.repo.path) throw new Error("Set the project's code repository folder first.")
+    return p
+  }
+  ipcMain.handle('claude:status', async (_e, slug?: string) =>
+    claudeStatus(slug && vault ? (await readProject(vault, slug)).repo.path || undefined : undefined)
+  )
+  ipcMain.handle('claude:connect', () => connectClaude())
+  ipcMain.handle('claude:disconnect', () => disconnectClaude())
+  ipcMain.handle('claude:instructions', async (_e, slug: string) => {
+    const p = await repoOf(slug)
+    await writeInstructions(p.repo.path, p.title, p.slug)
+  })
+  ipcMain.handle('claude:open', async (_e, slug: string, where: 'app' | 'terminal') => {
+    const p = await repoOf(slug)
+    await (where === 'app' ? openInClaudeApp(p.repo.path, p.title) : openInClaudeTerminal(p.repo.path))
   })
 
   ipcMain.handle('file:reveal', (_e, rel: string) => shell.showItemInFolder(requireVault().abs(rel)))

@@ -194,6 +194,12 @@ export interface Api {
   revealPath(path: string): Promise<void>
   openInCode(path: string): Promise<void>
   pickPath(kind: 'file' | 'folder'): Promise<string | null>
+  /** Optional Claude Code integration (nothing else depends on it) */
+  claudeStatus(slug?: string): Promise<ClaudeStatus>
+  claudeConnect(): Promise<void>
+  claudeDisconnect(): Promise<void>
+  claudeInstructions(slug: string): Promise<void>
+  claudeOpen(slug: string, where: 'app' | 'terminal'): Promise<void>
   /** All tasks, or one project's */
   tasks(project?: string): Promise<Task[]>
   /** Returns the new task's path */
@@ -270,4 +276,16 @@ export interface Api {
   createBoard(dir: string, name: string): Promise<string>
   /** Show a nudge right away (ignores timing rules; for trying it out) */
   nudgeNow(): Promise<void>
+}
+
+/** Whether Claude Code is installed and knows about Waypoint (see src/main/claudeCode.ts) */
+export interface ClaudeStatus {
+  /** The claude command was found */
+  cli: boolean
+  /** The connector in Claude Code's user config: missing, pointing at this Waypoint, or at an old install */
+  connector: 'missing' | 'connected' | 'outdated'
+  /** The project's repo has Waypoint's section in CLAUDE.local.md */
+  instructions: boolean
+  /** Name it's registered under ("waypoint", or "waypoint-dev" for dev builds) */
+  serverName: string
 }
