@@ -1,7 +1,7 @@
 import { app, BrowserWindow, dialog, globalShortcut, ipcMain, Menu, screen, shell, nativeTheme } from 'electron'
-import { basename, join } from 'path'
+import { basename, join, posix } from 'path'
 import { existsSync } from 'fs'
-import { stat } from 'fs/promises'
+import { mkdir, readFile, stat } from 'fs/promises'
 import { watch, type FSWatcher } from 'chokidar'
 import { Vault } from './vault'
 import { NotesIndex } from './notesIndex'
@@ -45,6 +45,7 @@ import type { ChangeEvent, VaultInfo } from '@shared/types'
 import { movedPath } from '@shared/names'
 import { updateLinks } from './relink'
 import { serveBridge, type BridgeRequest } from './bridge'
+import { hashText, markUndone, readChanges, snapshotPath } from './claudeLog'
 import type { Server } from 'net'
 
 let win: BrowserWindow | null = null
@@ -196,6 +197,86 @@ async function answerConnector(req: BridgeRequest): Promise<unknown> {
     default:
       throw new Error('Unknown request')
   }
+}
+
+/**
+ * Ask, then move a file or folder to the Recycle Bin. `except` is a window that tidies up its own tabs;
+ * every other window is told it's gone.
+ */
+async function trashPath(rel: string, asker: BrowserWindow, except?: Electron.WebContents, why?: string): Promise<boolean> {
+  const v = requireVault()
+  const abs = v.abs(rel)
+  if (abs === v.root) throw new Error('Cannot delete the vault itself')
+  const isDir = (await stat(abs)).isDirectory()
+  const { response } = await dialog.showMessageBox(asker, {
+    type: 'warning',
+    buttons: ['Move to Recycle Bin', 'Cancel'],
+    defaultId: 0,
+    cancelId: 1,
+    title: 'Delete',
+    message: `Move "${basename(abs)}" to the Recycle Bin?`,
+    detail: [
+      why,
+      isDir ? 'The folder and everything in it can be restored from the Recycle Bin.' : 'You can restore it from the Recycle Bin.'
+    ]
+      .filter(Boolean)
+      .join(' ')
+  })
+  if (response !== 0) return false
+  // Other windows stop editing (and saving) it before it goes
+  await flushOthers(except)
+  broadcast('vault:removed', [rel], except)
+  await withFolderUnlocked(v, rel, () => shell.trashItem(abs))
+  if (await dropIcons(v, rel)) broadcast('icons:changed', [])
+  updateRecent(v, (r) => (movedPath(r, rel, rel) ? null : r))
+  await requireIndex().remove(rel)
+  notify([{ event: isDir ? 'unlinkDir' : 'unlink', path: rel }])
+  return true
+}
+
+/**
+ * Undo a change made through the Claude Code connector: put an edited file's old text back (asking first if it has
+ * changed since), rename/move back, or offer to bin something Claude created. Returns false if Bill cancelled.
+ */
+async function undoClaudeChange(id: string, asker: BrowserWindow): Promise<boolean> {
+  const v = requireVault()
+  const c = (await readChanges(v)).find((x) => x.id === id)
+  if (!c) throw new Error('That change is no longer in the log.')
+  if (c.undone) return true
+  const exists = existsSync(v.abs(c.path))
+  if (c.action === 'renamed' || c.action === 'moved') {
+    if (!c.from) throw new Error("The log doesn't say where it was before.")
+    if (!exists) throw new Error(`${c.path} isn't there any more.`)
+    if (existsSync(v.abs(c.from))) throw new Error(`Something else is already at ${c.from}.`)
+    const from = c.from
+    await relocate(c.path, (vv) =>
+      c.action === 'renamed' ? vv.rename(c.path, posix.basename(from), true) : vv.move(c.path, posix.dirname(from))
+    )
+  } else if (c.action === 'created') {
+    if (exists && !(await trashPath(c.path, asker, undefined, 'Claude created it; undoing removes it.'))) return false
+  } else {
+    const old = c.hasSnapshot ? await readFile(v.abs(snapshotPath(c.id)), 'utf8').catch(() => null) : null
+    if (old === null) throw new Error("The version from before this change wasn't kept (undo keeps them for 30 days).")
+    const now = exists ? await v.read(c.path) : null
+    if (now !== null && c.afterHash && hashText(now) !== c.afterHash) {
+      const { response } = await dialog.showMessageBox(asker, {
+        type: 'warning',
+        buttons: ['Undo anyway', 'Cancel'],
+        defaultId: 1,
+        cancelId: 1,
+        title: 'Undo',
+        message: `"${basename(c.path)}" has changed since Claude edited it.`,
+        detail: "Undoing puts back the version from before Claude's change, so the later changes go too."
+      })
+      if (response !== 0) return false
+    }
+    await flushOthers() // open editors save first, then pick up the restored text
+    await mkdir(v.abs(posix.dirname(c.path)), { recursive: true })
+    await v.write(c.path, old)
+    await requireIndex().update(c.path)
+  }
+  await markUndone(v, c.id)
+  return true
 }
 
 /** Load the UI into a window; `hash` picks a mode (e.g. "capture" for the quick-capture window) */
@@ -358,34 +439,9 @@ function registerIpc() {
     await requireIndex().rebuild()
     return to
   })
-  ipcMain.handle('file:trash', async (e, rel: string) => {
-    const v = requireVault()
-    const abs = v.abs(rel)
-    if (abs === v.root) throw new Error('Cannot delete the vault itself')
-    const isDir = (await stat(abs)).isDirectory()
-    const asker = BrowserWindow.fromWebContents(e.sender) ?? win!
-    const { response } = await dialog.showMessageBox(asker, {
-      type: 'warning',
-      buttons: ['Move to Recycle Bin', 'Cancel'],
-      defaultId: 0,
-      cancelId: 1,
-      title: 'Delete',
-      message: `Move "${basename(abs)}" to the Recycle Bin?`,
-      detail: isDir
-        ? 'The folder and everything in it can be restored from the Recycle Bin.'
-        : 'You can restore it from the Recycle Bin.'
-    })
-    if (response !== 0) return false
-    // Other windows stop editing (and saving) it before it goes
-    await flushOthers(e.sender)
-    broadcast('vault:removed', [rel], e.sender)
-    await withFolderUnlocked(v, rel, () => shell.trashItem(abs))
-    if (await dropIcons(v, rel)) broadcast('icons:changed', [])
-    updateRecent(v, (r) => (movedPath(r, rel, rel) ? null : r))
-    await requireIndex().remove(rel)
-    notify([{ event: isDir ? 'unlinkDir' : 'unlink', path: rel }])
-    return true
-  })
+  ipcMain.handle('file:trash', (e, rel: string) =>
+    trashPath(rel, BrowserWindow.fromWebContents(e.sender) ?? win!, e.sender)
+  )
   ipcMain.handle('index:search', async (_e, query: string) => {
     await requireIndex().idle()
     return requireIndex().find(query)
@@ -464,6 +520,14 @@ function registerIpc() {
     claudeStatus(slug && vault ? (await readProject(vault, slug)).repo.path || undefined : undefined)
   )
   ipcMain.handle('claude:connect', () => connectClaude())
+  // "Changed by Claude": a project's changes (or all), newest first
+  ipcMain.handle('claude:changes', async (_e, slug?: string, limit = 50) => {
+    const all = vault ? await readChanges(vault) : []
+    const dir = slug ? `projects/${slug}` : ''
+    const inProject = (p?: string) => !!p && (p === dir || p.startsWith(dir + '/'))
+    return (slug ? all.filter((c) => inProject(c.path) || inProject(c.from)) : all).slice(0, limit)
+  })
+  ipcMain.handle('claude:undo', (e, id: string) => undoClaudeChange(id, BrowserWindow.fromWebContents(e.sender) ?? win!))
   ipcMain.handle('claude:disconnect', () => disconnectClaude())
   ipcMain.handle('claude:instructions', async (_e, slug: string) => {
     const p = await repoOf(slug)

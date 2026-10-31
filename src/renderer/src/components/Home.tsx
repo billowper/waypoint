@@ -2,6 +2,7 @@ import { useStore } from '../store'
 import { noteMenu, projectMenu, showMenu } from '../menus'
 import Icon, { noteDefault } from './Icon'
 import { byUrgency, dueState, formatDue } from './Board'
+import { ClaudeFeed } from './ClaudeCode'
 
 function greeting() {
   const h = new Date().getHours()
@@ -9,7 +10,7 @@ function greeting() {
 }
 
 export default function Home() {
-  const { stats, recent, openFile, newNote, tree, projects, openProject, createProject, tasks, notes } = useStore()
+  const { stats, recent, openFile, newNote, tree, projects, openProject, createProject, tasks, notes, prefs } = useStore()
   const active = projects.filter((p) => p.status === 'active')
   // My work: open tasks in projects that aren't finished, overdue first
   const liveProjects = new Set(projects.filter((p) => p.status !== 'done').map((p) => p.slug))
@@ -112,6 +113,8 @@ export default function Home() {
           </ul>
         )}
       </section>
+
+      {prefs?.claudeCode && <ClaudeFeed limit={6} panel />}
 
       <section className="panel">
         <h2>Recent</h2>

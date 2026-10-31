@@ -200,6 +200,10 @@ export interface Api {
   claudeDisconnect(): Promise<void>
   claudeInstructions(slug: string): Promise<void>
   claudeOpen(slug: string, where: 'app' | 'terminal'): Promise<void>
+  /** Changes made through the connector, newest first (one project, or all) */
+  claudeChanges(slug?: string, limit?: number): Promise<ClaudeChange[]>
+  /** Undo one; false if cancelled */
+  claudeUndo(id: string): Promise<boolean>
   /** All tasks, or one project's */
   tasks(project?: string): Promise<Task[]>
   /** Returns the new task's path */
@@ -288,4 +292,27 @@ export interface ClaudeStatus {
   instructions: boolean
   /** Name it's registered under ("waypoint", or "waypoint-dev" for dev builds) */
   serverName: string
+}
+
+/** One change made through the Claude Code connector (a line of .app/claude-log.jsonl) */
+export interface ClaudeChange {
+  id: string
+  /** ISO time */
+  at: string
+  /** Connector tool, e.g. "update_task" */
+  tool: string
+  action: 'created' | 'updated' | 'renamed' | 'moved' | 'appended'
+  /** Vault-relative path after the change (a folder for a new project) */
+  path: string
+  /** Where it was before a rename/move */
+  from?: string
+  summary: string
+  /** Folder the Claude Code session ran in */
+  session: string
+  /** Hash of the file right after the change, to spot later edits before undoing */
+  afterHash?: string
+  /** The old text was kept, so undo can restore it */
+  hasSnapshot?: boolean
+  /** Undone from the app */
+  undone?: boolean
 }

@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useState } from 'react'
-import type { ClaudeStatus } from '@shared/types'
+import type { ClaudeChange, ClaudeStatus } from '@shared/types'
 import type { Prefs } from '@shared/prefs'
 import { useStore } from '../store'
 import { noteMenu, showMenu } from '../menus'
@@ -175,6 +175,114 @@ export function ClaudeProjectCard({ slug, repo, dir }: { slug: string; repo: str
         </>
       )}
       <ClaudeNotes dir={dir} />
+    </section>
+  )
+}
+
+const VERB: Record<ClaudeChange['action'], string> = {
+  created: 'Created',
+  updated: 'Updated',
+  appended: 'Added to',
+  renamed: 'Renamed',
+  moved: 'Moved'
+}
+
+/** "just now", "5 min ago", "3 h ago", then the date */
+function ago(iso: string): string {
+  const mins = Math.round((Date.now() - new Date(iso).getTime()) / 60000)
+  if (mins < 1) return 'just now'
+  if (mins < 60) return `${mins} min ago`
+  if (mins < 24 * 60) return `${Math.round(mins / 60)} h ago`
+  return new Date(iso).toLocaleDateString('en-GB', { day: 'numeric', month: 'short' })
+}
+
+/** How a changed path reads in the feed: session logs by their date, everything else by name */
+function changedName(path: string): string {
+  const log = /\/claude\/sessions\/(\d{4}-\d{2}-\d{2})\.md$/.exec(path)
+  if (log) return `session log ${new Date(log[1]).toLocaleDateString('en-GB', { day: 'numeric', month: 'short' })}`
+  return baseName(path)
+}
+
+/** Edits need the kept old text; creates, renames and moves can always be undone */
+const canUndo = (c: ClaudeChange) => c.action === 'created' || c.action === 'renamed' || c.action === 'moved' || !!c.hasSnapshot
+
+/**
+ * "Changed by Claude": what the connector changed, newest first, each with Undo. For one project (project page)
+ * or all of them (Home). Updates when Claude logs another change.
+ */
+export function ClaudeFeed({ slug, limit, panel }: { slug?: string; limit: number; panel?: boolean }) {
+  const { openFile, openProject, openCanvas, projects } = useStore()
+  const [changes, setChanges] = useState<ClaudeChange[]>([])
+  const [showAll, setShowAll] = useState(false)
+  const [busy, setBusy] = useState('')
+  const load = useCallback(() => {
+    window.api.claudeChanges(slug, 200).then(setChanges, () => setChanges([]))
+  }, [slug])
+  useEffect(() => {
+    load()
+    return window.api.onChanged((events) => {
+      if (events.some((e) => e.path === '.app/claude-log.jsonl')) load()
+    })
+  }, [load])
+  if (!changes.length) return null
+
+  const open = (c: ClaudeChange, newTab: boolean) => {
+    const project = /^projects\/([^/]+)$/.exec(c.path)
+    if (project) openProject(project[1], { newTab })
+    else if (c.path.endsWith('.excalidraw')) openCanvas(c.path, { newTab })
+    else if (c.path.endsWith('.md')) openFile(c.path, { newTab })
+  }
+  const undo = (c: ClaudeChange) => async () => {
+    setBusy(c.id)
+    try {
+      await window.api.claudeUndo(c.id)
+    } catch (e) {
+      alert(`Couldn't undo that.\n\n${(e as Error).message}`)
+    } finally {
+      setBusy('')
+      load()
+    }
+  }
+  const shown = showAll ? changes : changes.slice(0, limit)
+  const projectTitle = (path: string) => projects.find((p) => path === p.dir || path.startsWith(p.dir + '/'))?.title
+
+  return (
+    <section className={panel ? 'panel' : 'card'}>
+      <h2>Changed by Claude</h2>
+      <ul className="recent claude-feed">
+        {shown.map((c) => (
+          <li key={c.id} className={c.undone ? 'undone' : ''}>
+            <button onClick={(e) => open(c, e.ctrlKey)} title={`${c.path}\nfrom a session in ${c.session}`}>
+              <span className="recent-name">
+                {VERB[c.action]} {changedName(c.path)}
+              </span>
+              <span className="recent-path">
+                {[
+                  c.summary !== baseName(c.path) && !c.summary.includes(' → ') ? c.summary : '',
+                  slug ? '' : projectTitle(c.path)
+                ]
+                  .filter(Boolean)
+                  .join(' · ')}
+              </span>
+              <span className="feed-when">{ago(c.at)}</span>
+            </button>
+            {c.undone ? (
+              <span className="feed-undone">Undone</span>
+            ) : !canUndo(c) ? (
+              <span className="feed-undone" title="The old version wasn't kept (undo keeps them for 30 days)">—</span>
+            ) : (
+              <button className="btn small" disabled={!!busy} onClick={undo(c)} title="Put it back the way it was before this change">
+                {busy === c.id ? 'Undoing…' : 'Undo'}
+              </button>
+            )}
+          </li>
+        ))}
+      </ul>
+      {changes.length > limit && (
+        <button className="link-button" onClick={() => setShowAll(!showAll)}>
+          {showAll ? 'Show fewer' : `Show all ${changes.length}`}
+        </button>
+      )}
     </section>
   )
 }

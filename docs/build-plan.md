@@ -108,7 +108,7 @@ vault/
 - Performance pass on large vaults
 - Installer, auto-update, backups
 
-### Claude Code connector (MCP) — M1–M4 BUILT (0.9.0), awaiting feedback
+### Claude Code connector (MCP) — M1–M5 BUILT (0.10.0), awaiting feedback
 A local MCP server bundled with Waypoint (runs via Waypoint.exe in node mode, no Node install, no hosting) that
 works directly on the vault, so Claude Code sessions in a project's repo can read and keep its tasks and docs up to date.
 - **M1 Read-only:** list/get projects, list/get tasks, read/list/search notes, inbox; current project = the session's
@@ -118,7 +118,7 @@ works directly on the vault, so Claude Code sessions in a project's repo can rea
 - **M3 Connect:** "Connect to Claude Code" on the project page (registers the server for the Code tab and terminal,
   writes an uncommitted CLAUDE.local.md naming the project + standing instructions); "Open in Claude Code"
 - **M4 Memory + session logs:** per-project claude/ notes Claude reads and keeps; dated session entries
-- **M5 Visibility:** "Changed by Claude" feed on the project page and Home; undo via vault git
+- **M5 Visibility:** "Changed by Claude" feed on the project page and Home; undo from the feed
 
 ## Feedback loop at every checkpoint
 1. Deliver the build + a 5-minute "try this" checklist
@@ -200,4 +200,9 @@ works directly on the vault, so Claude Code sessions in a project's repo can rea
   sessions/YYYY-MM-DD.md (waypoint_log_session: "## HH:MM · title" with summary, Done, Next, Tasks; local time).
   waypoint_overview includes the memory (first 3000 chars) and the last session; waypoint_read_memory gives more.
   The Claude Code card lists Memory and the 5 newest session logs; claude/ is left out of the page's Docs/Other notes
+- 2026-10-31: M5: "Changed by Claude" feed (project page: that project's changes; Home: all, with project names), newest
+  first, Undo per change. Undo doesn't rely on the vault's git (it may have no commit between changes): the connector
+  keeps each edited file's old text in .app/cache/claude-undo/<id>.md for 30 days. Undo restores it (warning first if
+  the file changed since), renames/moves back (links follow), or offers to bin something Claude created (Bill's own
+  delete, with the usual confirm). Undos are appended to the log as { undoes: id }; the log itself is never rewritten
 

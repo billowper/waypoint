@@ -1,6 +1,7 @@
 /**
  * The connector's write tools: keep tasks, docs, the inbox and project settings up to date.
- * Nothing here deletes a file (Bill's rule). Every change is appended to .app/claude-log.jsonl.
+ * Nothing here deletes a file (Bill's rule). Every change is logged (src/main/claudeLog.ts),
+ * with the old text kept for edits so Bill can undo them from the app.
  *
  * When Waypoint has the vault open, open editors are saved first (so an edit applies to what's on
  * screen and an unsaved editor doesn't overwrite it), and renames/moves are done by the app itself.
@@ -15,27 +16,23 @@ import { NotesIndex } from '../main/notesIndex'
 import { moveIcons } from '../main/iconMap'
 import { updateLinks } from '../main/relink'
 import { askApp, type BridgeRequest } from '../main/bridge'
+import { recordChange, type NewChange } from '../main/claudeLog'
 import { PRIORITIES, PROJECT_STATUSES, TASK_STATUSES, type Priority, type ProjectSettings, type ProjectStatus, type TaskFields, type TaskStatus } from '@shared/types'
 import { joinFrontmatter, splitFrontmatter } from '@shared/frontmatter'
 import { findNote, findTask, openVault, pickProject, safely, taskLine, today } from './common'
 
-const LOG = '.app/claude-log.jsonl'
 const WRITE = { readOnlyHint: false, destructiveHint: false, idempotentHint: false, openWorldHint: false }
 
-interface LogEntry {
-  tool: string
-  action: 'created' | 'updated' | 'renamed' | 'moved' | 'appended'
-  path: string
-  from?: string
-  summary: string
+/**
+ * Log a change for the "Changed by Claude" feed. For edits pass `before` (the file's text beforehand, null if it
+ * didn't exist) so Bill can undo it from the app.
+ */
+export async function logChange(vault: Vault, e: NewChange, before?: string | null) {
+  await recordChange(vault, e, before)
 }
 
-/** One JSON line per change, for the "Changed by Claude" feed (and for Bill to read) */
-export async function logChange(vault: Vault, e: LogEntry) {
-  const line = JSON.stringify({ at: new Date().toISOString(), ...e, session: process.cwd() })
-  await fs.mkdir(vault.abs('.app'), { recursive: true })
-  await fs.appendFile(vault.abs(LOG), line + '\n', 'utf8')
-}
+/** A file's text before an edit, or null if it doesn't exist yet */
+export const textBefore = (vault: Vault, rel: string) => vault.read(rel).catch(() => null)
 
 /** Save the app's open editors before touching files (no-op when Waypoint isn't running) */
 export async function flushApp(vault: Vault) {
@@ -154,6 +151,7 @@ export function registerWriteTools(server: McpServer) {
       const vault = openVault()
       await flushApp(vault)
       const before = await findTask(vault, a.task)
+      const old = await textBefore(vault, before.path)
       const patch: Partial<TaskFields> = {}
       for (const k of ['status', 'title', 'priority', 'due', 'labels'] as const) if (a[k] !== undefined) (patch as any)[k] = a[k]
       await updateTask(vault, before.path, patch)
@@ -171,7 +169,7 @@ export function registerWriteTools(server: McpServer) {
         a.description !== undefined ? 'description' : '',
         a.add_note ? 'progress note' : ''
       ].filter(Boolean)
-      await logChange(vault, { tool: 'update_task', action: 'updated', path: after.path, summary: `${after.id}: ${what.join(', ') || 'no change'}` })
+      await logChange(vault, { tool: 'update_task', action: 'updated', path: after.path, summary: `${after.id}: ${what.join(', ') || 'no change'}` }, old)
       return `Updated ${taskLine(after)}`
     })
   )
@@ -244,7 +242,7 @@ export function registerWriteTools(server: McpServer) {
         doc = doc.replace(old, () => e.new_text.replace(/\r\n/g, '\n'))
       })
       await vault.write(path, crlf ? doc.replace(/\n/g, '\r\n') : doc)
-      await logChange(vault, { tool: 'edit_note', action: 'updated', path, summary: `${a.edits.length} edit${a.edits.length > 1 ? 's' : ''}` })
+      await logChange(vault, { tool: 'edit_note', action: 'updated', path, summary: `${a.edits.length} edit${a.edits.length > 1 ? 's' : ''}` }, original)
       return `Edited ${path}`
     })
   )
@@ -266,11 +264,12 @@ export function registerWriteTools(server: McpServer) {
       await flushApp(vault)
       const path = await findNote(vault, a.note)
       checkPath(vault, path)
-      const doc = (await vault.read(path)).replace(/\r\n/g, '\n')
+      const old = await vault.read(path)
+      const doc = old.replace(/\r\n/g, '\n')
       const text = a.text.trim()
       const next = a.under_heading ? appendUnder(doc, a.under_heading, text) : `${doc.replace(/\s*$/, '')}\n\n${text}\n`
       await vault.write(path, next.endsWith('\n') ? next : next + '\n')
-      await logChange(vault, { tool: 'append_to_note', action: 'appended', path, summary: a.under_heading ? `under "${a.under_heading}"` : 'at the end' })
+      await logChange(vault, { tool: 'append_to_note', action: 'appended', path, summary: a.under_heading ? `under "${a.under_heading}"` : 'at the end' }, old)
       return `Appended to ${path}`
     })
   )
@@ -293,8 +292,9 @@ export function registerWriteTools(server: McpServer) {
       await flushApp(vault)
       const path = await findNote(vault, a.note)
       checkPath(vault, path)
+      const old = await vault.read(path)
       await vault.write(path, a.content.endsWith('\n') ? a.content : a.content + '\n')
-      await logChange(vault, { tool: 'replace_note', action: 'updated', path, summary: 'rewritten' })
+      await logChange(vault, { tool: 'replace_note', action: 'updated', path, summary: 'rewritten' }, old)
       return `Rewrote ${path}`
     })
   )
@@ -310,8 +310,9 @@ export function registerWriteTools(server: McpServer) {
     safely(async ({ text }: { text: string }) => {
       const vault = openVault()
       await flushApp(vault)
+      const old = await textBefore(vault, 'inbox.md')
       await vault.appendToInbox(text)
-      await logChange(vault, { tool: 'add_to_inbox', action: 'appended', path: 'inbox.md', summary: text.trim().slice(0, 80) })
+      await logChange(vault, { tool: 'add_to_inbox', action: 'appended', path: 'inbox.md', summary: text.trim().slice(0, 80) }, old)
       return 'Added to the inbox.'
     })
   )
@@ -333,7 +334,7 @@ export function registerWriteTools(server: McpServer) {
       const slug = await createProject(vault, a.name)
       if (a.repo_path || a.overview) await applyProjectChanges(vault, slug, { repo_path: a.repo_path, overview: a.overview })
       const p = await readProject(vault, slug)
-      await logChange(vault, { tool: 'create_project', action: 'created', path: `${p.dir}/project.md`, summary: p.title })
+      await logChange(vault, { tool: 'create_project', action: 'created', path: p.dir, summary: p.title })
       return `Created project ${p.title} (slug ${slug}, task prefix ${p.key}) at ${p.dir}`
     })
   )
@@ -362,8 +363,9 @@ export function registerWriteTools(server: McpServer) {
       const vault = openVault()
       await flushApp(vault)
       const p = await pickProject(server, vault, a.project)
+      const old = await textBefore(vault, `${p.dir}/project.md`)
       const changed = await applyProjectChanges(vault, p.slug, a)
-      await logChange(vault, { tool: 'update_project', action: 'updated', path: `${p.dir}/project.md`, summary: changed.join(', ') || 'no change' })
+      await logChange(vault, { tool: 'update_project', action: 'updated', path: `${p.dir}/project.md`, summary: changed.join(', ') || 'no change' }, old)
       return changed.length ? `Updated ${p.title}: ${changed.join(', ')}` : 'Nothing to change.'
     })
   )

@@ -102,10 +102,11 @@ export function registerMemoryTools(server: McpServer) {
       const p = await pickProject(server, vault, a.project)
       const path = memoryPath(p)
       await fs.mkdir(vault.abs(claudeDir(p)), { recursive: true })
-      const current = (await readMemory(vault, p)).replace(/\r\n/g, '\n') || `# Memory\n\n${MEMORY_INTRO}`
+      const old = await vault.read(path).catch(() => null)
+      const current = (old ?? '').replace(/\r\n/g, '\n') || `# Memory\n\n${MEMORY_INTRO}`
       const point = `- ${a.text.trim().replace(/\n+/g, ' ')}`
       await vault.write(path, appendUnder(current, a.section?.trim() || 'Notes', point).replace(/\n*$/, '\n'))
-      await logChange(vault, { tool: 'remember', action: 'appended', path, summary: a.text.trim().slice(0, 80) })
+      await logChange(vault, { tool: 'remember', action: 'appended', path, summary: a.text.trim().slice(0, 80) }, old)
       return `Remembered in ${path}`
     })
   )
@@ -134,7 +135,8 @@ export function registerMemoryTools(server: McpServer) {
       const { date, time } = localStamp()
       const path = `${sessionsDir(p)}/${date}.md`
       await fs.mkdir(vault.abs(sessionsDir(p)), { recursive: true })
-      const current = (await vault.read(path).catch(() => `# Sessions ${date}\n`)).replace(/\r\n/g, '\n')
+      const old = await vault.read(path).catch(() => null)
+      const current = (old ?? `# Sessions ${date}\n`).replace(/\r\n/g, '\n')
       const entry = [
         `## ${time} · ${a.title.trim()}\n`,
         a.summary?.trim() ? `\n${a.summary.trim()}\n` : '',
@@ -143,7 +145,7 @@ export function registerMemoryTools(server: McpServer) {
         a.tasks?.length ? `\nTasks: ${a.tasks.join(', ')}\n` : ''
       ].join('')
       await vault.write(path, `${current.trimEnd()}\n\n${entry.trimEnd()}\n`)
-      await logChange(vault, { tool: 'log_session', action: 'appended', path, summary: a.title.trim() })
+      await logChange(vault, { tool: 'log_session', action: 'appended', path, summary: a.title.trim() }, old)
       return `Logged in ${path}`
     })
   )

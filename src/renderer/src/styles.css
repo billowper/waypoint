@@ -2765,3 +2765,59 @@ img.item-icon {
   border: 3px solid transparent;
   background-clip: content-box;
 }
+
+/* Changed by Claude ------------------------------------------------------ */
+
+.claude-feed li {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.claude-feed li > button:first-child {
+  flex: 1;
+  min-width: 0;
+}
+
+/* Undo keeps its own size (.recent button would stretch it) */
+.claude-feed li > .btn {
+  width: auto;
+  flex: none;
+  display: inline-flex;
+  padding: 4px 10px;
+}
+
+.claude-feed .recent-name {
+  white-space: nowrap;
+}
+
+.claude-feed .recent-path {
+  flex: 1;
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.feed-when,
+.feed-undone {
+  color: var(--text-faint);
+  font-size: 12px;
+  white-space: nowrap;
+}
+
+.feed-undone {
+  padding: 0 10px;
+}
+
+.claude-feed li.undone .recent-name {
+  color: var(--text-faint);
+  text-decoration: line-through;
+}
+
+.link-button {
+  margin-top: 6px;
+  padding: 4px 10px;
+  color: var(--accent);
+  font-size: 12.5px;
+}
