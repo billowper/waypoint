@@ -2,6 +2,8 @@ import { useCallback, useEffect, useState } from 'react'
 import type { ClaudeStatus } from '@shared/types'
 import type { Prefs } from '@shared/prefs'
 import { useStore } from '../store'
+import { noteMenu, showMenu } from '../menus'
+import { baseName } from '@shared/names'
 
 /**
  * Optional Claude Code controls. Everything in Waypoint works without them; Settings → Claude Code
@@ -97,8 +99,38 @@ export function ClaudeSettings() {
   )
 }
 
-/** Project page card: connect, write the repo's CLAUDE.local.md, open Claude Code in the repo */
-export function ClaudeProjectCard({ slug, repo }: { slug: string; repo: string }) {
+/** Claude's notes for the project (claude/Memory.md and claude/sessions/<date>.md), newest sessions first */
+function ClaudeNotes({ dir }: { dir: string }) {
+  const { notes, openFile } = useStore()
+  const memory = notes.find((n) => n === `${dir}/claude/Memory.md`)
+  const sessions = notes
+    .filter((n) => n.startsWith(`${dir}/claude/sessions/`))
+    .sort()
+    .reverse()
+  const others = notes.filter((n) => n.startsWith(`${dir}/claude/`) && n !== memory && !sessions.includes(n))
+  if (!memory && !sessions.length && !others.length) return null
+  const item = (path: string, label: string) => (
+    <li key={path}>
+      <button onClick={(e) => openFile(path, { newTab: e.ctrlKey })} onContextMenu={(e) => showMenu(e, noteMenu(path))}>
+        {label}
+      </button>
+    </li>
+  )
+  return (
+    <>
+      <h3 className="card-sub">Claude's notes</h3>
+      <ul className="page-list">
+        {memory && item(memory, 'Memory')}
+        {sessions.slice(0, 5).map((s) => item(s, `Session log ${baseName(s)}`))}
+        {others.map((n) => item(n, baseName(n)))}
+      </ul>
+      {sessions.length > 5 && <p className="empty">{sessions.length - 5} older session logs in claude/sessions.</p>}
+    </>
+  )
+}
+
+/** Project page card: connect, write the repo's CLAUDE.local.md, open Claude Code in the repo, Claude's notes */
+export function ClaudeProjectCard({ slug, repo, dir }: { slug: string; repo: string; dir: string }) {
   const [status, reload] = useClaudeStatus(slug)
   const [busy, act] = useAction(reload)
   useEffect(reload, [repo, reload])
@@ -142,6 +174,7 @@ export function ClaudeProjectCard({ slug, repo }: { slug: string; repo: string }
           </div>
         </>
       )}
+      <ClaudeNotes dir={dir} />
     </section>
   )
 }

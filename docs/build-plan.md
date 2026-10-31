@@ -108,7 +108,7 @@ vault/
 - Performance pass on large vaults
 - Installer, auto-update, backups
 
-### Claude Code connector (MCP) — M1–M3 BUILT (0.8.0), awaiting feedback
+### Claude Code connector (MCP) — M1–M4 BUILT (0.9.0), awaiting feedback
 A local MCP server bundled with Waypoint (runs via Waypoint.exe in node mode, no Node install, no hosting) that
 works directly on the vault, so Claude Code sessions in a project's repo can read and keep its tasks and docs up to date.
 - **M1 Read-only:** list/get projects, list/get tasks, read/list/search notes, inbox; current project = the session's
@@ -195,4 +195,9 @@ works directly on the vault, so Claude Code sessions in a project's repo can rea
   waypoint-dev). Instructions go in a Waypoint-managed section of the repo's CLAUDE.local.md (rest of the file kept),
   listed in .git/info/exclude so it's never committed. "Open in Claude" uses the documented claude://code/new?folder=&q=
   link; "Open in terminal" runs claude in Windows Terminal at the repo. No Claude Code installed = a note, nothing breaks
+- 2026-10-31: M4: Claude's notes per project live in projects/<slug>/claude/ (plain notes, created only when Claude first
+  writes): Memory.md (waypoint_remember files one point under a heading: Conventions, Decisions, Gotchas, Notes…) and
+  sessions/YYYY-MM-DD.md (waypoint_log_session: "## HH:MM · title" with summary, Done, Next, Tasks; local time).
+  waypoint_overview includes the memory (first 3000 chars) and the last session; waypoint_read_memory gives more.
+  The Claude Code card lists Memory and the 5 newest session logs; claude/ is left out of the page's Docs/Other notes
 

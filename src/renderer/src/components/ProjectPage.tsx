@@ -81,7 +81,7 @@ export default function ProjectPage({ slug }: { slug: string }) {
     (n) =>
       n.startsWith(project.dir + '/') &&
       n !== `${project.dir}/project.md` &&
-      !/\/(docs|wiki|tasks|boards)\//.test(n.slice(project.dir.length))
+      !/\/(docs|wiki|tasks|boards|claude)\//.test(n.slice(project.dir.length))
   )
 
   return (
@@ -246,7 +246,7 @@ export default function ProjectPage({ slug }: { slug: string }) {
         </div>
       </section>
 
-      {prefs?.claudeCode && <ClaudeProjectCard slug={slug} repo={project?.repo.path ?? ''} />}
+      {prefs?.claudeCode && <ClaudeProjectCard slug={slug} repo={project.repo.path} dir={project.dir} />}
 
       <section className="card">
         <div className="card-head">

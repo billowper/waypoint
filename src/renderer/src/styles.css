@@ -1266,6 +1266,14 @@ button.crumb.current:hover {
   margin: 0 0 10px;
 }
 
+/* A smaller heading inside a card (e.g. Claude's notes under Claude Code) */
+.card .card-sub {
+  font-size: 12px;
+  font-weight: 600;
+  color: var(--text-dim);
+  margin: 16px 0 6px;
+}
+
 .card-head {
   display: flex;
   align-items: center;

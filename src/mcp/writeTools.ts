@@ -31,14 +31,14 @@ interface LogEntry {
 }
 
 /** One JSON line per change, for the "Changed by Claude" feed (and for Bill to read) */
-async function logChange(vault: Vault, e: LogEntry) {
+export async function logChange(vault: Vault, e: LogEntry) {
   const line = JSON.stringify({ at: new Date().toISOString(), ...e, session: process.cwd() })
   await fs.mkdir(vault.abs('.app'), { recursive: true })
   await fs.appendFile(vault.abs(LOG), line + '\n', 'utf8')
 }
 
 /** Save the app's open editors before touching files (no-op when Waypoint isn't running) */
-async function flushApp(vault: Vault) {
+export async function flushApp(vault: Vault) {
   await askApp(vault.root, { op: 'flush' }).catch(() => undefined)
 }
 
@@ -74,7 +74,7 @@ function docsDir(vault: Vault, dir: string): string {
 }
 
 /** Insert `text` at the end of the section under `heading` (any level), adding the heading if missing */
-function appendUnder(doc: string, heading: string, text: string): string {
+export function appendUnder(doc: string, heading: string, text: string): string {
   const lines = doc.split('\n')
   const want = heading.replace(/^#+\s*/, '').trim().toLowerCase()
   const at = lines.findIndex((l) => /^#{1,6}\s/.test(l) && l.replace(/^#+\s*/, '').trim().toLowerCase() === want)

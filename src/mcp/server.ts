@@ -19,8 +19,9 @@ import { TASK_STATUSES, type Project, type TaskStatus } from '@shared/types'
 import { splitFrontmatter } from '@shared/frontmatter'
 import { findNote, findTask, openVault, pickProject, projectForFolder, projectSummary, safely, sessionFolders, taskLine } from './common'
 import { registerWriteTools } from './writeTools'
+import { memoryPath, readMemory, recentSessions, registerMemoryTools } from './memoryTools'
 
-const VERSION = '0.2.0'
+const VERSION = '0.3.0'
 
 // --- Server ----------------------------------------------------------------------------------
 
@@ -33,7 +34,9 @@ const server = new McpServer(
       'project this session belongs to and what is open. Task statuses: backlog, todo, doing, done. ' +
       'You can also keep things up to date: move tasks as work progresses (doing when you start, done when finished), ' +
       'add tasks for follow-ups, and record decisions and docs in the project\'s docs. Edit notes with small exact edits ' +
-      'rather than rewrites. Nothing can be deleted through these tools; every change is logged for the user.'
+      'rather than rewrites. Keep a memory per project: save durable learnings with waypoint_remember, and after a meaningful ' +
+      'piece of work add a short entry with waypoint_log_session. Nothing can be deleted through these tools; every change is ' +
+      'logged for the user.'
   }
 )
 const READ_ONLY = { readOnlyHint: true, openWorldHint: false }
@@ -60,6 +63,14 @@ server.registerTool(
       lines.push(`This session's project: ${projectSummary(current, tasks)}`)
       if (current.overview) lines.push('', 'Overview:', current.overview.slice(0, 1200))
       lines.push('', open.length ? 'Open tasks (To do / Doing):' : 'No open tasks.', ...open.map(taskLine))
+      // Claude's own notes for the project (M4): memory in full while it's short, plus the last session
+      const memory = (await readMemory(vault, current)).trim()
+      const last = await recentSessions(vault, current, 1)
+      if (memory) {
+        const shown = memory.length > 3000 ? `${memory.slice(0, 3000)}\n… (more: waypoint_read_memory)` : memory
+        lines.push('', `Your memory for this project (${memoryPath(current)}):`, shown)
+      }
+      if (last[0]) lines.push('', 'Last session:', last[0])
     } else {
       lines.push(`This session's folder (${process.cwd()}) isn't the repo of any Waypoint project.`)
     }
@@ -102,7 +113,7 @@ server.registerTool(
       for (const n of nodes) n.type === 'dir' ? walk(n.children ?? []) : n.name.endsWith('.excalidraw') && boards.push(n.path)
     }
     walk(await vault.tree(p.dir))
-    const docs = notes.filter((n) => !/\/tasks\//.test(n) && !n.endsWith('/project.md'))
+    const docs = notes.filter((n) => !/\/(tasks|claude)\//.test(n) && !n.endsWith('/project.md'))
     return [
       projectSummary(p, tasks),
       `created: ${p.created || 'unknown'} · task prefix: ${p.key}`,
@@ -239,6 +250,7 @@ server.registerTool(
 )
 
 registerWriteTools(server)
+registerMemoryTools(server)
 
 server.connect(new StdioServerTransport()).catch((e) => {
   console.error('[waypoint-mcp]', e) // stderr: stdout is the protocol channel
