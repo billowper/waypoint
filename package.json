@@ -1,7 +1,7 @@
 {
   "name": "waypoint",
   "productName": "Waypoint",
-  "version": "0.10.0",
+  "version": "0.10.1",
   "description": "Notes, projects, docs and tasks in a plain-markdown, git-friendly vault",
   "main": "./out/main/index.js",
   "author": "Bill Lowe",

@@ -24,6 +24,7 @@ Full phased plan: `docs/build-plan.md`. Keep its Decisions log and phase status 
   the app. M3 UI: src/main/claudeCode.ts + components/ClaudeCode.tsx (prefs.claudeCode hides it all; WAYPOINT_CLAUDE_HOME
   points it at a scratch ~/.claude.json for testing). Claude stays optional: the app must never depend on or call Claude.
   Change log + undo snapshots: src/main/claudeLog.ts (feed + undo in index.ts / ClaudeCode.tsx).
+- **Sidebar project reordering** (2026-11-01, 0.10.1): drag project rows; order in `.app/project-order.json`.
 - Then: Phase 2 with Bill's project spec (settings in `project.md` frontmatter — see build plan; confirm the
   YAML shape with him first).
 - Windows gotcha: chokidar holds handles on watched folders, so any folder rename/move/delete must run inside

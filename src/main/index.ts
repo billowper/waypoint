@@ -5,7 +5,16 @@ import { mkdir, readFile, stat } from 'fs/promises'
 import { watch, type FSWatcher } from 'chokidar'
 import { Vault } from './vault'
 import { NotesIndex } from './notesIndex'
-import { createBoard, createProject, knownExternalPaths, listProjects, readProject, saveProject } from './projects'
+import {
+  createBoard,
+  createProject,
+  knownExternalPaths,
+  listProjects,
+  readProject,
+  renameInProjectOrder,
+  saveProject,
+  saveProjectOrder
+} from './projects'
 import { claudeStatus, connectClaude, disconnectClaude, openInClaudeApp, openInClaudeTerminal, writeInstructions } from './claudeCode'
 import { createTask, isTaskPath, listTasks, updateTask } from './tasks'
 import { VaultGit } from './git'
@@ -179,6 +188,7 @@ async function relocate(rel: string, op: (v: Vault) => Promise<string>, sender?:
   updateRecent(v, (r) => movedPath(r, rel, to) ?? r)
   broadcast('vault:moved', [rel, to], sender) // other windows' editors and tabs follow
   if (await moveIcons(v, rel, to)) broadcast('icons:changed', [])
+  await renameInProjectOrder(v, rel, to)
   const changed = await updateLinks(v, index, before, rel, to)
   await index.rebuild()
   notify(changed.map((path) => ({ event: 'change', path })))
@@ -478,6 +488,7 @@ function registerIpc() {
   })
   ipcMain.handle('boards:create', (_e, dir: string, name: string) => createBoard(requireVault(), dir, name))
   ipcMain.handle('projects:list', () => listProjects(requireVault()))
+  ipcMain.handle('projects:order', (_e, slugs: string[]) => saveProjectOrder(requireVault(), slugs))
   ipcMain.handle('projects:create', async (_e, name: string) => {
     const slug = await createProject(requireVault(), name)
     await requireIndex().rebuild()

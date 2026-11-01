@@ -189,6 +189,8 @@ export interface Api {
   /** Returns the new project's slug */
   createProject(name: string): Promise<string>
   saveProject(slug: string, settings: ProjectSettings): Promise<void>
+  /** Sidebar order of projects, by slug (.app/project-order.json) */
+  saveProjectOrder(slugs: string[]): Promise<void>
   /** Outside-the-vault paths (repo folder, bookmarks); only paths a project lists are allowed */
   openPath(path: string): Promise<void>
   revealPath(path: string): Promise<void>

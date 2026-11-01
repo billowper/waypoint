@@ -20,6 +20,7 @@ const api: Api = {
   projects: () => ipcRenderer.invoke('projects:list'),
   createProject: (name) => ipcRenderer.invoke('projects:create', name),
   saveProject: (slug, settings) => ipcRenderer.invoke('projects:save', slug, settings),
+  saveProjectOrder: (slugs) => ipcRenderer.invoke('projects:order', slugs),
   openPath: (path) => ipcRenderer.invoke('ext:open', path),
   revealPath: (path) => ipcRenderer.invoke('ext:reveal', path),
   openInCode: (path) => ipcRenderer.invoke('ext:code', path),

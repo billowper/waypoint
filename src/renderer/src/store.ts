@@ -151,6 +151,8 @@ interface State {
   revealFolder(path: string): void
   /** Open or close a project's tree in the sidebar */
   setProjectOpen(slug: string, open: boolean): void
+  /** Set the projects' order (all slugs, first to last); saved for every window */
+  reorderProjects(slugs: string[]): Promise<void>
   toggleBacklinks(): void
   clearReveal(): void
 }
@@ -880,6 +882,12 @@ ${(e as Error).message}`)
       const sidebarOpen = { ...cur, [section]: !cur[section] }
       saveSidebar(sidebarOpen)
       set({ sidebarOpen })
+    },
+
+    async reorderProjects(slugs) {
+      const rank = (slug: string) => (slugs.includes(slug) ? slugs.indexOf(slug) : slugs.length)
+      set({ projects: [...get().projects].sort((a, b) => rank(a.slug) - rank(b.slug)) })
+      await window.api.saveProjectOrder(slugs)
     },
 
     setProjectOpen(slug, open) {

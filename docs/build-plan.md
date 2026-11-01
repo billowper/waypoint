@@ -18,7 +18,7 @@ Electron desktop app blending Obsidian (local markdown vault), Notion (nested pa
 ## Vault layout
 ```
 vault/
-  .app/                      settings.json (committed), cache/ (git-ignored)
+  .app/                      settings.json, icons.json, project-order.json (committed), cache/ (git-ignored)
   notes/                     free-form notes, nest as deep as you like
   projects/
     <project-slug>/
@@ -205,4 +205,7 @@ works directly on the vault, so Claude Code sessions in a project's repo can rea
   keeps each edited file's old text in .app/cache/claude-undo/<id>.md for 30 days. Undo restores it (warning first if
   the file changed since), renames/moves back (links follow), or offers to bin something Claude created (Bill's own
   delete, with the usual confirm). Undos are appended to the log as { undoes: id }; the log itself is never rewritten
+- 2026-11-01: Projects can be reordered by dragging them in the sidebar. The order is a list of slugs in
+  .app/project-order.json (its own file, so saving settings.json can't clobber it; committed with the vault). Projects
+  not in it go after, alphabetically; finished projects still sit at the bottom. Renaming a project folder keeps its place
 

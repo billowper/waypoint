@@ -97,7 +97,7 @@ export default function App() {
     let timer: ReturnType<typeof setTimeout> | null = null
     let gitTimer: ReturnType<typeof setTimeout> | null = null
     const off = window.api.onChanged((events) => {
-      const structural = events.some((e) => e.event !== 'change' || e.path.startsWith('projects/'))
+      const structural = events.some((e) => e.event !== 'change' || e.path.startsWith('projects/') || e.path === '.app/project-order.json')
       if (!structural) {
         // Only the git "N changes" count can move; check it once typing settles
         if (gitTimer) clearTimeout(gitTimer)

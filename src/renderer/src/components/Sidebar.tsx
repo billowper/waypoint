@@ -12,6 +12,8 @@ const NOTES_DIR = 'notes'
 const INBOX_NOTE = 'inbox.md'
 /** Project folders shown first, in this order */
 const PROJECT_ORDER = ['docs', 'wiki', 'tasks', 'boards']
+/** Dragging a project row to put it somewhere else in the list */
+const PROJECT_DRAG = 'application/x-waypoint-project'
 
 function findNode(nodes: TreeNode[], path: string): TreeNode | null {
   for (const n of nodes) {
@@ -61,13 +63,16 @@ export default function Sidebar() {
     projects,
     openProject,
     createProject,
-    openSettings
+    openSettings,
+    reorderProjects
   } = useStore()
   // Finished projects drop to the bottom
   const listed = [...projects].sort((a, b) => Number(a.status === 'done') - Number(b.status === 'done'))
   const focus = focusedProject(view)
   const [rootDrop, setRootDrop] = useState(false)
   const [dropRow, setDropRow] = useState<string | null>(null)
+  /** Where a dragged project would land: before or after this one */
+  const [dropLine, setDropLine] = useState<{ slug: string; after: boolean } | null>(null)
 
   // Dropping on empty space below the file tree moves the item to the vault root
   const onDragOver = (e: DragEvent) => {
@@ -96,6 +101,38 @@ export default function Sidebar() {
       const path = e.dataTransfer.getData(DRAG_TYPE)
       if (path) move(path, dir)
     }
+  })
+
+  /** Project rows can be dragged up and down the list; notes dropped on them still move into the project */
+  const reorder = (slug: string) => ({
+    draggable: true,
+    onDragStart: (e: DragEvent) => {
+      e.dataTransfer.setData(PROJECT_DRAG, slug)
+      e.dataTransfer.effectAllowed = 'move'
+    },
+    onDragOver: (e: DragEvent) => {
+      if (!e.dataTransfer.types.includes(PROJECT_DRAG)) return dropInto(slug, `projects/${slug}`).onDragOver(e)
+      e.preventDefault()
+      e.dataTransfer.dropEffect = 'move'
+      const box = e.currentTarget.getBoundingClientRect()
+      setDropLine({ slug, after: e.clientY > box.top + box.height / 2 })
+    },
+    onDragLeave: () => {
+      setDropRow(null)
+      setDropLine(null)
+    },
+    onDrop: (e: DragEvent) => {
+      const dragged = e.dataTransfer.getData(PROJECT_DRAG)
+      if (!dragged) return dropInto(slug, `projects/${slug}`).onDrop(e)
+      e.preventDefault()
+      const after = dropLine?.slug === slug && dropLine.after
+      setDropLine(null)
+      if (dragged === slug) return
+      const order = listed.map((p) => p.slug).filter((s) => s !== dragged)
+      order.splice(order.indexOf(slug) + (after ? 1 : 0), 0, dragged)
+      reorderProjects(order)
+    },
+    onDragEnd: () => setDropLine(null)
   })
 
   const inboxKids = findNode(tree, NOTES_DIR)?.children ?? []
@@ -178,8 +215,8 @@ export default function Sidebar() {
             return (
               <div key={p.slug}>
                 <div
-                  className={`nav-row ${view.kind === 'project' && view.slug === p.slug ? 'active' : ''} ${p.status === 'done' ? 'done' : ''} ${dropRow === p.slug ? 'drop-target' : ''}`}
-                  {...dropInto(p.slug, `projects/${p.slug}`)}
+                  className={`nav-row ${view.kind === 'project' && view.slug === p.slug ? 'active' : ''} ${p.status === 'done' ? 'done' : ''} ${dropRow === p.slug ? 'drop-target' : ''} ${dropLine?.slug === p.slug ? (dropLine.after ? 'drop-after' : 'drop-before') : ''}`}
+                  {...reorder(p.slug)}
                 >
                   <button
                     className="nav-chev"
@@ -190,7 +227,8 @@ export default function Sidebar() {
                   </button>
                   <button
                     className="nav-item"
-                    title={`${p.title} · ${p.status}`}
+                    title={`${p.title} · ${p.status}
+Drag to reorder`}
                     onClick={(e) => openProject(p.slug, { newTab: e.ctrlKey })}
                     onContextMenu={(e) => showMenu(e, projectMenu(p.slug))}
                   >

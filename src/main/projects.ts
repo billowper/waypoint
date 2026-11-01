@@ -89,12 +89,43 @@ export async function readProject(vault: Vault, slug: string): Promise<Project> 
   return { ...settings, slug, dir, overview, updated: await newestMtime(vault.abs(dir)), hasFile: text !== null }
 }
 
+/** Projects in Bill's order (dragged in the sidebar), then any not placed yet by title */
 export async function listProjects(vault: Vault): Promise<Project[]> {
   const entries = await fs.readdir(vault.abs(PROJECTS_DIR), { withFileTypes: true }).catch(() => [])
   const projects = await Promise.all(
     entries.filter((e) => e.isDirectory() && !e.name.startsWith('.')).map((e) => readProject(vault, e.name))
   )
-  return projects.sort((a, b) => a.title.localeCompare(b.title, undefined, { sensitivity: 'base' }))
+  const order = await readProjectOrder(vault)
+  const rank = (p: Project) => (order.includes(p.slug) ? order.indexOf(p.slug) : order.length)
+  return projects.sort((a, b) => rank(a) - rank(b) || a.title.localeCompare(b.title, undefined, { sensitivity: 'base' }))
+}
+
+/** The sidebar order, .app/project-order.json: a list of project slugs (no file = alphabetical) */
+export const ORDER_FILE = '.app/project-order.json'
+
+async function readProjectOrder(vault: Vault): Promise<string[]> {
+  try {
+    const data = JSON.parse(await fs.readFile(vault.abs(ORDER_FILE), 'utf8'))
+    return Array.isArray(data) ? data.filter((s): s is string => typeof s === 'string') : []
+  } catch {
+    return []
+  }
+}
+
+export async function saveProjectOrder(vault: Vault, slugs: string[]): Promise<void> {
+  await fs.mkdir(vault.abs('.app'), { recursive: true })
+  await fs.writeFile(vault.abs(ORDER_FILE), JSON.stringify([...new Set(slugs)], null, 2) + '\n', 'utf8')
+}
+
+/** Keep a project's place when its folder is renamed (or drop it when moved out of projects/) */
+export async function renameInProjectOrder(vault: Vault, from: string, to: string): Promise<void> {
+  const slug = (rel: string) => /^projects\/([^/]+)$/.exec(rel)?.[1]
+  const [a, b] = [slug(from), slug(to)]
+  const order = await readProjectOrder(vault)
+  if (!a || !order.includes(a)) return
+  if (b) order[order.indexOf(a)] = b
+  else order.splice(order.indexOf(a), 1)
+  await saveProjectOrder(vault, order)
 }
 
 export async function createProject(vault: Vault, name: string): Promise<string> {

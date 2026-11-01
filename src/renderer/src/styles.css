@@ -1071,6 +1071,15 @@ button.crumb.current:hover {
   background: color-mix(in srgb, var(--accent) 16%, transparent);
 }
 
+/* Where a dragged project will land */
+.nav-row.drop-before {
+  box-shadow: inset 0 2px 0 var(--accent);
+}
+
+.nav-row.drop-after {
+  box-shadow: inset 0 -2px 0 var(--accent);
+}
+
 .nav-row .nav-item {
   flex: 1;
   min-width: 0;
