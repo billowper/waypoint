@@ -75,7 +75,7 @@ export function updateJumpList(recent: string[]) {
         type: 'tasks',
         items: [
           task('New note', ['--new-note'], 'Create a note in the open vault'),
-          task('Quick capture', ['--capture'], 'Jot something into the inbox'),
+          task('Quick capture', ['--capture'], 'Jot down an idea'),
           task('Open Home', ['--home'], 'Go to the Home page')
         ]
       },
@@ -134,7 +134,7 @@ export function toast(title: string, body: string, onClick?: () => void) {
   n.show()
 }
 
-/** Launcher-style popups: quick capture (jot into the inbox) and quick search */
+/** Launcher-style popups: quick capture (jot down an idea) and quick search */
 const POPUPS = { capture: { width: 520, height: 190 }, search: { width: 640, height: 440 } }
 const popups: Partial<Record<keyof typeof POPUPS, BrowserWindow>> = {}
 

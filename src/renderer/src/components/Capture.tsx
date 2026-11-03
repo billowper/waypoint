@@ -2,7 +2,7 @@ import { useEffect, useState } from 'react'
 import type { Prefs } from '@shared/prefs'
 import { useApplyTheme } from '../theme'
 
-/** The quick-capture window (global hotkey, jump list, tray): one box that appends to inbox.md */
+/** The quick-capture window (global hotkey, jump list, tray): one box that makes a new note in Ideas */
 export default function Capture() {
   const [text, setText] = useState('')
   const [busy, setBusy] = useState(false)
@@ -19,14 +19,14 @@ export default function Capture() {
       await window.api.captureAdd(text)
     } catch (e) {
       setBusy(false)
-      alert(`Couldn't add to the inbox.\n\n${(e as Error).message}`)
+      alert(`Couldn't save that.\n\n${(e as Error).message}`)
     }
   }
 
   return (
     <div className="capture">
       <div className="capture-head">
-        <span className="brand-mark small">◆</span> Quick capture <span className="capture-to">→ inbox</span>
+        <span className="brand-mark small">◆</span> Quick capture <span className="capture-to">→ ideas</span>
       </div>
       <textarea
         autoFocus

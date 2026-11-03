@@ -1,5 +1,7 @@
 import { useState, type DragEvent } from 'react'
 import type { TreeNode } from '@shared/types'
+import { findNode } from '@shared/nesting'
+import { IDEAS_DIR } from '@shared/names'
 import { useStore } from '../store'
 import FileTree, { DRAG_TYPE } from './FileTree'
 import SearchPanel from './SearchPanel'
@@ -7,30 +9,16 @@ import { projectMenu, showMenu, treeMenu } from '../menus'
 import GitPanel, { GitIndicator } from './GitPanel'
 import Icon from './Icon'
 
-/** General notes live here (the Notes item); inbox.md (quick captures) is pinned at the top */
+/** General notes live here (the Notes item) */
 const NOTES_DIR = 'notes'
-const INBOX_NOTE = 'inbox.md'
 /** Project folders shown first, in this order */
 const PROJECT_ORDER = ['docs', 'wiki', 'tasks', 'boards']
 /** Dragging a project row to put it somewhere else in the list */
 const PROJECT_DRAG = 'application/x-waypoint-project'
 
-function findNode(nodes: TreeNode[], path: string): TreeNode | null {
-  for (const n of nodes) {
-    if (n.path === path) return n
-    if (n.type === 'dir' && path.startsWith(n.path + '/')) return findNode(n.children ?? [], path)
-  }
-  return null
-}
-
-/** A project's contents for the sidebar: docs/tasks/boards first, project.md left out (it's the project page) */
+/** A project's contents for the sidebar: project.md left out (it's the project page) */
 function projectChildren(tree: TreeNode[], slug: string): TreeNode[] {
-  const kids = (findNode(tree, `projects/${slug}`)?.children ?? []).filter((n) => n.name !== 'project.md')
-  const rank = (n: TreeNode) => {
-    const i = PROJECT_ORDER.indexOf(n.name)
-    return n.type === 'dir' ? (i === -1 ? PROJECT_ORDER.length : i) : PROJECT_ORDER.length + 1
-  }
-  return [...kids].sort((a, b) => rank(a) - rank(b) || a.name.localeCompare(b.name))
+  return (findNode(tree, `projects/${slug}`)?.children ?? []).filter((n) => n.name !== 'project.md')
 }
 
 /** The project the current tab belongs to, if any */
@@ -50,9 +38,7 @@ export default function Sidebar() {
     newNote,
     newFolder,
     openVault,
-    openFile,
     tree,
-    notes,
     selectedDir,
     sidebarMode,
     setSidebarMode,
@@ -135,8 +121,8 @@ export default function Sidebar() {
     onDragEnd: () => setDropLine(null)
   })
 
-  const inboxKids = findNode(tree, NOTES_DIR)?.children ?? []
-  const inboxActive = view.kind === 'file' && view.path === INBOX_NOTE
+  const noteKids = findNode(tree, NOTES_DIR)?.children ?? []
+  const ideaKids = findNode(tree, IDEAS_DIR)?.children ?? []
 
   return (
     <aside className="sidebar">
@@ -163,15 +149,15 @@ export default function Sidebar() {
           <div className={`nav-row ${dropRow === 'notes' ? 'drop-target' : ''}`} {...dropInto('notes', NOTES_DIR)}>
             <button
               className="nav-chev"
-              title={sidebarOpen.inbox ? 'Hide notes' : 'Show notes'}
-              onClick={() => toggleSection('inbox')}
+              title={sidebarOpen.notes ? 'Hide notes' : 'Show notes'}
+              onClick={() => toggleSection('notes')}
             >
-              <span className={`chev ${sidebarOpen.inbox ? 'open' : ''}`}>›</span>
+              <span className={`chev ${sidebarOpen.notes ? 'open' : ''}`}>›</span>
             </button>
             <button
               className="nav-item"
               title="General notes (the notes folder)"
-              onClick={() => toggleSection('inbox')}
+              onClick={() => toggleSection('notes')}
               onContextMenu={(e) => showMenu(e, treeMenu(NOTES_DIR, 'dir'))}
             >
               <Icon path={NOTES_DIR} className="nav-glyph" fallback={<span className="nav-icon">✎</span>} /> Notes
@@ -180,21 +166,35 @@ export default function Sidebar() {
               ＋
             </button>
           </div>
-          {sidebarOpen.inbox && (
+          {sidebarOpen.notes && (
             <div className="nav-tree">
-              {/* Quick captures land in inbox.md: always first under Notes */}
-              <button
-                className={`tree-row file pinned ${inboxActive ? 'active' : ''}`}
-                style={{ paddingLeft: 24 }}
-                title="Quick captures land here (Ctrl+Alt+W)"
-                onClick={(e) => (notes.includes(INBOX_NOTE) ? openFile(INBOX_NOTE, { newTab: e.ctrlKey }) : newNote('', 'inbox'))}
-                onContextMenu={(e) => notes.includes(INBOX_NOTE) && showMenu(e, treeMenu(INBOX_NOTE, 'file'))}
-              >
-                <span className="chev spacer" />
-                <Icon path={INBOX_NOTE} fallback={<span className="tree-icon">✉</span>} />
-                Inbox
-              </button>
-              <FileTree nodes={inboxKids} depth={1} />
+              <FileTree nodes={noteKids} dir={NOTES_DIR} depth={1} />
+            </div>
+          )}
+
+          <div className={`nav-row ${dropRow === 'ideas' ? 'drop-target' : ''}`} {...dropInto('ideas', IDEAS_DIR)}>
+            <button
+              className="nav-chev"
+              title={sidebarOpen.ideas ? 'Hide ideas' : 'Show ideas'}
+              onClick={() => toggleSection('ideas')}
+            >
+              <span className={`chev ${sidebarOpen.ideas ? 'open' : ''}`}>›</span>
+            </button>
+            <button
+              className="nav-item"
+              title="Quick captures land here (Ctrl+Alt+W)"
+              onClick={() => toggleSection('ideas')}
+              onContextMenu={(e) => showMenu(e, treeMenu(IDEAS_DIR, 'dir'))}
+            >
+              <Icon path={IDEAS_DIR} className="nav-glyph" fallback={<span className="nav-icon">💡</span>} /> Ideas
+            </button>
+            <button className="icon-btn row-add" title="New idea" onClick={() => newNote(IDEAS_DIR)}>
+              ＋
+            </button>
+          </div>
+          {sidebarOpen.ideas && (
+            <div className="nav-tree">
+              <FileTree nodes={ideaKids} dir={IDEAS_DIR} depth={1} />
             </div>
           )}
         </nav>
@@ -239,7 +239,7 @@ Drag to reorder`}
                 </div>
                 {open && (
                   <div className="nav-tree">
-                    <FileTree nodes={projectChildren(tree, p.slug)} depth={1} />
+                    <FileTree nodes={projectChildren(tree, p.slug)} dir={`projects/${p.slug}`} pinned={PROJECT_ORDER} depth={1} />
                   </div>
                 )}
               </div>
@@ -305,7 +305,7 @@ Drag to reorder`}
               onDragLeave={() => setRootDrop(false)}
               onDrop={onDrop}
             >
-              <FileTree nodes={tree} depth={0} />
+              <FileTree nodes={tree} dir="" depth={0} />
             </div>
           ) : sidebarMode === 'search' ? (
             <SearchPanel />

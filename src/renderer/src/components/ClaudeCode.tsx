@@ -56,10 +56,25 @@ export function ClaudeSettings() {
       <label className="setting">
         <div>
           <div className="setting-name">Show Claude Code controls</div>
-          <div className="setting-help">On project pages and here. Turning this off hides them; nothing else changes.</div>
+          <div className="setting-help">On project pages, tasks and here. Turning this off hides them; nothing else changes.</div>
         </div>
         <input type="checkbox" checked={prefs.claudeCode} onChange={(e) => set({ claudeCode: e.target.checked })} />
       </label>
+      {prefs.claudeCode && (
+        <label className="setting">
+          <div>
+            <div className="setting-name">Send tasks to</div>
+            <div className="setting-help">
+              A terminal starts work straight away. The Claude app fills in the prompt, then you confirm the folder and press Enter.
+              The other one stays on the right-click menu.
+            </div>
+          </div>
+          <select value={prefs.claudeSendTo} onChange={(e) => set({ claudeSendTo: e.target.value as Prefs['claudeSendTo'] })}>
+            <option value="terminal">Terminal</option>
+            <option value="app">Claude app</option>
+          </select>
+        </label>
+      )}
       {prefs.claudeCode && status && (
         <div className="setting">
           <div>

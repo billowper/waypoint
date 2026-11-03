@@ -1,7 +1,7 @@
-import { promises as fs, existsSync } from 'fs'
+import { promises as fs, existsSync, readdirSync } from 'fs'
 import { join, resolve, relative, sep, basename, extname, dirname } from 'path'
 import type { TreeNode, VaultSettings, VaultStats } from '@shared/types'
-import { sanitize } from '@shared/names'
+import { IDEAS_DIR, pagesFolder, sanitize } from '@shared/names'
 
 const IGNORED = new Set(['.git', 'node_modules', '.app', '.obsidian', '.trash'])
 
@@ -44,16 +44,13 @@ export class Vault {
   async setUp(): Promise<void> {
     await fs.mkdir(join(this.root, '.app', 'cache'), { recursive: true })
     await fs.mkdir(join(this.root, 'notes'), { recursive: true })
+    await fs.mkdir(join(this.root, IDEAS_DIR), { recursive: true })
     await fs.mkdir(join(this.root, 'projects'), { recursive: true })
     await writeIfMissing(
       join(this.root, '.app', 'settings.json'),
       JSON.stringify({ version: 1 }, null, 2) + '\n'
     )
     await writeIfMissing(join(this.root, '.gitignore'), '.app/cache/\n')
-    await writeIfMissing(
-      join(this.root, 'inbox.md'),
-      '# Inbox\n\nQuick captures land here. Sort them into notes or projects later.\n'
-    )
     await writeIfMissing(
       join(this.root, 'notes', 'Welcome.md'),
       [
@@ -64,21 +61,48 @@ export class Vault {
         '',
         '- **notes/** — free-form notes, nest folders as deep as you like',
         '- **projects/** — one folder per project (docs, tasks, boards)',
-        '- **inbox.md** — quick capture',
+        '- **ideas/** — quick captures, one note each',
         ''
       ].join('\n')
     )
   }
 
-  /** Quick capture: add a bullet to inbox.md (created if missing), stamped with the time */
-  async appendToInbox(text: string): Promise<void> {
+  /** The folder of sub-pages a note actually has, if any. Exact case, so "foo.md" doesn't claim "Foo/". */
+  pagesOf(rel: string): string | null {
+    const folder = pagesFolder(rel)
+    if (!folder) return null
+    const name = folder.slice(folder.lastIndexOf('/') + 1)
+    try {
+      const found = readdirSync(dirname(this.abs(rel)), { withFileTypes: true }).some((e) => e.isDirectory() && e.name === name)
+      return found ? folder : null
+    } catch {
+      return null
+    }
+  }
+
+  /** Is this folder the sub-pages of a note beside it? */
+  isPagesFolder(dirRel: string): boolean {
+    return !!dirRel && existsSync(this.abs(`${dirRel}.md`)) && pagesFolder(`${dirRel}.md`) === dirRel
+  }
+
+  /** A note whose last sub-page has gone is an ordinary note again. rmdir refuses anything not empty. */
+  async pruneEmptyPages(dirRel: string): Promise<void> {
+    if (this.isPagesFolder(dirRel)) await fs.rmdir(this.abs(dirRel)).catch(() => undefined)
+  }
+
+  /** Quick capture: a new note in ideas/, named after the first line and stamped with the time. Returns its path. */
+  async addIdea(text: string): Promise<string | null> {
     const clean = text.trim()
-    if (!clean) return
-    const file = join(this.root, 'inbox.md')
-    const current = await fs.readFile(file, 'utf8').catch(() => '# Inbox\n\n')
+    if (!clean) return null
+    const [first, ...rest] = clean.split(/\r?\n/)
+    // No markdown markers or link syntax in the name, or [[links]] to it won't resolve
+    const name = sanitize(first.replace(/^[#>*\-\s]+/, '').replace(/[[\]#^]/g, '').slice(0, 60)) || 'Capture'
+    const rel = await this.createNote(IDEAS_DIR, name)
+    // The first line is already the title unless it had to be cut or cleaned up
+    const body = (name === first.trim() ? rest.join('\n').trim() : clean).replace(/\r\n/g, '\n')
     const when = new Date().toLocaleString('en-GB', { day: 'numeric', month: 'short', hour: '2-digit', minute: '2-digit' })
-    const entry = `- ${clean.replace(/\r?\n/g, '\n  ')} _(${when})_\n`
-    await fs.writeFile(file, (current.endsWith('\n') ? current : current + '\n') + entry, 'utf8')
+    await fs.appendFile(this.abs(rel), `${body ? body + '\n\n' : ''}_Captured ${when}_\n`, 'utf8')
+    return rel
   }
 
   /** .app/settings.json, with defaults for anything missing (the file is optional) */
@@ -180,15 +204,20 @@ export class Vault {
     const destDir = this.abs(destDirRel)
     if (src === this.root) throw new Error('Cannot move the vault itself')
     if (destDir === src || destDir.startsWith(src + sep)) throw new Error("Can't move a folder into itself")
+    const pages = this.pagesOf(rel)
+    if (pages && (destDir === this.abs(pages) || destDir.startsWith(this.abs(pages) + sep))) {
+      throw new Error("Can't move a note into its own sub-pages")
+    }
     if (dirname(src) === destDir) return rel
     await fs.mkdir(destDir, { recursive: true })
     const isFile = (await fs.stat(src)).isFile()
     const ext = isFile ? extname(src) : ''
-    const final = await uniqueName(destDir, basename(src, ext), ext)
+    const final = await uniqueName(destDir, basename(src, ext), ext, !!pages)
     const dest = join(destDir, final)
-    await renameWithRetry(src, dest)
+    await renameWithPages(src, dest, pages && this.abs(pages), join(destDir, basename(final, ext)))
     // A numbered name ("Plan 1") means the old "# Plan" title no longer matches
     if (isFile) await retitle(dest, basename(src, ext), basename(final, ext))
+    await this.pruneEmptyPages(this.rel(dirname(src)))
     return this.rel(dest)
   }
 
@@ -199,11 +228,13 @@ export class Vault {
     const isFile = (await fs.stat(src)).isFile()
     const ext = isFile ? extname(src) : ''
     const oldBase = basename(src, ext)
-    const final = await uniqueName(dirname(src), `${oldBase} copy`, ext)
+    const pages = this.pagesOf(rel)
+    const final = await uniqueName(dirname(src), `${oldBase} copy`, ext, !!pages)
     const dest = join(dirname(src), final)
     if (isFile) {
       await fs.copyFile(src, dest, fs.constants.COPYFILE_EXCL)
       await retitle(dest, oldBase, basename(final, ext))
+      if (pages) await fs.cp(this.abs(pages), join(dirname(src), basename(final, ext)), { recursive: true, errorOnExist: true, force: false })
     } else {
       await fs.cp(src, dest, { recursive: true, errorOnExist: true, force: false })
     }
@@ -226,11 +257,12 @@ export class Vault {
 
     const dir = dirname(src)
     // Windows file names are case-insensitive, so a case-only change must not be "taken"
-    const final = base.toLowerCase() === oldBase.toLowerCase() ? base + ext : await uniqueName(dir, base, ext)
+    const pages = this.pagesOf(rel)
+    const final = base.toLowerCase() === oldBase.toLowerCase() ? base + ext : await uniqueName(dir, base, ext, !!pages)
     const dest = join(dir, final)
 
     if (syncHeading) await retitle(src, oldBase, basename(final, ext))
-    await renameWithRetry(src, dest)
+    await renameWithPages(src, dest, pages && this.abs(pages), join(dir, basename(final, ext)))
     return this.rel(dest)
   }
 
@@ -251,10 +283,11 @@ async function writeIfMissing(p: string, content: string) {
   }
 }
 
-async function uniqueName(dir: string, base: string, ext: string): Promise<string> {
+/** `withFolder`: the same name must be free for a folder too (a note and its sub-pages move as a pair) */
+async function uniqueName(dir: string, base: string, ext: string, withFolder = false): Promise<string> {
   for (let i = 0; ; i++) {
-    const name = i === 0 ? `${base}${ext}` : `${base} ${i}${ext}`
-    if (!existsSync(join(dir, name))) return name
+    const stem = i === 0 ? base : `${base} ${i}`
+    if (!existsSync(join(dir, stem + ext)) && !(withFolder && existsSync(join(dir, stem)))) return stem + ext
   }
 }
 
@@ -277,6 +310,17 @@ async function renameWithRetry(src: string, dest: string) {
       if (attempt >= 5 || !['EPERM', 'EBUSY', 'EACCES'].includes(e.code)) throw e
       await new Promise((r) => setTimeout(r, 100 * (attempt + 1)))
     }
+  }
+}
+
+/** Rename a file and, if it has one, its folder of sub-pages. The folder goes first (it's what gets locked); undone if the file then fails. */
+async function renameWithPages(src: string, dest: string, pages: string | null, pagesDest: string) {
+  if (pages) await renameWithRetry(pages, pagesDest)
+  try {
+    await renameWithRetry(src, dest)
+  } catch (e) {
+    if (pages) await renameWithRetry(pagesDest, pages).catch(() => undefined)
+    throw e
   }
 }
 

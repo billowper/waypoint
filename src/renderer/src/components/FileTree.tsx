@@ -1,5 +1,7 @@
 import { useRef, useState, type DragEvent, type MouseEvent } from 'react'
 import type { TreeNode } from '@shared/types'
+import { arrange, canNest, type TreeRow } from '@shared/nesting'
+import { pagesFolder } from '@shared/names'
 import { canRename, useStore } from '../store'
 import { showMenu, treeMenu } from '../menus'
 import Icon, { noteDefault } from './Icon'
@@ -10,23 +12,45 @@ const EXPAND_DELAY = 650
 
 interface Props {
   nodes: TreeNode[]
+  /** The folder these are in ('' = vault root) */
+  dir: string
+  /** Names that stay first, in this order, and can't be reordered */
+  pinned?: string[]
   depth: number
 }
 
-const parentOf = (p: string) => (p.includes('/') ? p.slice(0, p.lastIndexOf('/')) : '')
+/** Where on a row a drag would land: a line above or below it, or inside it */
+type Zone = 'before' | 'into' | 'after'
+const TASKS_DIR = /^projects\/[^/]+\/tasks(\/|$)/
 
-export default function FileTree({ nodes, depth }: Props) {
-  const { expanded, toggle, view, openFile, openCanvas, openBoard, openInNewWindow, createTask, selectedDir, selectDir, move, tasks } =
+export default function FileTree({ nodes, dir, pinned, depth }: Props) {
+  const { expanded, toggle, view, openFile, openCanvas, openBoard, openInNewWindow, createTask, selectedDir, selectDir, move, place, tasks, treeOrder } =
     useStore()
+  const rows = arrange(nodes, treeOrder[dir], pinned)
   const taskByPath = new Map(tasks.map((t) => [t.path, t]))
   const openPath = view.kind === 'file' ? view.path : null
-  const [dropOn, setDropOn] = useState<string | null>(null)
+  const [dropOn, setDropOn] = useState<{ path: string; zone: Zone } | null>(null)
   const expandTimer = useRef<ReturnType<typeof setTimeout> | null>(null)
 
   const menu = (n: TreeNode) => (e: MouseEvent) => showMenu(e, treeMenu(n.path, n.type))
 
-  // Drag a note or folder onto a folder (or onto a note, meaning its folder) to move it there
-  const drag = (n: TreeNode) => ({
+  // The folder a drop "into" this row means: the folder, the note's sub-pages, or (for anything else) beside it
+  const destOf = (n: TreeRow) => (n.type === 'dir' ? n.path : canNest(n.path) ? (n.folder ?? pagesFolder(n.path)!) : dir)
+
+  // Near a row's edge means between rows; its middle means inside. Pinned rows and tasks only take "inside".
+  const zoneAt = (e: DragEvent, n: TreeRow): Zone => {
+    if (pinned?.includes(n.name) || TASKS_DIR.test(dir)) return 'into'
+    const box = e.currentTarget.getBoundingClientRect()
+    const y = (e.clientY - box.top) / box.height
+    if (n.type !== 'dir' && !canNest(n.path)) return y < 0.5 ? 'before' : 'after'
+    return y < 0.25 ? 'before' : y > 0.75 ? 'after' : 'into'
+  }
+
+  const dropClass = (n: TreeRow) =>
+    dropOn?.path !== n.path ? '' : dropOn.zone === 'into' ? 'drop-target' : `drop-${dropOn.zone}`
+
+  // Drag a note or folder onto a row to put it inside, or between rows to put it there
+  const drag = (n: TreeRow) => ({
     draggable: canRename(n.path),
     onDragStart: (e: DragEvent) => {
       e.dataTransfer.setData(DRAG_TYPE, n.path)
@@ -37,13 +61,14 @@ export default function FileTree({ nodes, depth }: Props) {
       e.preventDefault()
       e.stopPropagation()
       e.dataTransfer.dropEffect = 'move'
-      const target = n.type === 'dir' ? n.path : parentOf(n.path)
-      if (dropOn !== target) {
-        setDropOn(target)
+      const zone = zoneAt(e, n)
+      if (dropOn?.path !== n.path || dropOn.zone !== zone) {
+        setDropOn({ path: n.path, zone })
         if (expandTimer.current) clearTimeout(expandTimer.current)
-        if (n.type === 'dir' && !expanded[n.path]) {
+        const opens = n.type === 'dir' ? n.path : n.folder
+        if (zone === 'into' && opens && !expanded[opens]) {
           expandTimer.current = setTimeout(() => {
-            if (!useStore.getState().expanded[n.path]) toggle(n.path)
+            if (!useStore.getState().expanded[opens]) toggle(opens)
           }, EXPAND_DELAY)
         }
       }
@@ -58,13 +83,16 @@ export default function FileTree({ nodes, depth }: Props) {
       setDropOn(null)
       if (expandTimer.current) clearTimeout(expandTimer.current)
       const path = e.dataTransfer.getData(DRAG_TYPE)
-      if (path) move(path, n.type === 'dir' ? n.path : parentOf(n.path))
+      if (!path || path === n.path) return
+      const zone = zoneAt(e, n)
+      if (zone === 'into') move(path, destOf(n))
+      else place(path, dir, { name: n.name, after: zone === 'after' })
     }
   })
 
   return (
     <ul className="tree">
-      {nodes.map((n) => {
+      {rows.map((n) => {
         const pad = { paddingLeft: 10 + depth * 14 }
         // A project's tasks folder is its task board
         const boardOf = n.type === 'dir' ? /^projects\/([^/]+)\/tasks$/.exec(n.path)?.[1] : undefined
@@ -72,7 +100,7 @@ export default function FileTree({ nodes, depth }: Props) {
           return (
             <li key={n.path}>
               <button
-                className={`tree-row dir task-board ${view.kind === 'board' && view.slug === boardOf ? 'active' : ''} ${dropOn === n.path ? 'drop-target' : ''}`}
+                className={`tree-row dir task-board ${view.kind === 'board' && view.slug === boardOf ? 'active' : ''} ${dropClass(n)}`}
                 style={pad}
                 data-path={n.path}
                 title="Open the task board"
@@ -107,7 +135,7 @@ export default function FileTree({ nodes, depth }: Props) {
           return (
             <li key={n.path}>
               <button
-                className={`tree-row dir ${selectedDir === n.path ? 'selected' : ''} ${dropOn === n.path ? 'drop-target' : ''}`}
+                className={`tree-row dir ${selectedDir === n.path ? 'selected' : ''} ${dropClass(n)}`}
                 style={pad}
                 data-path={n.path}
                 onClick={() => {
@@ -121,17 +149,19 @@ export default function FileTree({ nodes, depth }: Props) {
                 <Icon path={n.path} />
                 {n.name}
               </button>
-              {isOpen && n.children && <FileTree nodes={n.children} depth={depth + 1} />}
+              {isOpen && n.children && <FileTree nodes={n.children} dir={n.path} depth={depth + 1} />}
             </li>
           )
         }
         const isMd = n.name.toLowerCase().endsWith('.md')
         const isBoard = n.name.toLowerCase().endsWith('.excalidraw')
         const task = taskByPath.get(n.path) // tasks read better by title than by file name
+        const pages = n.children?.length ? n.folder : undefined
+        const pagesOpen = !!pages && !!expanded[pages]
         return (
           <li key={n.path}>
             <button
-              className={`tree-row file ${openPath === n.path || (view.kind === 'canvas' && view.path === n.path) ? 'active' : ''} ${isMd || isBoard ? '' : 'other'} ${task?.status === 'done' ? 'done' : ''}`}
+              className={`tree-row file ${openPath === n.path || (view.kind === 'canvas' && view.path === n.path) ? 'active' : ''} ${isMd || isBoard ? '' : 'other'} ${task?.status === 'done' ? 'done' : ''} ${dropClass(n)}`}
               style={pad}
               data-path={n.path}
               onClick={(e) =>
@@ -146,7 +176,20 @@ export default function FileTree({ nodes, depth }: Props) {
               title={isMd ? n.path : `${n.path} — opens in Explorer`}
               {...drag(n)}
             >
-              <span className="chev spacer" />
+              {pages ? (
+                <span
+                  className={`chev ${pagesOpen ? 'open' : ''}`}
+                  title={pagesOpen ? 'Hide sub-pages' : 'Show sub-pages'}
+                  onClick={(e) => {
+                    e.stopPropagation()
+                    toggle(pages)
+                  }}
+                >
+                  ›
+                </span>
+              ) : (
+                <span className="chev spacer" />
+              )}
               <Icon path={n.path} fallback={isBoard ? <span className="tree-icon">✎</span> : noteDefault(n.path, !!task)} />
               {task ? (
                 <>
@@ -161,6 +204,7 @@ export default function FileTree({ nodes, depth }: Props) {
                 n.name
               )}
             </button>
+            {pagesOpen && <FileTree nodes={n.children!} dir={pages!} depth={depth + 1} />}
           </li>
         )
       })}

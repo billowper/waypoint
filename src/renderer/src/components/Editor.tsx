@@ -1,4 +1,4 @@
-import { useEffect, useRef } from 'react'
+import { useEffect, useRef, useState } from 'react'
 import { EditorSelection, EditorState } from '@codemirror/state'
 import { EditorView, keymap, drawSelection, highlightActiveLine, placeholder } from '@codemirror/view'
 import { defaultKeymap, history, historyKeymap, indentWithTab } from '@codemirror/commands'
@@ -14,8 +14,13 @@ import { enqueue, registerEditor, useStore, type Reveal, type SaveState } from '
 import { linkContext, livePreview, refreshLinks } from './livePreview'
 import { wikiComplete } from './wikiComplete'
 import { frontmatterSyntax } from './frontmatterSyntax'
+import Toc, { readHeadings, type Heading } from './Toc'
 
 const SAVE_DELAY = 400
+/** How long typing has to pause before the contents pane catches up */
+const TOC_DELAY = 250
+/** After a jump, the scrolling it causes doesn't decide the current heading (one near the end can't reach the top) */
+const TOC_JUMP_SETTLE = 200
 /** How long the # title has to sit still before the file is renamed to match it */
 const TITLE_RENAME_DELAY = 1200
 
@@ -94,6 +99,11 @@ export default function Editor({ tabId, path, active }: Props) {
   pathRef.current = path
   const activeRef = useRef(active)
   activeRef.current = active
+  const tocOpen = useStore((s) => s.tocOpen)
+  const [headings, setHeadings] = useState<Heading[]>([])
+  /** Document position at the top of the view: says which heading you're under */
+  const [scrolledTo, setScrolledTo] = useState(0)
+  const jumpedAt = useRef(0)
 
   useEffect(() => {
     const store = useStore.getState
@@ -101,12 +111,24 @@ export default function Editor({ tabId, path, active }: Props) {
     let view: EditorView | null = null
     let timer: ReturnType<typeof setTimeout> | null = null
     let titleTimer: ReturnType<typeof setTimeout> | null = null
+    let tocTimer: ReturnType<typeof setTimeout> | null = null
     let lastSaved = ''
     let disposed = false
     let deleted = false // moved to the Recycle Bin: never write it back
     // While a note's file name matches its "# Title", editing the title renames the file
     let follow = false
     let renamingSelf = false
+
+    const trackScroll = () => {
+      if (!view || !store().tocOpen || performance.now() - jumpedAt.current < TOC_JUMP_SETTLE) return
+      // A little below the top edge, so a heading just jumped to counts as the current one
+      setScrolledTo(view.lineBlockAtHeight(view.scrollDOM.scrollTop - view.documentPadding.top + 32).from)
+    }
+    const refreshToc = () => {
+      if (!view || !store().tocOpen) return
+      setHeadings(readHeadings(view.state, baseName(pathRef.current)))
+      trackScroll()
+    }
 
     const wantedName = (text: string) => {
       const title = titleOf(text)
@@ -166,6 +188,7 @@ export default function Editor({ tabId, path, active }: Props) {
         const moved = movedPath(pathRef.current, from, to)
         if (moved) pathRef.current = moved
         if (view) follow = inSync(view.state.doc.toString())
+        refreshToc()
       },
       removed(p) {
         if (movedPath(pathRef.current, p, p)) deleted = true
@@ -223,11 +246,15 @@ export default function Editor({ tabId, path, active }: Props) {
               setSaveState('unsaved')
               if (timer) clearTimeout(timer)
               timer = setTimeout(save, SAVE_DELAY)
+              if (tocTimer) clearTimeout(tocTimer)
+              tocTimer = setTimeout(refreshToc, TOC_DELAY)
             })
           ]
         })
       })
       viewRef.current = view
+      view.scrollDOM.addEventListener('scroll', trackScroll, { passive: true })
+      refreshToc()
       // Select the title of a fresh "Untitled" note so typing replaces it
       const fresh = /^# (Untitled(?: \d+)?)\n\n$/.exec(doc)
       if (fresh) view.dispatch({ selection: { anchor: 2, head: 2 + fresh[1].length } })
@@ -250,6 +277,7 @@ export default function Editor({ tabId, path, active }: Props) {
     }
     const offReveal = useStore.subscribe((s, prev) => {
       if (s.reveal !== prev.reveal) revealIfAsked(s.reveal)
+      if (s.tocOpen !== prev.tocOpen) refreshToc()
       // Links re-check whether they resolve when notes come and go
       if (s.notes !== prev.notes && view) view.dispatch({ effects: refreshLinks.of(null) })
     })
@@ -275,6 +303,7 @@ export default function Editor({ tabId, path, active }: Props) {
     return () => {
       off()
       offReveal()
+      if (tocTimer) clearTimeout(tocTimer)
       const pendingTitle = titleTimer !== null
       save()
         .then(() => (pendingTitle || titleTimer ? followTitle() : undefined))
@@ -294,5 +323,19 @@ export default function Editor({ tabId, path, active }: Props) {
     view.focus()
   }, [active])
 
-  return <div className="editor" ref={host} hidden={!active} />
+  const jumpTo = (pos: number) => {
+    const view = viewRef.current
+    if (!view) return
+    jumpedAt.current = performance.now()
+    setScrolledTo(pos)
+    view.dispatch({ selection: { anchor: pos }, effects: EditorView.scrollIntoView(pos, { y: 'start', yMargin: 24 }) })
+    view.focus()
+  }
+
+  return (
+    <div className="doc" hidden={!active}>
+      {tocOpen && <Toc headings={headings} scrolledTo={scrolledTo} onJump={jumpTo} />}
+      <div className="editor" ref={host} />
+    </div>
+  )
 }

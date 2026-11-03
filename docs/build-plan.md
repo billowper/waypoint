@@ -26,7 +26,7 @@ vault/
       docs/                  nested markdown pages (older projects: wiki/)
       tasks/                 TASK-001.md … (frontmatter: status, priority, due, assignee)
       boards/                *.excalidraw canvas files
-  inbox.md                   quick-capture target
+  ideas/                     quick captures, one note each
 ```
 
 ## Phases
@@ -119,6 +119,8 @@ works directly on the vault, so Claude Code sessions in a project's repo can rea
   writes an uncommitted CLAUDE.local.md naming the project + standing instructions); "Open in Claude Code"
 - **M4 Memory + session logs:** per-project claude/ notes Claude reads and keeps; dated session entries
 - **M5 Visibility:** "Changed by Claude" feed on the project page and Home; undo from the feed
+- **Send to Claude Code (0.10.2), awaiting feedback:** a button on the open task and a right-click item on tasks
+  (board, Home, project page) start a new session on that task in the project's repo
 
 ## Feedback loop at every checkpoint
 1. Deliver the build + a 5-minute "try this" checklist
@@ -162,13 +164,17 @@ works directly on the vault, so Claude Code sessions in a project's repo can rea
 - 2026-10-30: Phase 8: light/system theme, Settings page (Windows, nudges, backups, shortcuts), daily zip backups
   via Windows tar (no .git), lighter refresh on autosave, NSIS installer dist/Waypoint-Setup-0.0.1.exe.
   Auto-update skipped (needs a release server).
+- 2026-11-03: Inbox and Captures combined into Ideas: every quick capture is a new note in ideas/, named after its first
+  line, with no option to append to a single file. inbox.md is gone; on opening a vault, an old notes/Captures moves to
+  ideas/, and an old inbox.md moves there as one note if it has content (an empty one goes to the Recycle Bin).
+  Connector tools became add_idea and list_ideas.
 
 ## Review checklist for Bill (all unattended phases)
 1. Install dist/Waypoint-Setup-0.0.1.exe (unsigned, so SmartScreen warns: More info → Run anyway).
 2. Projects: sidebar + → create; set status, tags, repo path (Open in VS Code), links, bookmarks.
 3. Tasks: Open board → add tasks, drag between columns, click a card → properties bar; Home → My work.
 4. Git: sidebar Git → Start versioning → edit → Commit; ⟲ on a note shows history and diffs.
-5. Windows: Ctrl+Alt+W quick capture → inbox.md; right-click the taskbar icon for the jump list; tray ◆ menu; closing keeps it in the tray.
+5. Windows: Ctrl+Alt+W quick capture → new note under Ideas; right-click the taskbar icon for the jump list; tray ◆ menu; closing keeps it in the tray.
 6. Nudges: Settings → Nudge me now (in-app banner when focused, toast otherwise); Don't nag / Snooze.
 7. Boards: project page → New board → Add note or task card → click its link icon.
 8. Settings: theme Light/System; Backups → choose folder → Back up now.
@@ -208,4 +214,29 @@ works directly on the vault, so Claude Code sessions in a project's repo can rea
 - 2026-11-01: Projects can be reordered by dragging them in the sidebar. The order is a list of slugs in
   .app/project-order.json (its own file, so saving settings.json can't clobber it; committed with the vault). Projects
   not in it go after, alphabetically; finished projects still sit at the bottom. Renaming a project folder keeps its place
-
+- 2026-11-02: Send a task to Claude Code (Bill; default route is the terminal, switchable in Settings → Claude Code, prefs.claudeSendTo; the other route stays on the right-click menu): "Send to Claude" on the task bar and "Send to Claude Code" / "Send to Claude
+  app" on task menus. The terminal route runs `claude "<prompt>"` in the repo, so work starts straight away. The Claude app
+  route uses claude://code/new, which by design only pre-fills: Bill confirms the folder and presses Enter. The prompt names
+  the task and has Claude read it with waypoint_get_task; it's reduced to plain characters because it passes through command
+  lines. Not set up yet = one dialog offering to connect and write CLAUDE.local.md first. Claude moves the task to Doing itself
+- 2026-11-02: Fixed "Open in terminal": wt.exe is a Store app alias that existsSync can't see, so it always fell back to a
+  console window, and Node's escaping of start's quoted title stopped that running claude. Now found with where.exe; the
+  fallback uses verbatim arguments
+- 2026-11-03: Notion-style nesting on plain files (Bill asked for dragging notes into notes and reordering). A note's sub-pages live
+  in a folder of the same name beside it (Plan.md + Plan/), which the sidebar draws as one row; the note itself doesn't move, so
+  nesting changes no links to it. An existing note and folder with the same name therefore become one row. The pair moves, renames,
+  duplicates and deletes together; a folder left empty is removed. Folders the layout depends on (notes, projects, a project's docs,
+  wiki, tasks, boards, claude) never pair up, and tasks, the inbox and project.md can't take sub-pages. Dropping on a row's top or
+  bottom quarter places it between rows, the middle puts it inside. Order is in .app/tree-order.json (folder → names; own file like
+  project-order.json, committed with the vault); anything not listed goes after, folders first, then by name. Docs/tasks/boards stay
+  pinned at the top of a project
+- 2026-11-03: Contents pane on the left of the note (☰ on the path bar, Ctrl+Shift+O; open or closed is remembered per PC). Headings come
+  from the parsed document, so "# " in code or frontmatter doesn't count; the title line matching the file name is left out
+- 2026-11-03: Back/forward (arrows on the tab bar, Alt+Left/Right, mouse side buttons). One history per window, not per tab, so following
+  a link to a note already open in another tab can still go back; closed notes reopen, deleted ones are skipped. Not kept between launches
+- 2026-11-03: One-page website in site/ (static: index.html, img/, no build step). Colours follow the app; the viewer's light or dark setting picks
+  matching screenshots. Each section is labelled with the path where that feature keeps its files. Screenshots come from the real app and a made-up
+  vault: after UI changes, npm run build, then node site/tools/capture.mjs (throwaway vault and app profile; the real vault and settings aren't touched).
+  The download button opens the latest GitHub release
+- 2026-11-03: Source made public at github.com/billowper/waypoint (Bill's choice, over a releases-only repo). Installers are GitHub releases, tagged vX.Y.Z,
+  with only the .exe attached (no auto-update, so no blockmap or latest.yml). The earlier "never pushed" rule no longer applies. No licence chosen yet

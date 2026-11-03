@@ -1,11 +1,12 @@
 import { useEffect, useState } from 'react'
 import { PRIORITIES, TASK_STATUSES, TASK_STATUS_LABEL, type Priority, type TaskStatus } from '@shared/types'
 import { useStore } from '../store'
+import { sendItems, sendToClaude, showMenu } from '../menus'
 import { dueState } from './Board'
 
 /** Task properties for the open task note, edited without touching its YAML */
 export default function TaskBar({ path }: { path: string }) {
-  const { tasks, updateTask, openBoard } = useStore()
+  const { tasks, updateTask, openBoard, prefs } = useStore()
   const task = tasks.find((t) => t.path === path)
   const [title, setTitle] = useState(task?.title ?? '')
   const [labels, setLabels] = useState(task?.labels.join(', ') ?? '')
@@ -65,6 +66,16 @@ export default function TaskBar({ path }: { path: string }) {
         onKeyDown={(e) => e.key === 'Enter' && (e.currentTarget as HTMLInputElement).blur()}
         aria-label="Labels"
       />
+      {prefs?.claudeCode && (
+        <button
+          className="btn small"
+          title={`Start a Claude Code session on this task, in the project's repo (${prefs.claudeSendTo === 'app' ? 'Claude app' : 'terminal'}). Right-click for the other way`}
+          onClick={() => sendToClaude(task, prefs.claudeSendTo)}
+          onContextMenu={(e) => showMenu(e, sendItems(task).slice(1))}
+        >
+          Send to Claude
+        </button>
+      )}
     </div>
   )
 }

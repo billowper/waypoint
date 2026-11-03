@@ -133,19 +133,35 @@ export async function writeInstructions(repo: string, title: string, slug: strin
   }
 }
 
-/** A new Code-tab session in the Claude desktop app, in the repo folder (the app asks to confirm the folder) */
-export async function openInClaudeApp(repo: string, title: string): Promise<void> {
-  const q = `Let's work on ${title}. What's open?`
-  await shell.openExternal(`claude://code/new?folder=${encodeURIComponent(repo)}&q=${encodeURIComponent(q)}`)
+/**
+ * What a task's session starts with. Plain characters only, because the terminal route passes it through
+ * command lines (wt.exe splits on ";", cmd.exe acts on & | % and quotes) and task titles can hold anything.
+ */
+export function taskPrompt(id: string, title: string): string {
+  const plain = (s: string) => s.replace(/[^\p{L}\p{N} .,_-]/gu, ' ').replace(/\s+/g, ' ').trim().slice(0, 120)
+  return `Work on Waypoint task ${plain(id)}: ${plain(title)}. Read it with waypoint_get_task, move it to doing, do the work, then move it to done with a short progress note.`
 }
 
-/** Claude Code in a terminal at the repo folder (Windows Terminal if there, else a console window) */
-export async function openInClaudeTerminal(repo: string): Promise<void> {
+/** A new Code-tab session in the Claude desktop app, in the repo folder. The app asks to confirm the folder and never sends the prompt itself */
+export async function openInClaudeApp(repo: string, prompt: string): Promise<void> {
+  await shell.openExternal(`claude://code/new?folder=${encodeURIComponent(repo)}&q=${encodeURIComponent(prompt)}`)
+}
+
+/** Claude Code in a terminal at the repo folder (Windows Terminal if there, else a console window); a prompt starts work straight away */
+export async function openInClaudeTerminal(repo: string, prompt?: string): Promise<void> {
   const cli = await findCli()
   if (!cli) throw new Error('Claude Code isn\'t installed (no "claude" command found).')
-  const wt = join(process.env.LOCALAPPDATA ?? '', 'Microsoft', 'WindowsApps', 'wt.exe')
-  const child = existsSync(wt)
-    ? spawn(wt, ['-d', repo, cli], { detached: true, stdio: 'ignore' })
-    : spawn('cmd.exe', ['/c', 'start', '"Claude Code"', '/d', repo, cli], { detached: true, stdio: 'ignore', windowsHide: true })
+  // wt.exe is a Store app alias: "where" finds it, existsSync can't see it
+  const hasWt = await run('where.exe', ['wt'], { windowsHide: true }).then(() => true, () => false)
+  const q = (s: string) => `"${s}"`
+  const child = hasWt
+    ? spawn('wt.exe', ['-d', repo, cli, ...(prompt ? [prompt] : [])], { detached: true, stdio: 'ignore' })
+    : // Verbatim, because start needs its quotes as written: Node would escape them and it would lose the title and command
+      spawn('cmd.exe', ['/c', 'start', q('Claude Code'), '/d', q(repo), q(cli), ...(prompt ? [q(prompt)] : [])], {
+        detached: true,
+        stdio: 'ignore',
+        windowsHide: true,
+        windowsVerbatimArguments: true
+      })
   child.unref()
 }

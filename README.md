@@ -41,3 +41,7 @@ src/preload    Safe bridge exposing window.api to the UI
 src/renderer   React UI (CodeMirror editor, sidebar, tabs, search, backlinks)
 src/shared     Types and link/name helpers used by both sides
 ```
+
+## Download
+
+Windows installers are on the [releases page](https://github.com/billowper/waypoint/releases/latest). The installer isn't code-signed yet, so SmartScreen warns you the first time: choose More info, then Run anyway.

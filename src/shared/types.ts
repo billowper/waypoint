@@ -8,6 +8,9 @@ export interface TreeNode {
   children?: TreeNode[]
 }
 
+/** Folder path ('' = vault root) → the names in it, in the order chosen by dragging */
+export type TreeOrder = Record<string, string[]>
+
 export interface VaultInfo {
   path: string
   name: string
@@ -123,6 +126,8 @@ export interface GitCommit {
 export interface VaultSettings {
   version: number
   git: { autoCommit: boolean; intervalMinutes: number }
+  /** notes/Captures and inbox.md have been moved to ideas/ (done once, on opening the vault) */
+  ideasMoved?: boolean
 }
 
 /** Things the main process asks the UI to do (jump list, tray, toasts, second launches) */
@@ -191,6 +196,9 @@ export interface Api {
   saveProject(slug: string, settings: ProjectSettings): Promise<void>
   /** Sidebar order of projects, by slug (.app/project-order.json) */
   saveProjectOrder(slugs: string[]): Promise<void>
+  /** Hand-made order of the sidebar tree: folder → names (.app/tree-order.json) */
+  treeOrder(): Promise<TreeOrder>
+  saveTreeOrder(dir: string, names: string[]): Promise<void>
   /** Outside-the-vault paths (repo folder, bookmarks); only paths a project lists are allowed */
   openPath(path: string): Promise<void>
   revealPath(path: string): Promise<void>
@@ -202,6 +210,8 @@ export interface Api {
   claudeDisconnect(): Promise<void>
   claudeInstructions(slug: string): Promise<void>
   claudeOpen(slug: string, where: 'app' | 'terminal'): Promise<void>
+  /** A new session in the task's project repo, starting on that task */
+  claudeSendTask(rel: string, where: 'app' | 'terminal'): Promise<void>
   /** Changes made through the connector, newest first (one project, or all) */
   claudeChanges(slug?: string, limit?: number): Promise<ClaudeChange[]>
   /** Undo one; false if cancelled */
@@ -232,7 +242,7 @@ export interface Api {
   prefs(): Promise<Prefs>
   savePrefs(prefs: Prefs): Promise<Prefs>
   desktopInfo(): Promise<DesktopInfo>
-  /** Quick capture window: append to inbox.md, then close */
+  /** Quick capture window: save as a new note in ideas/, then close */
   captureAdd(text: string): Promise<void>
   captureClose(): void
   /** Search popup: open a result in the main window (closes the popup) */

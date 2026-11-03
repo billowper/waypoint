@@ -1,7 +1,9 @@
 import type { MouseEvent as ReactMouseEvent } from 'react'
-import type { ViewRef } from '@shared/types'
+import { TASK_STATUSES, TASK_STATUS_LABEL, type Task, type ViewRef } from '@shared/types'
 import { linkTextFor } from '@shared/links'
-import { canRename, useStore, type MenuItem, type Tab } from './store'
+import { canNest } from '@shared/nesting'
+import { pagesFolder } from '@shared/names'
+import { canRename, flushEditors, useStore, type MenuItem, type Tab } from './store'
 
 // Right-click menus. Each builder returns the items for one kind of thing; `showMenu` opens them.
 
@@ -57,6 +59,39 @@ export function noteMenu(path: string): MenuItem[] {
   return [...openItems(ref), sep, iconItem(path), ...fileItems(path)]
 }
 
+/** Start a Claude Code session on a task, in its project's repo. Saves first so the session reads what's on screen */
+export async function sendToClaude(t: Task, where: 'app' | 'terminal') {
+  try {
+    await flushEditors()
+    await window.api.claudeSendTask(t.path, where)
+  } catch (e) {
+    alert(`Couldn't send ${t.id} to Claude Code.\n\n${(e as Error).message.replace(/^Error invoking remote method '[^']+': (Error: )?/, '')}`)
+  }
+}
+
+/** Both ways to send a task, the one chosen in Settings first */
+export function sendItems(t: Task): MenuItem[] {
+  const items = {
+    terminal: { label: 'Send to Claude Code', run: () => sendToClaude(t, 'terminal') },
+    app: { label: 'Send to Claude app', run: () => sendToClaude(t, 'app') }
+  }
+  return store().prefs?.claudeSendTo === 'app' ? [items.app, items.terminal] : [items.terminal, items.app]
+}
+
+/** A task anywhere it's listed: open it, send it to Claude Code, or move it to another column */
+export function taskMenu(t: Task): MenuItem[] {
+  const s = store()
+  return [
+    ...noteMenu(t.path),
+    sep,
+    ...(s.prefs?.claudeCode ? [...sendItems(t), sep] : []),
+    ...TASK_STATUSES.filter((st) => st !== t.status).map((st) => ({
+      label: `Move to ${TASK_STATUS_LABEL[st]}`,
+      run: () => s.updateTask(t.path, { status: st })
+    }))
+  ]
+}
+
 /** A file or folder in the tree */
 export function treeMenu(path: string, type: 'file' | 'dir'): MenuItem[] {
   const s = store()
@@ -65,6 +100,7 @@ export function treeMenu(path: string, type: 'file' | 'dir'): MenuItem[] {
   const openable = lower.endsWith('.md') || lower.endsWith('.excalidraw')
   return [
     ...(openable ? [...noteMenu(path), sep] : []),
+    ...(canNest(path) ? [{ label: 'New sub-page', run: () => s.newNote(pagesFolder(path)!) }, sep] : []),
     ...(type === 'dir'
       ? [
           { label: 'New note here', run: () => s.newNote(path) },

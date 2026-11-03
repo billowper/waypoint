@@ -25,6 +25,17 @@ Full phased plan: `docs/build-plan.md`. Keep its Decisions log and phase status 
   points it at a scratch ~/.claude.json for testing). Claude stays optional: the app must never depend on or call Claude.
   Change log + undo snapshots: src/main/claudeLog.ts (feed + undo in index.ts / ClaudeCode.tsx).
 - **Sidebar project reordering** (2026-11-01, 0.10.1): drag project rows; order in `.app/project-order.json`.
+- **Send tasks to Claude Code** (2026-11-02, 0.10.2): TaskBar button + `taskMenu` (menus.ts) → `claude:send-task` (index.ts) →
+  `taskPrompt`/`openInClaudeTerminal`/`openInClaudeApp` (claudeCode.ts). Only the terminal route auto-starts; claude:// links never send.
+- **Ideas replace the inbox** (2026-11-03, 0.12.0): every quick capture is a note in `IDEAS_DIR` (ideas/, `Vault.addIdea`), shown as the Ideas
+  sidebar section. `moveCapturesToIdeas` (index.ts) moves notes/Captures and inbox.md there once per vault (`ideasMoved` in .app/settings.json).
+  Connector tools: waypoint_add_idea, waypoint_list_ideas.
+- **Nested pages, contents pane, back/forward** (2026-11-03, 0.11.0, awaiting Bill's review): a note's sub-pages are the same-named
+  folder beside it (Plan.md + Plan/). `src/shared/nesting.ts` `arrange` merges each pair into one row and applies `.app/tree-order.json`
+  (src/main/treeOrder.ts); `state.tree` stays what's on disk. `Vault.move/rename/duplicate` carry the folder and `movedPath` follows it, so
+  tabs, icons, links and recents need nothing extra. Contents pane: `components/Toc.tsx`, driven from Editor.tsx. Back/forward: window-wide
+  `navBack`/`navForward` in store.ts, recorded in `setTabs`.
+- **Website** (2026-11-03): static page in `site/`. Retake screenshots with `npm run build` then `node site/tools/capture.mjs` (sample vault in `site/tools/demo-vault.mjs`). Update the version in `site/index.html` on release; installers go on GitHub releases (`gh release create vX.Y.Z dist/Waypoint-Setup-X.Y.Z.exe`).
 - Then: Phase 2 with Bill's project spec (settings in `project.md` frontmatter — see build plan; confirm the
   YAML shape with him first).
 - Windows gotcha: chokidar holds handles on watched folders, so any folder rename/move/delete must run inside

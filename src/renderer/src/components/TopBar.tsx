@@ -29,7 +29,7 @@ export function tabTitle(t: Tab, projects: Project[]): string {
 
 /** Tab strip across the top of the window (also the window's drag area) */
 export function TabBar() {
-  const { tabs, activeTab, activateTab, closeTab, newTab, projects, moveTabToWindow, receiveTab } = useStore()
+  const { tabs, activeTab, activateTab, closeTab, newTab, projects, moveTabToWindow, receiveTab, navBack, navForward, navigate } = useStore()
   const [dropHere, setDropHere] = useState(false)
 
   const onMouseDown = (t: Tab) => (e: MouseEvent) => {
@@ -85,6 +85,14 @@ export function TabBar() {
           ◆
         </button>
       )}
+      <div className="nav-arrows">
+        <button className="icon-btn" title="Back (Alt+Left)" disabled={!navBack.length} onClick={() => navigate(-1)}>
+          ←
+        </button>
+        <button className="icon-btn" title="Forward (Alt+Right)" disabled={!navForward.length} onClick={() => navigate(1)}>
+          →
+        </button>
+      </div>
       <div className="tabs">
         {tabs.map((t) => (
           <div
@@ -120,7 +128,7 @@ export function TabBar() {
 
 /** Folder path, title (click to rename) and note actions for the open note */
 export function PathBar() {
-  const { view, activeTab, saveStates, rename, backlinksOpen, toggleBacklinks, openHistory, git, projects, openProject, openBoard, revealFolder, openIconPicker } =
+  const { view, activeTab, saveStates, rename, backlinksOpen, toggleBacklinks, tocOpen, toggleToc, openHistory, git, projects, notes, openFile, openProject, openBoard, revealFolder, openIconPicker } =
     useStore()
   if (view.kind !== 'file') return null
   const crumbs = view.path.replace(/\.md$/i, '').split('/')
@@ -136,6 +144,9 @@ export function PathBar() {
 
   return (
     <div className="pathbar">
+      <button className={`icon-btn ${tocOpen ? 'on' : ''}`} title="Contents (Ctrl+Shift+O)" onClick={toggleToc}>
+        ☰
+      </button>
       <nav className="crumbs">
         {crumbs.map((c, i) =>
           i === crumbs.length - 1 ? (
@@ -159,15 +170,18 @@ export function PathBar() {
             (() => {
               const dir = folderAt(i)
               const slug = projectAt(dir)
+              // The folder of a note's sub-pages stands for that note
+              const parentNote = notes.includes(`${dir}.md`) ? `${dir}.md` : null
               return (
                 <button
                   key={i}
                   className="crumb link"
-                  title={slug ? 'Open the project' : boardAt(dir) ? 'Open the task board' : 'Show this folder in the sidebar'}
+                  title={slug ? 'Open the project' : boardAt(dir) ? 'Open the task board' : parentNote ? 'Open this page' : 'Show this folder in the sidebar'}
                   onClick={(e) => {
                     const board = boardAt(dir)
                     if (slug) openProject(slug, { newTab: e.ctrlKey })
                     else if (board) openBoard(board, { newTab: e.ctrlKey })
+                    else if (parentNote) openFile(parentNote, { newTab: e.ctrlKey })
                     else revealFolder(dir)
                   }}
                   onContextMenu={(e) => showMenu(e, slug ? projectMenu(slug) : treeMenu(dir, 'dir'))}

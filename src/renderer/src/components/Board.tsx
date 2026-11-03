@@ -1,20 +1,7 @@
 import { useRef, useState, type MouseEvent, type PointerEvent } from 'react'
 import { PRIORITIES, TASK_STATUSES, TASK_STATUS_LABEL, type Task, type TaskStatus } from '@shared/types'
 import { useStore } from '../store'
-import { noteMenu, showMenu } from '../menus'
-
-/** A task's menu: open it anywhere, or move it to another column */
-function taskMenu(t: Task) {
-  const s = useStore.getState()
-  return [
-    ...noteMenu(t.path),
-    'separator' as const,
-    ...TASK_STATUSES.filter((st) => st !== t.status).map((st) => ({
-      label: `Move to ${TASK_STATUS_LABEL[st]}`,
-      run: () => s.updateTask(t.path, { status: st })
-    }))
-  ]
-}
+import { showMenu, taskMenu } from '../menus'
 
 /** Pixels the pointer must move before a press on a card becomes a drag */
 const DRAG_THRESHOLD = 5

@@ -1,9 +1,10 @@
 import { app, BrowserWindow, dialog, globalShortcut, ipcMain, Menu, screen, shell, nativeTheme } from 'electron'
 import { basename, join, posix } from 'path'
 import { existsSync } from 'fs'
-import { mkdir, readFile, stat } from 'fs/promises'
+import { mkdir, readFile, rmdir, stat } from 'fs/promises'
 import { watch, type FSWatcher } from 'chokidar'
 import { Vault } from './vault'
+import { dropFromTreeOrder, moveInTreeOrder, readTreeOrder, saveTreeOrder } from './treeOrder'
 import { NotesIndex } from './notesIndex'
 import {
   createBoard,
@@ -15,7 +16,7 @@ import {
   saveProject,
   saveProjectOrder
 } from './projects'
-import { claudeStatus, connectClaude, disconnectClaude, openInClaudeApp, openInClaudeTerminal, writeInstructions } from './claudeCode'
+import { claudeStatus, connectClaude, disconnectClaude, openInClaudeApp, openInClaudeTerminal, taskPrompt, writeInstructions } from './claudeCode'
 import { createTask, isTaskPath, listTasks, updateTask } from './tasks'
 import { VaultGit } from './git'
 import type { ProjectSettings, TaskFields, VaultSettings } from '@shared/types'
@@ -51,7 +52,7 @@ import {
 import type { ViewRef } from '@shared/types'
 import type { AppCommand, DesktopInfo } from '@shared/types'
 import type { ChangeEvent, VaultInfo } from '@shared/types'
-import { movedPath } from '@shared/names'
+import { IDEAS_DIR, movedPath } from '@shared/names'
 import { updateLinks } from './relink'
 import { serveBridge, type BridgeRequest } from './bridge'
 import { hashText, markUndone, readChanges, snapshotPath } from './claudeLog'
@@ -119,8 +120,40 @@ async function setVault(path: string | undefined) {
     notes!.rebuild()
     startWatching(vault)
     bridge = serveBridge(vault.root, answerConnector)
+    await moveCapturesToIdeas(vault).catch((e) => console.error('[ideas]', e)) // tried again next time
   }
   scheduleAutoCommit()
+}
+
+/** Once per vault: quick captures used to live in notes/Captures and inbox.md */
+async function moveCapturesToIdeas(v: Vault) {
+  const settings = await v.settings()
+  if (settings.ideasMoved || !v.isSetUp()) return
+  const toIdeas = (rel: string) => relocate(rel, (vv) => vv.move(rel, IDEAS_DIR))
+  const captures = 'notes/Captures'
+  // Notes first: each brings its sub-pages folder along
+  const nodes = await v.tree(captures)
+  for (const n of [...nodes.filter((x) => x.type === 'file'), ...nodes.filter((x) => x.type === 'dir')]) {
+    if (existsSync(v.abs(n.path))) await toIdeas(n.path)
+  }
+  if (existsSync(v.abs(captures))) {
+    await withFolderUnlocked(v, captures, () => rmdir(v.abs(captures)).catch(() => undefined)) // hidden files stay put
+    await dropFromTreeOrder(v, captures)
+    await dropIcons(v, captures)
+  }
+  const inbox = await v.read('inbox.md').catch(() => null)
+  // Nothing but the heading and the old starter text: to the Recycle Bin. Anything else is kept, as one idea.
+  if (inbox !== null && /^# inbox\s*((quick captures land here|things to sort)[^\n]*\s*)?$/i.test(inbox)) {
+    await shell.trashItem(v.abs('inbox.md'))
+    await dropIcons(v, 'inbox.md')
+    updateRecent(v, (r) => (r === 'inbox.md' ? null : r))
+    await requireIndex().remove('inbox.md')
+    broadcast('vault:removed', ['inbox.md'])
+    notify([{ event: 'unlink', path: 'inbox.md' }])
+  } else if (inbox !== null) {
+    await toIdeas('inbox.md')
+  }
+  await v.saveSettings({ ...settings, ideasMoved: true })
 }
 
 /** File changes go to every Waypoint window (each has its own tree, editors, search) */
@@ -158,15 +191,18 @@ function startWatching(v: Vault) {
  * moving or deleting a folder (EPERM). Run `op` with the watcher paused when `rel` is a folder.
  */
 async function withFolderUnlocked<T>(v: Vault, rel: string, op: () => Promise<T>): Promise<T> {
-  const isDir = (await stat(v.abs(rel))).isDirectory()
-  if (isDir) {
+  // A note can bring a folder with it (its sub-pages) or leave one to be removed (its parent's, now empty)
+  const parent = posix.dirname(rel)
+  const locks =
+    (await stat(v.abs(rel))).isDirectory() || !!v.pagesOf(rel) || (parent !== '.' && v.isPagesFolder(parent))
+  if (locks) {
     await watcher?.close()
     watcher = null
   }
   try {
     return await op()
   } finally {
-    if (isDir && vault === v && !watcher) startWatching(v)
+    if (locks && vault === v && !watcher) startWatching(v)
   }
 }
 
@@ -189,6 +225,7 @@ async function relocate(rel: string, op: (v: Vault) => Promise<string>, sender?:
   broadcast('vault:moved', [rel, to], sender) // other windows' editors and tabs follow
   if (await moveIcons(v, rel, to)) broadcast('icons:changed', [])
   await renameInProjectOrder(v, rel, to)
+  await moveInTreeOrder(v, rel, to)
   const changed = await updateLinks(v, index, before, rel, to)
   await index.rebuild()
   notify(changed.map((path) => ({ event: 'change', path })))
@@ -218,6 +255,7 @@ async function trashPath(rel: string, asker: BrowserWindow, except?: Electron.We
   const abs = v.abs(rel)
   if (abs === v.root) throw new Error('Cannot delete the vault itself')
   const isDir = (await stat(abs)).isDirectory()
+  const pages = v.pagesOf(rel)
   const { response } = await dialog.showMessageBox(asker, {
     type: 'warning',
     buttons: ['Move to Recycle Bin', 'Cancel'],
@@ -227,6 +265,7 @@ async function trashPath(rel: string, asker: BrowserWindow, except?: Electron.We
     message: `Move "${basename(abs)}" to the Recycle Bin?`,
     detail: [
       why,
+      pages ? 'Its sub-pages go too.' : '',
       isDir ? 'The folder and everything in it can be restored from the Recycle Bin.' : 'You can restore it from the Recycle Bin.'
     ]
       .filter(Boolean)
@@ -236,10 +275,16 @@ async function trashPath(rel: string, asker: BrowserWindow, except?: Electron.We
   // Other windows stop editing (and saving) it before it goes
   await flushOthers(except)
   broadcast('vault:removed', [rel], except)
-  await withFolderUnlocked(v, rel, () => shell.trashItem(abs))
+  await withFolderUnlocked(v, rel, async () => {
+    await shell.trashItem(abs)
+    if (pages) await shell.trashItem(v.abs(pages))
+    if (rel.includes('/')) await v.pruneEmptyPages(posix.dirname(rel))
+  })
+  await dropFromTreeOrder(v, rel)
   if (await dropIcons(v, rel)) broadcast('icons:changed', [])
   updateRecent(v, (r) => (movedPath(r, rel, rel) ? null : r))
   await requireIndex().remove(rel)
+  if (pages) await requireIndex().remove(pages)
   notify([{ event: isDir ? 'unlinkDir' : 'unlink', path: rel }])
   return true
 }
@@ -419,7 +464,7 @@ function registerIpc() {
         title: 'Set up this folder?',
         message: `Set up "${v.name}" as a Waypoint vault?`,
         detail:
-          'Adds notes/, projects/, inbox.md and a small .app/ settings folder. Existing files are never changed.'
+          'Adds notes/, ideas/, projects/ and a small .app/ settings folder. Existing files are never changed.'
       })
       if (choice.response === 2) return info()
       if (choice.response === 0) await v.setUp()
@@ -429,6 +474,8 @@ function registerIpc() {
   })
 
   ipcMain.handle('vault:tree', () => requireVault().tree())
+  ipcMain.handle('tree:order', () => readTreeOrder(requireVault()))
+  ipcMain.handle('tree:saveOrder', (_e, dir: string, names: string[]) => saveTreeOrder(requireVault(), dir, names))
   ipcMain.handle('vault:stats', () => requireVault().stats())
   ipcMain.handle('file:read', (_e, rel: string) => requireVault().read(rel))
   ipcMain.handle('file:write', (_e, rel: string, content: string) => requireVault().write(rel, content))
@@ -546,7 +593,31 @@ function registerIpc() {
   })
   ipcMain.handle('claude:open', async (_e, slug: string, where: 'app' | 'terminal') => {
     const p = await repoOf(slug)
-    await (where === 'app' ? openInClaudeApp(p.repo.path, p.title) : openInClaudeTerminal(p.repo.path))
+    await (where === 'app' ? openInClaudeApp(p.repo.path, `Let's work on ${p.title}. What's open?`) : openInClaudeTerminal(p.repo.path))
+  })
+  // A new session in the project's repo that starts on this task; offers to set the project up first if it isn't
+  ipcMain.handle('claude:send-task', async (e, rel: string, where: 'app' | 'terminal') => {
+    const task = (await listTasks(requireVault())).find((t) => t.path === rel)
+    if (!task) throw new Error(`Couldn't find the task ${rel}.`)
+    const p = await repoOf(task.project)
+    const status = await claudeStatus(p.repo.path)
+    if (!status.cli) throw new Error('Claude Code isn\'t installed (no "claude" command found).')
+    if (status.connector !== 'connected' || !status.instructions) {
+      const { response } = await dialog.showMessageBox(BrowserWindow.fromWebContents(e.sender) ?? win!, {
+        type: 'question',
+        buttons: ['Set up and send', 'Cancel'],
+        defaultId: 0,
+        cancelId: 1,
+        title: 'Claude Code',
+        message: `Set up ${p.title} for Claude Code first?`,
+        detail: 'The session needs Waypoint connected to read the task, and instructions for this project in the repo (CLAUDE.local.md, kept out of git).'
+      })
+      if (response !== 0) return
+      if (status.connector !== 'connected') await connectClaude()
+      await writeInstructions(p.repo.path, p.title, p.slug)
+    }
+    const prompt = taskPrompt(task.id, task.title)
+    await (where === 'app' ? openInClaudeApp(p.repo.path, prompt) : openInClaudeTerminal(p.repo.path, prompt))
   })
 
   ipcMain.handle('file:reveal', (_e, rel: string) => shell.showItemInFolder(requireVault().abs(rel)))
@@ -577,7 +648,7 @@ function registerIpc() {
     searchHotkey: hotkeyRegistered('search')
   }))
   ipcMain.handle('capture:add', async (_e, text: string) => {
-    await requireVault().appendToInbox(text)
+    await requireVault().addIdea(text)
     closePopup('capture')
   })
   ipcMain.on('capture:close', () => closePopup('capture'))

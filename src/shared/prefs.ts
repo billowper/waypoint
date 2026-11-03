@@ -17,6 +17,8 @@ export interface Prefs {
   backup: BackupPrefs
   /** Show the optional Claude Code controls (project page, Settings) */
   claudeCode: boolean
+  /** Where "Send to Claude" goes first: a terminal starts work straight away, the Claude app waits for Enter */
+  claudeSendTo: 'terminal' | 'app'
 }
 
 export interface ThemeColors {
@@ -84,7 +86,8 @@ export const DEFAULT_PREFS: Prefs = {
   uiScale: 1,
   searchHotkey: 'Control+Alt+F',
   backup: { dir: '', daily: true, keep: 14, last: 0 },
-  claudeCode: true
+  claudeCode: true,
+  claudeSendTo: 'terminal'
 }
 
 /** Fill in anything missing (older config files, hand edits) */

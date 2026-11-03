@@ -1,5 +1,5 @@
 import { useStore } from '../store'
-import { noteMenu, projectMenu, showMenu } from '../menus'
+import { noteMenu, projectMenu, showMenu, taskMenu } from '../menus'
 import Icon, { noteDefault } from './Icon'
 import { byUrgency, dueState, formatDue } from './Board'
 import { ClaudeFeed } from './ClaudeCode'
@@ -10,7 +10,7 @@ function greeting() {
 }
 
 export default function Home() {
-  const { stats, recent, openFile, newNote, tree, projects, openProject, createProject, tasks, notes, prefs } = useStore()
+  const { stats, recent, openFile, newNote, projects, openProject, createProject, tasks, notes, prefs } = useStore()
   const active = projects.filter((p) => p.status === 'active')
   // My work: open tasks in projects that aren't finished, overdue first
   const liveProjects = new Set(projects.filter((p) => p.status !== 'done').map((p) => p.slug))
@@ -20,7 +20,6 @@ export default function Home() {
   )
   const dueSoon = open.filter((t) => ['overdue', 'today', 'soon'].includes(dueState(t))).length
   const projectTitle = (slug: string) => projects.find((p) => p.slug === slug)?.title ?? slug
-  const hasInbox = tree.some((n) => n.path === 'inbox.md')
   const date = new Date().toLocaleDateString(undefined, {
     weekday: 'long',
     day: 'numeric',
@@ -41,11 +40,6 @@ export default function Home() {
         <button className="btn" onClick={createProject}>
           New project
         </button>
-        {hasInbox && (
-          <button className="btn" onClick={() => openFile('inbox.md')}>
-            Open inbox
-          </button>
-        )}
       </div>
 
       <section className="stat-row">
@@ -73,7 +67,7 @@ export default function Home() {
               <li key={t.path}>
                 <button
                   onClick={(e) => openFile(t.path, { newTab: e.ctrlKey })}
-                  onContextMenu={(e) => showMenu(e, noteMenu(t.path))}
+                  onContextMenu={(e) => showMenu(e, taskMenu(t))}
                 >
                   <span className="task-id">{t.id}</span>
                   <Icon path={t.path} />

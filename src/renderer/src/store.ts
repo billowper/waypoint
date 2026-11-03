@@ -1,7 +1,8 @@
 import { create } from 'zustand'
 import type { ViewRef } from '@shared/types'
-import type { GitStatus, NudgeInfo, Project, Task, TaskFields, TreeNode, VaultInfo, VaultSettings, VaultStats } from '@shared/types'
-import { baseName, movedPath } from '@shared/names'
+import type { GitStatus, NudgeInfo, Project, Task, TaskFields, TreeNode, TreeOrder, VaultInfo, VaultSettings, VaultStats } from '@shared/types'
+import { baseName, IDEAS_DIR, movedPath, pagesFolder } from '@shared/names'
+import { arrange, findNode } from '@shared/nesting'
 import type { Prefs } from '@shared/prefs'
 
 /** `docId` stays the same when the open file is renamed, so the editor isn't recreated. */
@@ -55,6 +56,7 @@ export interface Reveal {
 interface State {
   vault: VaultInfo | null
   tree: TreeNode[]
+  treeOrder: TreeOrder
   /** Every .md note in the vault, for links, Ctrl+P and autocomplete */
   notes: string[]
   /** Every .excalidraw board in the vault */
@@ -88,6 +90,11 @@ interface State {
   /** The nudge Bill clicked through, shown as a banner until dismissed */
   nudge: NudgeInfo | null
   backlinksOpen: boolean
+  /** The contents pane beside the note */
+  tocOpen: boolean
+  /** Where Back and Forward go in this window, nearest last */
+  navBack: ViewRef[]
+  navForward: ViewRef[]
   prompt: PromptState | null
   menu: MenuState | null
   picker: PickerState | null
@@ -132,7 +139,10 @@ interface State {
   /** Ask for a new name, then rename. */
   rename(path: string): Promise<void>
   renameTo(path: string, name: string): Promise<string>
-  move(path: string, destDir: string): Promise<void>
+  /** Returns where it ended up, or null if it didn't move */
+  move(path: string, destDir: string): Promise<string | null>
+  /** Move (if need be) into `destDir` and put it right before or after the sibling called `anchor` */
+  place(path: string, destDir: string, anchor: { name: string; after: boolean }): Promise<void>
   duplicate(path: string): Promise<void>
   remove(path: string): Promise<void>
   ask(title: string, opts?: { placeholder?: string; initial?: string; action?: string }): Promise<string | null>
@@ -142,7 +152,7 @@ interface State {
   openPicker(picker: PickerState): void
   closePicker(): void
   setSidebarMode(mode: State['sidebarMode']): void
-  toggleSection(section: 'files' | 'inbox'): void
+  toggleSection(section: 'files' | 'notes' | 'ideas'): void
   /** Open the icon chooser for a path (at a point, or where the last menu was) */
   openIconPicker(path: string, at?: { x: number; y: number }): void
   closeIconPicker(): void
@@ -154,6 +164,9 @@ interface State {
   /** Set the projects' order (all slugs, first to last); saved for every window */
   reorderProjects(slugs: string[]): Promise<void>
   toggleBacklinks(): void
+  toggleToc(): void
+  /** Back (-1) or forward (1) through the places visited in this window */
+  navigate(step: -1 | 1): Promise<void>
   clearReveal(): void
 }
 
@@ -168,7 +181,8 @@ let prefsTimer: ReturnType<typeof setTimeout> | null = null
 /** Sidebar sections: the file tree starts hidden; projects open while you're in them unless set */
 export interface SidebarOpen {
   files: boolean
-  inbox: boolean
+  notes: boolean
+  ideas: boolean
   /** Explicit choice per project; missing = open only while that project is in focus */
   projects: Record<string, boolean>
 }
@@ -176,9 +190,10 @@ const SIDEBAR_KEY = 'waypoint:sidebar'
 function loadSidebar(): SidebarOpen {
   try {
     const s = JSON.parse(localStorage.getItem(SIDEBAR_KEY) ?? 'null')
-    return { files: !!s?.files, inbox: s?.inbox !== false, projects: s?.projects ?? {} }
+    // Notes was saved as "inbox" before Ideas split off
+    return { files: !!s?.files, notes: (s?.notes ?? s?.inbox) !== false, ideas: s?.ideas !== false, projects: s?.projects ?? {} }
   } catch {
-    return { files: false, inbox: true, projects: {} }
+    return { files: false, notes: true, ideas: true, projects: {} }
   }
 }
 function saveSidebar(s: SidebarOpen) {
@@ -187,6 +202,36 @@ function saveSidebar(s: SidebarOpen) {
   } catch {
     /* ignore */
   }
+}
+const TOC_KEY = 'waypoint:toc'
+function loadToc(): boolean {
+  try {
+    return localStorage.getItem(TOC_KEY) === '1'
+  } catch {
+    return false
+  }
+}
+function saveToc(open: boolean) {
+  try {
+    localStorage.setItem(TOC_KEY, open ? '1' : '0')
+  } catch {
+    /* ignore */
+  }
+}
+const NAV_LIMIT = 100
+const navKey = (r: ViewRef) => JSON.stringify(r)
+/** Where a remembered place is now, after a rename or move */
+function movedRef(r: ViewRef, from: string, to: string): ViewRef {
+  if (r.kind === 'project' || r.kind === 'board') {
+    const moved = movedPath(`projects/${r.slug}`, from, to)
+    if (!moved) return r
+    return /^projects\/[^/]+$/.test(moved) ? { kind: r.kind, slug: moved.slice('projects/'.length) } : { kind: 'home' }
+  }
+  if (r.kind === 'file' || r.kind === 'canvas' || r.kind === 'history') {
+    const moved = movedPath(r.path, from, to)
+    return moved ? { ...r, path: moved } : r
+  }
+  return r
 }
 const homeTab = (): Tab => ({ id: ++nextId, view: { kind: 'home' } })
 
@@ -293,11 +338,21 @@ function loadTabs(vault: string, notes: string[], projects: Project[]): { tabs: 
 }
 
 export const useStore = create<State>((set, get) => {
-  /** Set tabs and keep `view` in step with the active one. */
+  /** What's showing now, and whether Back/Forward (rather than you) is what's changing it */
+  let navHere: ViewRef | null = null
+  let navigating = false
+
+  /** Set tabs and keep `view` in step with the active one. Going somewhere else is remembered for Back. */
   const setTabs = (tabs: Tab[], activeTab: number, extra: Partial<State> = {}) => {
     if (!tabs.length) tabs = [homeTab()]
     const active = tabs.find((t) => t.id === activeTab) ?? tabs[0]
-    set({ tabs, activeTab: active.id, view: active.view, ...extra })
+    const here = toRef(active.view)
+    const nav: Partial<State> =
+      navHere && !navigating && navKey(navHere) !== navKey(here)
+        ? { navBack: [...(extra.navBack ?? get().navBack), navHere].slice(-NAV_LIMIT), navForward: [] }
+        : {}
+    navHere = here
+    set({ tabs, activeTab: active.id, view: active.view, ...extra, ...nav })
     saveTabs(get().vault?.path, tabs, active.id)
     window.api.reportWindowState({
       views: tabs.map((t) => toRef(t.view)),
@@ -323,7 +378,13 @@ export const useStore = create<State>((set, get) => {
       const moved = movedPath(t.view.path, from, to)
       return moved ? { ...t, view: { ...t.view, path: moved } } : t
     })
-    setTabs(tabs, s.activeTab, { expanded, selectedDir: movedPath(s.selectedDir, from, to) ?? s.selectedDir })
+    if (navHere) navHere = movedRef(navHere, from, to) // the same place under a new name isn't going anywhere
+    setTabs(tabs, s.activeTab, {
+      expanded,
+      selectedDir: movedPath(s.selectedDir, from, to) ?? s.selectedDir,
+      navBack: s.navBack.map((r) => movedRef(r, from, to)),
+      navForward: s.navForward.map((r) => movedRef(r, from, to))
+    })
   }
 
   const isOpen = (path: string) => get().tabs.some((t) => t.view.kind === 'file' && t.view.path === path)
@@ -373,6 +434,7 @@ export const useStore = create<State>((set, get) => {
   return {
     vault: null,
     tree: [],
+    treeOrder: {},
     notes: [],
     boards: [],
     folders: [],
@@ -397,6 +459,9 @@ export const useStore = create<State>((set, get) => {
     prefs: null,
     nudge: null,
     backlinksOpen: true,
+    tocOpen: loadToc(),
+    navBack: [],
+    navForward: [],
     prompt: null,
     menu: null,
     picker: null,
@@ -420,7 +485,8 @@ export const useStore = create<State>((set, get) => {
     async openVault() {
       const vault = await window.api.openVault()
       if (vault?.path === get().vault?.path) return
-      set({ vault, tree: [], recent: [] })
+      set({ vault, tree: [], recent: [], navBack: [], navForward: [] })
+      navHere = null
       if (!vault) return
       await get().refresh()
       listenToOtherWindows()
@@ -435,8 +501,9 @@ export const useStore = create<State>((set, get) => {
 
     async refresh() {
       if (!get().vault) return
-      const [tree, stats, recent, projects, tasks, icons] = await Promise.all([
+      const [tree, treeOrder, stats, recent, projects, tasks, icons] = await Promise.all([
         window.api.tree(),
+        window.api.treeOrder().catch(() => get().treeOrder),
         window.api.stats(),
         window.api.recent(),
         window.api.projects(),
@@ -447,7 +514,7 @@ export const useStore = create<State>((set, get) => {
       const folders: string[] = []
       const boards: string[] = []
       flatten(tree, notes, folders, boards)
-      set({ tree, stats, recent, notes, folders, boards, projects, tasks, icons })
+      set({ tree, treeOrder, stats, recent, notes, folders, boards, projects, tasks, icons })
       get().refreshGit()
     },
 
@@ -761,20 +828,40 @@ ${(e as Error).message}`)
     },
 
     async move(path, destDir) {
-      if (parentOf(path) === destDir || destDir === path || destDir.startsWith(path + '/')) return
+      // Not into itself, nor into its own sub-pages
+      const pages = pagesFolder(path)
+      const inside = (dir: string) => destDir === dir || destDir.startsWith(dir + '/')
+      if (parentOf(path) === destDir || inside(path) || (pages && inside(pages))) return null
       try {
         await flushEditors()
-        await enqueue(async () => {
+        const to = await enqueue(async () => {
           const to = await window.api.move(path, destDir)
-          if (to === path) return
+          if (to === path) return to
           editors.forEach((e) => e.renamed(path, to))
           applyMove(path, to)
           set((s) => ({ expanded: { ...s.expanded, [destDir]: true } }))
+          return to
         })
         await get().refresh()
+        return to === path ? null : to
       } catch (e) {
         alert(`Couldn't move "${baseName(path)}".\n\n${(e as Error).message}`)
+        return null
       }
+    },
+
+    async place(path, destDir, anchor) {
+      const to = parentOf(path) === destDir ? path : await get().move(path, destDir)
+      if (!to) return
+      const name = to.slice(to.lastIndexOf('/') + 1)
+      if (name === anchor.name) return
+      const { tree, treeOrder } = get()
+      const siblings = destDir ? (findNode(tree, destDir)?.children ?? []) : tree
+      const names = arrange(siblings, treeOrder[destDir]).map((n) => n.name).filter((n) => n !== name)
+      const at = names.indexOf(anchor.name)
+      names.splice(at === -1 ? names.length : at + (anchor.after ? 1 : 0), 0, name)
+      set({ treeOrder: { ...treeOrder, [destDir]: names } })
+      await window.api.saveTreeOrder(destDir, names)
     },
 
     async duplicate(path) {
@@ -839,7 +926,8 @@ ${(e as Error).message}`)
       const project = /^projects\/([^/]+)/.exec(path)?.[1]
       let mode = s.sidebarMode
       if (project && path !== `projects/${project}`) sidebarOpen.projects[project] = true
-      else if (path === 'notes' || path.startsWith('notes/')) sidebarOpen.inbox = true
+      else if (path === 'notes' || path.startsWith('notes/')) sidebarOpen.notes = true
+      else if (path === IDEAS_DIR || path.startsWith(`${IDEAS_DIR}/`)) sidebarOpen.ideas = true
       else {
         sidebarOpen.files = true
         mode = 'files'
@@ -849,8 +937,9 @@ ${(e as Error).message}`)
       // Once it's drawn: scroll to the folder's row and flash it
       requestAnimationFrame(() =>
         requestAnimationFrame(() => {
-          const rows = document.querySelectorAll<HTMLElement>(`[data-path="${CSS.escape(path)}"]`)
-          const row = rows[0]
+          const row =
+            document.querySelector<HTMLElement>(`[data-path="${CSS.escape(path)}"]`) ??
+            document.querySelector<HTMLElement>(`[data-path="${CSS.escape(path + '.md')}"]`)
           if (!row) return
           row.scrollIntoView({ block: 'nearest' })
           row.classList.remove('flash')
@@ -897,6 +986,47 @@ ${(e as Error).message}`)
       set({ sidebarOpen })
     },
     toggleBacklinks: () => set((s) => ({ backlinksOpen: !s.backlinksOpen })),
+    toggleToc() {
+      const tocOpen = !get().tocOpen
+      saveToc(tocOpen)
+      set({ tocOpen })
+    },
+
+    async navigate(step) {
+      const s = get()
+      // Skip anywhere that has since been deleted
+      const exists = (r: ViewRef) =>
+        r.kind === 'file'
+          ? s.notes.includes(r.path)
+          : r.kind === 'canvas'
+            ? s.boards.includes(r.path)
+            : r.kind === 'project' || r.kind === 'board'
+              ? s.projects.some((p) => p.slug === r.slug)
+              : true
+      const list = (step < 0 ? s.navBack : s.navForward).filter(exists)
+      const target = list.pop()
+      if (!target || !navHere) return set(step < 0 ? { navBack: [] } : { navForward: [] })
+      const left = navHere
+      const open = s.tabs.find((t) => navKey(toRef(t.view)) === navKey(target))
+      navigating = true
+      try {
+        if (open) setTabs(s.tabs, open.id)
+        else if (target.kind === 'file') await s.openFile(target.path)
+        else if (target.kind === 'canvas') await s.openCanvas(target.path)
+        else if (target.kind === 'project') s.openProject(target.slug)
+        else if (target.kind === 'board') s.openBoard(target.slug)
+        else if (target.kind === 'history') s.openHistory(target.path)
+        else if (target.kind === 'settings') s.openSettings()
+        else s.goHome()
+      } finally {
+        navigating = false
+      }
+      // Open in another window, which came forward instead: nothing changed here
+      const arrived = navKey(navHere) === navKey(target)
+      const other = step < 0 ? s.navForward : s.navBack
+      const opposite = arrived ? [...other, left].slice(-NAV_LIMIT) : other
+      set(step < 0 ? { navBack: list, navForward: opposite } : { navForward: list, navBack: opposite })
+    },
     clearReveal: () => set({ reveal: null })
   }
 })

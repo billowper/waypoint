@@ -1,5 +1,5 @@
 /**
- * The connector's write tools: keep tasks, docs, the inbox and project settings up to date.
+ * The connector's write tools: keep tasks, docs, ideas and project settings up to date.
  * Nothing here deletes a file (Bill's rule). Every change is logged (src/main/claudeLog.ts),
  * with the old text kept for edits so Bill can undo them from the app.
  *
@@ -14,11 +14,13 @@ import { createProject, readProject, saveProject } from '../main/projects'
 import { createTask, updateTask } from '../main/tasks'
 import { NotesIndex } from '../main/notesIndex'
 import { moveIcons } from '../main/iconMap'
+import { moveInTreeOrder } from '../main/treeOrder'
 import { updateLinks } from '../main/relink'
 import { askApp, type BridgeRequest } from '../main/bridge'
 import { recordChange, type NewChange } from '../main/claudeLog'
 import { PRIORITIES, PROJECT_STATUSES, TASK_STATUSES, type Priority, type ProjectSettings, type ProjectStatus, type TaskFields, type TaskStatus } from '@shared/types'
 import { joinFrontmatter, splitFrontmatter } from '@shared/frontmatter'
+import { IDEAS_DIR } from '@shared/names'
 import { findNote, findTask, openVault, pickProject, safely, taskLine, today } from './common'
 
 const WRITE = { readOnlyHint: false, destructiveHint: false, idempotentHint: false, openWorldHint: false }
@@ -49,6 +51,7 @@ async function relocate(vault: Vault, req: Extract<BridgeRequest, { op: 'rename'
   const to = req.op === 'rename' ? await vault.rename(req.path, req.name, true) : await vault.move(req.path, req.dest)
   if (to !== req.path) {
     await moveIcons(vault, req.path, to)
+    await moveInTreeOrder(vault, req.path, to)
     await updateLinks(vault, index, before, req.path, to)
   }
   return to
@@ -300,20 +303,19 @@ export function registerWriteTools(server: McpServer) {
   )
 
   server.registerTool(
-    'waypoint_add_to_inbox',
+    'waypoint_add_idea',
     {
-      title: 'Add to inbox',
-      description: 'Quick-capture a thought, idea or follow-up into the inbox (inbox.md) for the user to sort later.',
+      title: 'Add idea',
+      description: 'Quick-capture a thought, idea or follow-up as a new note in ideas/ for the user to sort later. The first line names it.',
       inputSchema: { text: z.string().min(1) },
       annotations: WRITE
     },
     safely(async ({ text }: { text: string }) => {
       const vault = openVault()
-      await flushApp(vault)
-      const old = await textBefore(vault, 'inbox.md')
-      await vault.appendToInbox(text)
-      await logChange(vault, { tool: 'add_to_inbox', action: 'appended', path: 'inbox.md', summary: text.trim().slice(0, 80) }, old)
-      return 'Added to the inbox.'
+      const rel = await vault.addIdea(text)
+      if (!rel) throw new Error('Nothing to add: the text is blank')
+      await logChange(vault, { tool: 'add_idea', action: 'created', path: rel, summary: text.trim().slice(0, 80) })
+      return `Created ${rel}`
     })
   )
 
@@ -418,7 +420,7 @@ export function registerWriteTools(server: McpServer) {
 function guardMovable(vault: Vault, rel: string): string {
   const p = checkPath(vault, rel)
   if (!existsSync(vault.abs(p))) throw new Error(`Nothing at ${p}`)
-  if (p === 'projects' || p === 'notes' || p === 'inbox.md') throw new Error(`${p} is part of the vault layout and stays where it is`)
+  if (p === 'projects' || p === 'notes' || p === IDEAS_DIR) throw new Error(`${p} is part of the vault layout and stays where it is`)
   if (/^projects\/[^/]+\/(project\.md|tasks)$/i.test(p)) throw new Error(`${p} is part of the project and stays where it is`)
   return p
 }

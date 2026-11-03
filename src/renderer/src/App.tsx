@@ -97,7 +97,7 @@ export default function App() {
     let timer: ReturnType<typeof setTimeout> | null = null
     let gitTimer: ReturnType<typeof setTimeout> | null = null
     const off = window.api.onChanged((events) => {
-      const structural = events.some((e) => e.event !== 'change' || e.path.startsWith('projects/') || e.path === '.app/project-order.json')
+      const structural = events.some((e) => e.event !== 'change' || e.path.startsWith('projects/') || e.path === '.app/project-order.json' || e.path === '.app/tree-order.json')
       if (!structural) {
         // Only the git "N changes" count can move; check it once typing settles
         if (gitTimer) clearTimeout(gitTimer)
@@ -171,6 +171,7 @@ export default function App() {
             requestAnimationFrame(() => document.querySelector<HTMLInputElement>('.search-input')?.select())
           })
         } else if (k === 'b') run(s.toggleBacklinks)
+        else if (k === 'o') run(s.toggleToc)
       } else if ((k === '=' || k === '+' || k === '-' || k === '0') && s.prefs) {
         const p = s.prefs
         const next = k === '0' ? 1 : Math.round((p.uiScale + (k === '-' ? -0.1 : 0.1)) * 100) / 100
@@ -181,8 +182,28 @@ export default function App() {
       else if (k === 't') run(s.newTab)
       else if (k === 'w') run(() => s.closeTab(s.activeTab))
     }
+    // Back and forward, like a browser: Alt+arrows (ahead of the editor, which binds them too) and the mouse's side buttons
+    const onNavKey = (e: KeyboardEvent) => {
+      const s = useStore.getState()
+      if (!e.altKey || e.ctrlKey || e.shiftKey || e.metaKey || s.prompt || s.picker) return
+      if (e.key !== 'ArrowLeft' && e.key !== 'ArrowRight') return
+      e.preventDefault()
+      e.stopPropagation()
+      s.navigate(e.key === 'ArrowLeft' ? -1 : 1)
+    }
+    const onNavMouse = (e: MouseEvent) => {
+      if (e.button !== 3 && e.button !== 4) return
+      e.preventDefault()
+      useStore.getState().navigate(e.button === 3 ? -1 : 1)
+    }
     window.addEventListener('keydown', onKey)
-    return () => window.removeEventListener('keydown', onKey)
+    window.addEventListener('keydown', onNavKey, true)
+    window.addEventListener('mouseup', onNavMouse)
+    return () => {
+      window.removeEventListener('keydown', onKey)
+      window.removeEventListener('keydown', onNavKey, true)
+      window.removeEventListener('mouseup', onNavMouse)
+    }
   }, [])
 
   if (!vault) return <Welcome />

@@ -17,6 +17,7 @@ import { listTasks } from '../main/tasks'
 import { NotesIndex } from '../main/notesIndex'
 import { TASK_STATUSES, type Project, type TaskStatus } from '@shared/types'
 import { splitFrontmatter } from '@shared/frontmatter'
+import { IDEAS_DIR } from '@shared/names'
 import { findNote, findTask, openVault, pickProject, projectForFolder, projectSummary, safely, sessionFolders, taskLine } from './common'
 import { registerWriteTools } from './writeTools'
 import { memoryPath, readMemory, recentSessions, registerMemoryTools } from './memoryTools'
@@ -236,16 +237,16 @@ server.registerTool(
 )
 
 server.registerTool(
-  'waypoint_read_inbox',
+  'waypoint_list_ideas',
   {
-    title: 'Read inbox',
-    description: 'The inbox (inbox.md): quick captures waiting to be sorted into notes, projects or tasks.',
+    title: 'List ideas',
+    description: 'The notes in ideas/: quick captures, one note each, waiting to be sorted into notes, projects or tasks.',
     inputSchema: {},
     annotations: READ_ONLY
   },
   safely(async () => {
-    const vault = openVault()
-    return vault.read('inbox.md').catch(() => 'The inbox is empty (no inbox.md).')
+    const ideas = await openVault().notePaths(IDEAS_DIR)
+    return ideas.length ? ideas.join('\n') : 'No ideas yet.'
   })
 )
 

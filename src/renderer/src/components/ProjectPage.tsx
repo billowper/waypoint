@@ -5,7 +5,7 @@ import AccentPicker from './AccentPicker'
 import Icon from './Icon'
 import { baseName } from '@shared/names'
 import { useStore } from '../store'
-import { noteMenu, showMenu } from '../menus'
+import { noteMenu, showMenu, taskMenu } from '../menus'
 import { ClaudeFeed, ClaudeProjectCard } from './ClaudeCode'
 
 const SAVE_DELAY = 500
@@ -191,7 +191,7 @@ export default function ProjectPage({ slug }: { slug: string }) {
             .slice(0, 6)
             .map((t) => (
               <li key={t.path}>
-                <button onClick={(e) => openFile(t.path, { newTab: e.ctrlKey })} onContextMenu={(e) => showMenu(e, noteMenu(t.path))}>
+                <button onClick={(e) => openFile(t.path, { newTab: e.ctrlKey })} onContextMenu={(e) => showMenu(e, taskMenu(t))}>
                   <span className="task-id">{t.id}</span>
                   {t.title}
                   {t.due && <span className={`due ${dueState(t)}`}>{formatDue(t.due)}</span>}

@@ -238,7 +238,7 @@ ${(e as Error).message}`)
         </label>
         <HotkeySetting
           name="Quick-capture hotkey"
-          help="Opens a small box from anywhere that adds a line to inbox.md."
+          help="Opens a small box from anywhere; each capture becomes a new note under Ideas."
           value={prefs.captureHotkey}
           registered={info?.hotkey}
           onChange={(captureHotkey) => set({ captureHotkey })}
