@@ -3,3 +3,8 @@ out/
 dist/
 *.log
 src/renderer/public/excalidraw/
+
+# Working notes kept on this PC only
+CLAUDE.md
+docs/build-plan.md
+docs/miro-importer-plan.md
