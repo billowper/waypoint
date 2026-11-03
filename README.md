@@ -9,6 +9,10 @@
   <a href="https://billowper.github.io/waypoint/">Website</a> · <a href="https://github.com/billowper/waypoint/releases/latest">Download for Windows 11</a>
 </p>
 
+<blockquote>
+  This is a vibe-coded Everything App with a vibe-coded README and a vibe-coded website! This started as an experiment/learning process and turned into something actually useful, so I'm sharing it. - Bill
+</blockquote>
+
 <picture>
   <source media="(prefers-color-scheme: light)" srcset="site/img/note-light.webp">
   <img src="site/img/note-dark.webp" alt="Waypoint showing a note with live preview, a contents pane, nested pages in the sidebar and a Linked from panel">
