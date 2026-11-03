@@ -1,6 +1,20 @@
-# Waypoint
+<p align="center">
+  <img src="site/icon.png" width="96" height="96" alt="Waypoint logo: an amber diamond on a dark rounded square">
+</p>
 
-Notes, projects, docs and tasks in a plain-Markdown, git-friendly vault. Electron + React + TypeScript.
+<h1 align="center">Waypoint</h1>
+
+<p align="center">
+  Notes, projects, docs and tasks in a plain-Markdown, git-friendly vault.<br>
+  <a href="https://billowper.github.io/waypoint/">Website</a> · <a href="https://github.com/billowper/waypoint/releases/latest">Download for Windows 11</a>
+</p>
+
+<picture>
+  <source media="(prefers-color-scheme: light)" srcset="site/img/note-light.webp">
+  <img src="site/img/note-dark.webp" alt="Waypoint showing a note with live preview, a contents pane, nested pages in the sidebar and a Linked from panel">
+</picture>
+
+Built with Electron, React and TypeScript.
 
 ## Run
 

@@ -240,3 +240,4 @@ works directly on the vault, so Claude Code sessions in a project's repo can rea
   The download button opens the latest GitHub release
 - 2026-11-03: Source made public at github.com/billowper/waypoint (Bill's choice, over a releases-only repo). Installers are GitHub releases, tagged vX.Y.Z,
   with only the .exe attached (no auto-update, so no blockmap or latest.yml). The earlier "never pushed" rule no longer applies. No licence chosen yet
+- 2026-11-03: Website live at billowper.github.io/waypoint on GitHub Pages. .github/workflows/pages.yml publishes site/ (without site/tools) when it changes on master

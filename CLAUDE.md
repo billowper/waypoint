@@ -35,7 +35,7 @@ Full phased plan: `docs/build-plan.md`. Keep its Decisions log and phase status 
   (src/main/treeOrder.ts); `state.tree` stays what's on disk. `Vault.move/rename/duplicate` carry the folder and `movedPath` follows it, so
   tabs, icons, links and recents need nothing extra. Contents pane: `components/Toc.tsx`, driven from Editor.tsx. Back/forward: window-wide
   `navBack`/`navForward` in store.ts, recorded in `setTabs`.
-- **Website** (2026-11-03): static page in `site/`. Retake screenshots with `npm run build` then `node site/tools/capture.mjs` (sample vault in `site/tools/demo-vault.mjs`). Update the version in `site/index.html` on release; installers go on GitHub releases (`gh release create vX.Y.Z dist/Waypoint-Setup-X.Y.Z.exe`).
+- **Website** (2026-11-03): static page in `site/`, published to billowper.github.io/waypoint by `.github/workflows/pages.yml` on push. Retake screenshots with `npm run build` then `node site/tools/capture.mjs` (sample vault in `site/tools/demo-vault.mjs`). Update the version in `site/index.html` on release; installers go on GitHub releases (`gh release create vX.Y.Z dist/Waypoint-Setup-X.Y.Z.exe`).
 - Then: Phase 2 with Bill's project spec (settings in `project.md` frontmatter — see build plan; confirm the
   YAML shape with him first).
 - Windows gotcha: chokidar holds handles on watched folders, so any folder rename/move/delete must run inside
