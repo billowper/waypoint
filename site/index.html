@@ -139,8 +139,9 @@ kbd {
 }
 .top nav a { color: var(--dim); text-decoration: none; }
 .top nav a:hover { color: var(--strong); }
-@media (max-width: 860px) { .top nav { display: none; } .top { justify-content: space-between; } }
+@media (max-width: 860px) { .top nav { display: none; } .top { justify-content: space-between; column-gap: 12px; } }
 
+.top-actions { display: flex; gap: 8px; }
 .btn {
   display: inline-block;
   padding: 0.65em 1.15em;
@@ -292,7 +293,10 @@ footer .wrap { display: flex; flex-wrap: wrap; justify-content: space-between; g
     <a href="#windows">Windows</a>
     <a href="#claude">Claude Code</a>
   </nav>
-  <a class="btn small" href="#download">Download</a>
+  <div class="top-actions">
+    <a class="btn small" href="https://github.com/billowper/waypoint">GitHub</a>
+    <a class="btn small" href="#download">Download</a>
+  </div>
 </header>
 
 <main class="wrap" id="top">
@@ -303,7 +307,8 @@ footer .wrap { display: flex; flex-wrap: wrap; justify-content: space-between; g
       <p class="likes">Local Markdown like Obsidian, nested pages like Notion, boards like Miro and task tracking like Jira, in one app.</p>
       <div class="actions">
         <a class="btn primary" href="#download">Download for Windows</a>
-        <span class="meta">v0.12.0 · Windows 11 · no account needed</span>
+        <a class="btn" href="https://github.com/billowper/waypoint">View source on GitHub</a>
+        <span class="meta">v0.12.0 · Windows 11 · no account needed · MIT licence</span>
       </div>
     </div>
     <figure>
