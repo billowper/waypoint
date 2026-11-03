@@ -89,3 +89,7 @@ src/shared     Types and helpers used by both sides
 src/mcp        The optional Claude Code connector
 site           The website. site/tools retakes its screenshots from the real app
 ```
+
+## Licence
+
+[MIT](LICENSE)

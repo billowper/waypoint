@@ -5,6 +5,7 @@
   "description": "Notes, projects, docs and tasks in a plain-markdown, git-friendly vault",
   "main": "./out/main/index.js",
   "author": "Bill Lowe",
+  "license": "MIT",
   "private": true,
   "engines": {
     "node": "^20.19.0 || >=22.12.0"
