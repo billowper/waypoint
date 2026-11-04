@@ -110,6 +110,12 @@ export interface GitStatus {
   ahead: number
   behind: number
   hasRemote: boolean
+  /** The remote pushes go to, with any password or token in the URL removed */
+  remoteUrl?: string
+  /** Why the last push failed, until one succeeds */
+  pushError?: string
+  /** When this session last pushed (ISO) */
+  lastPush?: string
   lastCommit: { hash: string; date: string; message: string } | null
   /** Set when git itself isn't installed or failed */
   error?: string
@@ -125,7 +131,7 @@ export interface GitCommit {
 /** Per-vault settings in .app/settings.json (committed with the vault) */
 export interface VaultSettings {
   version: number
-  git: { autoCommit: boolean; intervalMinutes: number }
+  git: { autoCommit: boolean; autoPush: boolean; intervalMinutes: number }
   /** notes/Captures and inbox.md have been moved to ideas/ (done once, on opening the vault) */
   ideasMoved?: boolean
 }
@@ -229,6 +235,8 @@ export interface Api {
   gitCommit(message: string): Promise<boolean>
   gitPull(): Promise<string>
   gitPush(): Promise<void>
+  /** Point the vault at a remote, turn on auto-commit and auto-push, and push now */
+  gitConnectRemote(url: string): Promise<void>
   gitLog(file?: string): Promise<GitCommit[]>
   /** Patch for a commit, or uncommitted changes when hash is "working" */
   gitDiff(hash: string, file?: string): Promise<string>

@@ -86,7 +86,44 @@ function requireGit(): VaultGit {
   return git
 }
 
-/** Optional auto-commit (off by default): commits any changes every N minutes. */
+/** How the last push went, shown in the Git panel. Reset when the vault changes. */
+let pushState: { pushError?: string; lastPush?: string } = {}
+let pushing: Promise<void> | null = null
+
+/** One push at a time; asking during a push joins it. Throws on failure, after recording why. */
+function pushVault(g: VaultGit, background: boolean): Promise<void> {
+  pushing ??= g
+    .push(background)
+    .then(
+      () => {
+        if (git === g) pushState = { lastPush: new Date().toISOString() }
+      },
+      (e) => {
+        if (git === g) pushState = { ...pushState, pushError: (e as Error).message }
+        throw e
+      }
+    )
+    .finally(() => {
+      pushing = null
+      if (git === g) broadcast('git:changed', [])
+    })
+  return pushing
+}
+
+/** Push whatever is waiting. A failure (offline, signed out) shows in the panel and is tried again next time. */
+async function pushIfNeeded(g: VaultGit) {
+  try {
+    if (await g.needsPush()) await pushVault(g, true)
+    else if (git === g && pushState.pushError) {
+      pushState = { ...pushState, pushError: undefined } // e.g. pushed from a terminal instead
+      broadcast('git:changed', [])
+    }
+  } catch (e) {
+    console.error('[auto-push]', (e as Error).message)
+  }
+}
+
+/** Optional auto-commit and auto-push (both off by default), every N minutes. */
 let autoCommitTimer: NodeJS.Timeout | null = null
 async function scheduleAutoCommit() {
   if (autoCommitTimer) clearInterval(autoCommitTimer)
@@ -94,16 +131,20 @@ async function scheduleAutoCommit() {
   const v = vault
   if (!v) return
   const { git: g } = await v.settings()
-  if (!g.autoCommit) return
+  if (!g.autoCommit && !g.autoPush) return
   autoCommitTimer = setInterval(async () => {
-    if (vault !== v || !git?.isRepo()) return
-    try {
-      if (await git.commitIfChanged(`Auto-commit ${new Date().toLocaleString('en-GB')}`)) {
-        broadcast('git:changed', [])
+    const repo = git
+    if (vault !== v || !repo?.isRepo()) return
+    if (g.autoCommit) {
+      try {
+        if (await repo.commitIfChanged(`Auto-commit ${new Date().toLocaleString('en-GB')}`)) {
+          broadcast('git:changed', [])
+        }
+      } catch (e) {
+        console.error('[auto-commit]', e) // e.g. conflicts: leave it for Bill to sort out
       }
-    } catch (e) {
-      console.error('[auto-commit]', e) // e.g. conflicts: leave it for Bill to sort out
     }
+    if (g.autoPush) await pushIfNeeded(repo)
   }, g.intervalMinutes * 60_000)
 }
 
@@ -115,6 +156,7 @@ async function setVault(path: string | undefined) {
   vault = path ? new Vault(path) : null
   notes = vault ? new NotesIndex(vault) : null
   git = vault ? new VaultGit(vault.root) : null
+  pushState = {}
   saveConfig({ vaultPath: path })
   if (vault) {
     notes!.rebuild()
@@ -512,13 +554,31 @@ function registerIpc() {
     await requireVault().saveSettings(settings)
     scheduleAutoCommit()
   })
-  ipcMain.handle('git:status', () => requireGit().status())
+  ipcMain.handle('git:status', async () => ({ ...(await requireGit().status()), ...pushState }))
   ipcMain.handle('git:init', () => requireGit().init())
-  ipcMain.handle('git:commit', (_e, message: string) =>
-    requireGit().commitIfChanged(message.trim() || `Update ${new Date().toLocaleString('en-GB')}`)
-  )
-  ipcMain.handle('git:pull', () => requireGit().pull())
-  ipcMain.handle('git:push', () => requireGit().push())
+  ipcMain.handle('git:commit', async (_e, message: string) => {
+    const g = requireGit()
+    const committed = await g.commitIfChanged(message.trim() || `Update ${new Date().toLocaleString('en-GB')}`)
+    if (committed && (await requireVault().settings()).git.autoPush) void pushIfNeeded(g)
+    return committed
+  })
+  ipcMain.handle('git:pull', async () => {
+    const g = requireGit()
+    const summary = await g.pull()
+    if ((await requireVault().settings()).git.autoPush) void pushIfNeeded(g)
+    return summary
+  })
+  ipcMain.handle('git:push', () => pushVault(requireGit(), false))
+  ipcMain.handle('git:connectRemote', async (_e, url: string) => {
+    const v = requireVault()
+    const g = requireGit()
+    await g.setRemote(url)
+    const settings = await v.settings()
+    await v.saveSettings({ ...settings, git: { ...settings.git, autoCommit: true, autoPush: true } })
+    await scheduleAutoCommit()
+    await g.commitIfChanged(`Update ${new Date().toLocaleString('en-GB')}`)
+    await pushVault(g, false) // the user is here, so this one may ask them to sign in
+  })
   ipcMain.handle('git:log', (_e, file?: string) => requireGit().log(file))
   ipcMain.handle('git:diff', (_e, hash: string, file?: string) =>
     hash === 'working' ? requireGit().workingDiff(file) : requireGit().diff(hash, file)

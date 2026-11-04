@@ -1900,6 +1900,44 @@ button.crumb.current:hover {
   color: var(--text-dim);
 }
 
+.git-remote {
+  margin: 10px 0;
+  font-size: 12.5px;
+  color: var(--text-dim);
+}
+
+.git-remote p {
+  margin: 6px 2px;
+  font-size: 11.5px;
+  color: var(--text-faint);
+}
+
+.git-remote input {
+  width: 100%;
+  box-sizing: border-box;
+  margin-bottom: 6px;
+  padding: 5px 8px;
+  border: 1px solid var(--border);
+  border-radius: 6px;
+  background: transparent;
+  color: var(--text);
+  font: inherit;
+}
+
+.git-remote-url {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+}
+
+.git-remote-url span {
+  flex: 1;
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
 .git-auto select {
   font: inherit;
   color: var(--text);

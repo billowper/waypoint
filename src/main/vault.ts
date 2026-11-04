@@ -118,6 +118,7 @@ export class Vault {
       version: 1,
       git: {
         autoCommit: data.git?.autoCommit === true,
+        autoPush: data.git?.autoPush === true,
         intervalMinutes: Math.max(5, Number(data.git?.intervalMinutes) || 15)
       }
     }

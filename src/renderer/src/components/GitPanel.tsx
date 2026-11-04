@@ -13,13 +13,15 @@ export function GitIndicator() {
       ? gitBusy + '…'
       : git.conflicted.length
         ? `${git.conflicted.length} conflict${git.conflicted.length === 1 ? '' : 's'}`
-        : git.files.length
-          ? `${git.files.length} change${git.files.length === 1 ? '' : 's'}`
-          : 'All committed'
+        : git.pushError
+          ? 'Push failed'
+          : git.files.length
+            ? `${git.files.length} change${git.files.length === 1 ? '' : 's'}`
+            : 'All committed'
   return (
     <button
-      className={`git-indicator ${git.conflicted.length ? 'conflict' : git.files.length ? 'dirty' : ''}`}
-      title="Version history (git)"
+      className={`git-indicator ${git.conflicted.length || git.pushError ? 'conflict' : git.files.length ? 'dirty' : ''}`}
+      title={git.pushError ? `Push failed: ${git.pushError}` : 'Version history (git)'}
       onClick={() => setSidebarMode(sidebarMode === 'git' ? 'files' : 'git')}
     >
       <span className="git-icon">⎇</span>
@@ -34,6 +36,8 @@ export function GitIndicator() {
 export default function GitPanel() {
   const { git, gitBusy, runGit, vaultSettings, saveVaultSettings, openFile, openHistory, notes } = useStore()
   const [message, setMessage] = useState('')
+  const [remoteUrl, setRemoteUrl] = useState('')
+  const [changingRemote, setChangingRemote] = useState(false)
 
   if (!git) return null
   if (git.error && !git.isRepo) return <div className="git-panel"><p className="empty">Git isn't available: {git.error}</p></div>
@@ -55,6 +59,14 @@ export default function GitPanel() {
   const commit = async () => {
     if (await runGit('Committing', () => window.api.gitCommit(message))) setMessage('')
   }
+  const connect = async () => {
+    const url = remoteUrl.trim()
+    if (!url) return
+    if (await runGit('Pushing', () => window.api.gitConnectRemote(url))) {
+      setRemoteUrl('')
+      setChangingRemote(false)
+    }
+  }
   const auto = vaultSettings?.git
 
   return (
@@ -65,6 +77,7 @@ export default function GitPanel() {
           ======= / &gt;&gt;&gt;&gt;&gt;&gt;&gt; markers), then commit.
         </p>
       )}
+      {git.pushError && <p className="git-warning">Couldn’t push: {git.pushError}</p>}
       <textarea
         className="git-message"
         value={message}
@@ -116,6 +129,54 @@ export default function GitPanel() {
           </select>
         </label>
       )}
+      {auto && git.hasRemote && (
+        <label className="git-auto">
+          <input
+            type="checkbox"
+            checked={auto.autoPush}
+            onChange={(e) => saveVaultSettings({ ...vaultSettings!, git: { ...auto, autoPush: e.target.checked } })}
+          />
+          Push commits automatically
+        </label>
+      )}
+
+      <div className="git-remote">
+        {git.hasRemote && !changingRemote ? (
+          <>
+            <div className="git-remote-url">
+              <span title={git.remoteUrl}>Remote: {git.remoteUrl}</span>
+              <button className="btn small" onClick={() => setChangingRemote(true)}>
+                Change
+              </button>
+            </div>
+            {git.lastPush && <p>Last pushed {new Date(git.lastPush).toLocaleTimeString()}</p>}
+          </>
+        ) : (
+          <>
+            <input
+              value={remoteUrl}
+              placeholder="https://github.com/you/my-vault.git"
+              aria-label="Remote URL"
+              onChange={(e) => setRemoteUrl(e.target.value)}
+              onKeyDown={(e) => e.key === 'Enter' && connect()}
+            />
+            <div className="git-actions">
+              <button className="btn small primary" disabled={!!gitBusy || !remoteUrl.trim()} onClick={connect}>
+                Connect and push
+              </button>
+              {changingRemote && (
+                <button className="btn small" onClick={() => setChangingRemote(false)}>
+                  Cancel
+                </button>
+              )}
+            </div>
+            <p>
+              Use an empty private repo. Waypoint then commits and pushes changes on the schedule above, signing in
+              with your git credentials.
+            </p>
+          </>
+        )}
+      </div>
 
       <h3>Changes</h3>
       {git.files.length === 0 && <p className="empty">Everything is committed.</p>}

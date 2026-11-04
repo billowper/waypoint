@@ -45,6 +45,7 @@ const api: Api = {
   gitCommit: (message) => ipcRenderer.invoke('git:commit', message),
   gitPull: () => ipcRenderer.invoke('git:pull'),
   gitPush: () => ipcRenderer.invoke('git:push'),
+  gitConnectRemote: (url) => ipcRenderer.invoke('git:connectRemote', url),
   gitLog: (file) => ipcRenderer.invoke('git:log', file),
   gitDiff: (hash, file) => ipcRenderer.invoke('git:diff', hash, file),
   reveal: (rel) => ipcRenderer.invoke('file:reveal', rel),
