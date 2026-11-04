@@ -12,6 +12,7 @@ import { baseName, movedPath, sanitize, titleOf } from '@shared/names'
 import { resolveLink } from '@shared/links'
 import { enqueue, registerEditor, useStore, type Reveal, type SaveState } from '../store'
 import { linkContext, livePreview, refreshLinks } from './livePreview'
+import { tableKeymap, tablePreview } from './tablePreview'
 import { wikiComplete } from './wikiComplete'
 import { frontmatterSyntax } from './frontmatterSyntax'
 import Toc, { readHeadings, type Heading } from './Toc'
@@ -230,12 +231,14 @@ export default function Editor({ tabId, path, active }: Props) {
             syntaxHighlighting(mdHighlight),
             linkContext.of({ notes: () => store().notes, from: () => pathRef.current, open: openLink }),
             livePreview,
+            tablePreview,
             wikiComplete,
             theme,
             placeholder('Start writing…'),
             keymap.of([
               { key: 'Mod-s', run: () => (save(), true), preventDefault: true },
               ...completionKeymap,
+              ...tableKeymap,
               indentWithTab,
               ...defaultKeymap,
               ...historyKeymap,

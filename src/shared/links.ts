@@ -7,6 +7,8 @@ export interface WikiLink {
   target: string
   heading?: string
   alias?: string
+  /** Written [[target\|alias]], which a markdown table needs so the | doesn't end the cell */
+  escapedPipe?: boolean
 }
 
 const WIKILINK = /\[\[([^[\]\n|#]+)(#[^[\]\n|]*)?(\|[^[\]\n]*)?\]\]/g
@@ -21,19 +23,23 @@ export function parseLinks(text: string): WikiLink[] {
   const links: WikiLink[] = []
   const masked = maskCode(text)
   for (const m of masked.matchAll(WIKILINK)) {
+    const escapedPipe = !!m[3] && (m[2] ?? m[1]).endsWith('\\')
+    const unescape = (s: string) => (escapedPipe ? s.replace(/\\$/, '') : s)
     links.push({
       from: m.index!,
       to: m.index! + m[0].length,
-      target: m[1].trim(),
-      heading: m[2]?.slice(1) || undefined,
-      alias: m[3]?.slice(1) || undefined
+      target: (m[2] ? m[1] : unescape(m[1])).trim(),
+      heading: (m[2] && unescape(m[2]).slice(1)) || undefined,
+      alias: m[3]?.slice(1) || undefined,
+      ...(escapedPipe ? { escapedPipe } : {})
     })
   }
   return links
 }
 
-export function formatLink(target: string, heading?: string, alias?: string): string {
-  return `[[${target}${heading ? `#${heading}` : ''}${alias ? `|${alias}` : ''}]]`
+export function formatLink(target: string, heading?: string, alias?: string, escapedPipe?: boolean): string {
+  const pipe = escapedPipe ? '\\|' : '|'
+  return `[[${target}${heading ? `#${heading}` : ''}${alias ? `${pipe}${alias}` : ''}]]`
 }
 
 const dirOf = (p: string) => (p.includes('/') ? p.slice(0, p.lastIndexOf('/')) : '')

@@ -101,6 +101,8 @@ function build(view: EditorView): DecorationSet {
   const doc = state.doc
   const active = activeLines(view)
   const decos: Range<Decoration>[] = []
+  /** Tables drawn by tablePreview.ts, so nothing here decorates what they replace */
+  const drawnTables: { from: number; to: number }[] = []
 
   const touches = (from: number, to: number) => {
     const last = doc.lineAt(to).number
@@ -126,6 +128,12 @@ function build(view: EditorView): DecorationSet {
         const node = ref.node
         const parent = node.parent
         switch (node.name) {
+          case 'Table':
+            if (parent?.name === 'Document' && !touches(node.from, node.to)) {
+              drawnTables.push({ from: node.from, to: node.to })
+              return false
+            }
+            return
           case 'HeaderMark':
             if (!touches(node.from, node.to)) hideRange(node.from, withSpace(node.to))
             return
@@ -164,7 +172,7 @@ function build(view: EditorView): DecorationSet {
           }
           case 'URL':
             // Bare URL in text (GFM autolink); URLs inside links/images are handled above
-            if (parent?.name === 'Paragraph' || parent?.name === 'Task') {
+            if (parent?.name === 'Paragraph' || parent?.name === 'Task' || parent?.name === 'TableCell') {
               const rendered = !touches(node.from, node.to)
               decos.push(linkMark(doc.sliceString(node.from, node.to), rendered).range(node.from, node.to))
             }
@@ -261,6 +269,7 @@ function build(view: EditorView): DecorationSet {
       const lf = start + l.from
       const lt = start + l.to
       if (CODE.has(syntaxTree(state).resolveInner(lf + 2, 1).name)) continue
+      if (drawnTables.some((t) => lf >= t.from && lt <= t.to)) continue
       const raw = doc.sliceString(lf + 2, lt - 2)
       const pipe = raw.indexOf('|')
       const textFrom = pipe === -1 ? lf + 2 : lf + 3 + pipe

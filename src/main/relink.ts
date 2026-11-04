@@ -32,7 +32,7 @@ export async function updateLinks(
       const dest = target ? moved.get(target) : undefined
       // Name-only links usually still work after a folder move; only rewrite the ones that break
       if (!dest || resolveLink(l.target, path, after) === dest) continue
-      out = out.slice(0, l.from) + formatLink(linkTextFor(dest, after), l.heading, l.alias) + out.slice(l.to)
+      out = out.slice(0, l.from) + formatLink(linkTextFor(dest, after), l.heading, l.alias, l.escapedPipe) + out.slice(l.to)
     }
     if (out !== text) {
       await v.write(path, out)
