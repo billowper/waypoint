@@ -1,5 +1,15 @@
 import { syntaxTree } from '@codemirror/language'
-import { Facet, StateEffect, type EditorState, type Range } from '@codemirror/state'
+import {
+  Facet,
+  RangeSet,
+  StateEffect,
+  StateField,
+  type EditorState,
+  type Extension,
+  type Line,
+  type Range,
+  type Text
+} from '@codemirror/state'
 import {
   Decoration,
   EditorView,
@@ -11,11 +21,15 @@ import {
 import type { SyntaxNode } from '@lezer/common'
 import { parseLinks, resolveLink } from '@shared/links'
 
-// Obsidian-style live preview: markdown syntax is hidden and rendered, except on the lines
-// the selection touches, where the raw text comes back so it can be edited.
+// Notion-style live preview: markdown syntax is hidden and drawn as what it means, all the time,
+// including on the line being edited. The file underneath stays plain markdown. The Markdown
+// button (Ctrl+Shift+M) turns all of this off to show and edit the source.
+// wysiwyg.ts makes the cursor, arrows and deleting behave around what's hidden here.
 //
-// Links: on a rendered line a plain click follows a link; on the line being edited, Ctrl+click.
-// Ctrl+click (or middle-click) on a [[wiki link]] opens it in a new tab.
+// Two things stay raw: a table while the selection is in it (tablePreview.ts), and syntax that
+// isn't finished yet (an unclosed ``` fence, a ** with no partner), so you can see what you type.
+//
+// Links: a click follows a link; Ctrl+click (or middle-click) on a [[wiki link]] opens it in a new tab.
 
 /** What the editor knows about the vault, for resolving and following [[wiki links]] */
 export interface LinkContext {
@@ -28,6 +42,30 @@ export const linkContext = Facet.define<LinkContext, LinkContext | null>({ combi
 
 /** Dispatch when the set of notes changes, so links re-check whether they resolve. */
 export const refreshLinks = StateEffect.define<null>()
+
+/** Whether the editor has focus, kept in the state so state fields (tablePreview.ts) can see it */
+const setFocused = StateEffect.define<boolean>()
+export const editorFocused = StateField.define<boolean>({
+  create: () => false,
+  update(value, tr) {
+    for (const e of tr.effects) if (e.is(setFocused)) value = e.value
+    return value
+  }
+})
+
+/**
+ * Markdown the preview hides or draws over:
+ * - inline: marks around text (** _ ~~ ` [ ](url) [[ ]])
+ * - prefix: block markers at the start of a line (# > - [ ])
+ * - open / close: the ``` lines of a code block
+ * - rule: a --- line (a divider, or the underline of a heading)
+ */
+export type HiddenKind = 'inline' | 'prefix' | 'open' | 'close' | 'rule'
+export interface Hidden {
+  from: number
+  to: number
+  kind: HiddenKind
+}
 
 const hide = Decoration.replace({})
 const CODE = new Set(['InlineCode', 'FencedCode', 'CodeBlock', 'CodeText'])
@@ -43,6 +81,7 @@ class BulletWidget extends WidgetType {
     return el
   }
 }
+const bullet = new BulletWidget()
 
 class CheckboxWidget extends WidgetType {
   constructor(
@@ -84,43 +123,48 @@ class RuleWidget extends WidgetType {
     return el
   }
 }
+const rule = new RuleWidget()
 
-function activeLines(view: EditorView): Set<number> {
-  const lines = new Set<number>()
-  if (!view.hasFocus) return lines
-  const { doc, selection } = view.state
-  for (const r of selection.ranges) {
-    const last = doc.lineAt(r.to).number
-    for (let l = doc.lineAt(r.from).number; l <= last; l++) lines.add(l)
+/** Stands in for a code block's opening ```, showing its language */
+class LangWidget extends WidgetType {
+  constructor(readonly lang: string) {
+    super()
   }
-  return lines
+  eq(other: LangWidget) {
+    return other.lang === this.lang
+  }
+  toDOM() {
+    const el = document.createElement('span')
+    el.className = 'cm-md-code-lang'
+    el.textContent = this.lang
+    return el
+  }
 }
 
-function build(view: EditorView): DecorationSet {
-  const state: EditorState = view.state
-  const doc = state.doc
-  const active = activeLines(view)
-  const decos: Range<Decoration>[] = []
-  /** Tables drawn by tablePreview.ts, so nothing here decorates what they replace */
-  const drawnTables: { from: number; to: number }[] = []
+/** Whether a fenced code block has its closing fence (an unclosed one shows its ``` until it does) */
+export function fenceClosed(node: SyntaxNode, doc: Text): boolean {
+  const marks = node.getChildren('CodeMark')
+  return marks.length >= 2 && doc.lineAt(marks[marks.length - 1].from).number > doc.lineAt(node.from).number
+}
 
-  const touches = (from: number, to: number) => {
-    const last = doc.lineAt(to).number
-    for (let l = doc.lineAt(from).number; l <= last; l++) if (active.has(l)) return true
-    return false
-  }
-  const hideRange = (from: number, to: number) => {
-    if (to > from) decos.push(hide.range(from, to))
+function collect(state: EditorState, ranges: readonly { from: number; to: number }[]) {
+  const doc = state.doc
+  const decos: Range<Decoration>[] = []
+  const hidden: Hidden[] = []
+  /** Top-level tables belong to tablePreview.ts, so nothing here decorates inside them */
+  const tables: { from: number; to: number }[] = []
+
+  const hideRange = (from: number, to: number, kind: HiddenKind, widget?: WidgetType) => {
+    if (to <= from) return
+    decos.push((widget ? Decoration.replace({ widget }) : hide).range(from, to))
+    hidden.push({ from, to, kind })
   }
   // Include the single space after a block marker ("# ", "> ", "- ")
   const withSpace = (to: number) => (doc.sliceString(to, to + 1) === ' ' ? to + 1 : to)
-  const linkMark = (url: string, rendered: boolean) =>
-    Decoration.mark({
-      class: 'cm-md-link',
-      attributes: { 'data-url': url, title: url, ...(rendered ? { 'data-rendered': '' } : {}) }
-    })
+  const linkMark = (url: string) =>
+    Decoration.mark({ class: 'cm-md-link', attributes: { 'data-url': url, title: url, 'data-rendered': '' } })
 
-  for (const { from, to } of view.visibleRanges) {
+  for (const { from, to } of ranges) {
     syntaxTree(state).iterate({
       from,
       to,
@@ -129,23 +173,27 @@ function build(view: EditorView): DecorationSet {
         const parent = node.parent
         switch (node.name) {
           case 'Table':
-            if (parent?.name === 'Document' && !touches(node.from, node.to)) {
-              drawnTables.push({ from: node.from, to: node.to })
-              return false
+            if (parent?.name !== 'Document') return
+            tables.push({ from: node.from, to: node.to })
+            return false
+          case 'HeaderMark': {
+            const line = doc.lineAt(node.from)
+            if (parent?.name.startsWith('SetextHeading') && line.number > doc.lineAt(parent.from).number) {
+              hideRange(node.from, line.to, 'rule') // the --- or === under the heading
+            } else if (node.from === parent?.from) {
+              hideRange(node.from, withSpace(node.to), 'prefix')
+            } else {
+              hideRange(node.from, node.to, 'inline') // closing #s
             }
             return
-          case 'HeaderMark':
-            if (!touches(node.from, node.to)) hideRange(node.from, withSpace(node.to))
-            return
+          }
           case 'EmphasisMark':
           case 'StrikethroughMark':
-            if (parent && !touches(parent.from, parent.to)) hideRange(node.from, node.to)
+            hideRange(node.from, node.to, 'inline')
             return
           case 'InlineCode':
             decos.push(Decoration.mark({ class: 'cm-md-inline-code' }).range(node.from, node.to))
-            if (!touches(node.from, node.to)) {
-              for (const m of node.getChildren('CodeMark')) hideRange(m.from, m.to)
-            }
+            for (const m of node.getChildren('CodeMark')) hideRange(m.from, m.to, 'inline')
             return false
           case 'FencedCode':
             fencedCode(node)
@@ -163,18 +211,14 @@ function build(view: EditorView): DecorationSet {
           case 'Autolink': {
             const url = node.getChild('URL')
             if (!url) return false
-            const rendered = !touches(node.from, node.to)
-            decos.push(linkMark(doc.sliceString(url.from, url.to), rendered).range(url.from, url.to))
-            if (rendered) {
-              for (const m of node.getChildren('LinkMark')) hideRange(m.from, m.to)
-            }
+            decos.push(linkMark(doc.sliceString(url.from, url.to)).range(url.from, url.to))
+            for (const m of node.getChildren('LinkMark')) hideRange(m.from, m.to, 'inline')
             return false
           }
           case 'URL':
             // Bare URL in text (GFM autolink); URLs inside links/images are handled above
             if (parent?.name === 'Paragraph' || parent?.name === 'Task' || parent?.name === 'TableCell') {
-              const rendered = !touches(node.from, node.to)
-              decos.push(linkMark(doc.sliceString(node.from, node.to), rendered).range(node.from, node.to))
+              decos.push(linkMark(doc.sliceString(node.from, node.to)).range(node.from, node.to))
             }
             return
           case 'Image':
@@ -185,26 +229,21 @@ function build(view: EditorView): DecorationSet {
           case 'TaskMarker': {
             const checked = /x/i.test(doc.sliceString(node.from, node.to))
             const task = node.parent
-            if (checked && task && task.to > node.to) {
-              decos.push(Decoration.mark({ class: 'cm-md-done' }).range(withSpace(node.to), task.to))
+            const end = withSpace(node.to)
+            if (checked && task && task.to > end) {
+              decos.push(Decoration.mark({ class: 'cm-md-done' }).range(end, task.to))
             }
-            if (!touches(node.from, node.to)) {
-              decos.push(
-                Decoration.replace({ widget: new CheckboxWidget(checked, node.from) }).range(node.from, node.to)
-              )
-            }
+            hideRange(node.from, end, 'prefix', new CheckboxWidget(checked, node.from))
             return
           }
           case 'QuoteMark': {
             const line = doc.lineAt(node.from)
             decos.push(Decoration.line({ class: 'cm-md-quote' }).range(line.from))
-            if (!active.has(line.number)) hideRange(node.from, withSpace(node.to))
+            hideRange(node.from, withSpace(node.to), 'prefix')
             return
           }
           case 'HorizontalRule':
-            if (!touches(node.from, node.to)) {
-              decos.push(Decoration.replace({ widget: new RuleWidget() }).range(node.from, node.to))
-            }
+            hideRange(node.from, node.to, 'rule', rule)
             return
         }
         return
@@ -215,20 +254,19 @@ function build(view: EditorView): DecorationSet {
   function fencedCode(node: SyntaxNode) {
     const first = doc.lineAt(node.from).number
     const last = doc.lineAt(node.to).number
-    const editing = touches(node.from, node.to)
     for (let l = first; l <= last; l++) {
       const line = doc.line(l)
       const cls =
         'cm-md-codeblock' + (l === first ? ' cm-md-codeblock-first' : '') + (l === last ? ' cm-md-codeblock-last' : '')
       decos.push(Decoration.line({ class: cls }).range(line.from))
     }
-    if (!editing) {
-      // Hide the ``` fences (and language tag) but keep their lines as the block's padding
-      for (const m of node.getChildren('CodeMark')) {
-        const line = doc.lineAt(m.from)
-        if (line.number === first || line.number === last) hideRange(line.from, line.to)
-      }
-    }
+    if (!fenceClosed(node, doc)) return
+    // The ``` lines stay as the block's padding: the opening one shows the language
+    const open = doc.line(first)
+    const close = doc.line(last)
+    const info = node.getChild('CodeInfo')
+    hideRange(open.from, open.to, 'open', new LangWidget(info ? doc.sliceString(info.from, info.to) : ''))
+    hideRange(close.from, close.to, 'close')
   }
 
   function link(node: SyntaxNode) {
@@ -238,24 +276,20 @@ function build(view: EditorView): DecorationSet {
     if (marks.length < 3 || !url) return
     const open = marks[0]
     const close = marks[1]
-    const rendered = !touches(node.from, node.to)
     if (close.from > open.to) {
-      decos.push(linkMark(doc.sliceString(url.from, url.to), rendered).range(open.to, close.from))
+      decos.push(linkMark(doc.sliceString(url.from, url.to)).range(open.to, close.from))
     }
-    if (rendered) {
-      hideRange(open.from, open.to)
-      hideRange(close.from, node.to)
-    }
+    hideRange(open.from, open.to, 'inline')
+    hideRange(close.from, node.to, 'inline')
   }
 
   function listMark(node: SyntaxNode) {
-    if (touches(node.from, node.to)) return
     const item = node.parent
     if (!item) return
     if (item.getChild('Task')) {
-      hideRange(node.from, withSpace(node.to)) // the checkbox stands in for the bullet
+      hideRange(node.from, withSpace(node.to), 'prefix') // the checkbox stands in for the bullet
     } else if (item.parent?.name === 'BulletList') {
-      decos.push(Decoration.replace({ widget: new BulletWidget() }).range(node.from, node.to))
+      hideRange(node.from, withSpace(node.to), 'prefix', bullet)
     }
   }
 
@@ -263,17 +297,16 @@ function build(view: EditorView): DecorationSet {
   const ctx = state.facet(linkContext)
   const notes = ctx?.notes() ?? []
   const fromPath = ctx?.from() ?? ''
-  for (const { from, to } of view.visibleRanges) {
+  for (const { from, to } of ranges) {
     const start = doc.lineAt(from).from
     for (const l of parseLinks(doc.sliceString(start, doc.lineAt(to).to))) {
       const lf = start + l.from
       const lt = start + l.to
       if (CODE.has(syntaxTree(state).resolveInner(lf + 2, 1).name)) continue
-      if (drawnTables.some((t) => lf >= t.from && lt <= t.to)) continue
+      if (tables.some((t) => lf >= t.from && lt <= t.to)) continue
       const raw = doc.sliceString(lf + 2, lt - 2)
       const pipe = raw.indexOf('|')
       const textFrom = pipe === -1 ? lf + 2 : lf + 3 + pipe
-      const rendered = !touches(lf, lt)
       const resolved = resolveLink(l.target, fromPath, notes) !== null
       if (lt - 2 > textFrom) {
         decos.push(
@@ -282,59 +315,79 @@ function build(view: EditorView): DecorationSet {
             attributes: {
               'data-wikilink': l.target,
               title: resolved ? l.target : `${l.target} — not created yet; click to create`,
-              ...(rendered ? { 'data-rendered': '' } : {})
+              'data-rendered': ''
             }
           }).range(textFrom, lt - 2)
         )
       }
-      if (rendered) {
-        hideRange(lf, textFrom)
-        hideRange(lt - 2, lt)
-      }
+      hideRange(lf, textFrom, 'inline')
+      hideRange(lt - 2, lt, 'inline')
     }
   }
 
-  return Decoration.set(decos, true)
+  return { decos, hidden }
 }
 
-export const livePreview = ViewPlugin.fromClass(
-  class {
-    decorations: DecorationSet
-    constructor(view: EditorView) {
-      this.decorations = build(view)
-    }
-    update(u: ViewUpdate) {
-      if (
-        u.docChanged ||
-        u.viewportChanged ||
-        u.selectionSet ||
-        u.focusChanged ||
-        syntaxTree(u.startState) !== syntaxTree(u.state) ||
-        u.transactions.some((tr) => tr.effects.some((e) => e.is(refreshLinks)))
-      ) {
-        this.decorations = build(u.view)
-      }
-    }
-  },
-  {
-    decorations: (v) => v.decorations,
-    eventHandlers: {
-      mousedown(e, view) {
-        if (e.button !== 0 && e.button !== 1) return false
-        const el = (e.target as HTMLElement).closest('[data-url], [data-wikilink]')
-        if (!el) return false
-        const mod = e.ctrlKey || e.metaKey
-        if (!mod && e.button === 0 && !el.hasAttribute('data-rendered')) return false // editing
-        e.preventDefault()
-        const wiki = el.getAttribute('data-wikilink')
-        if (wiki !== null) {
-          view.state.facet(linkContext)?.open(wiki, mod || e.button === 1)
-          return true
-        }
-        const url = el.getAttribute('data-url')
-        if (url && /^https?:\/\//i.test(url)) window.open(url) // main process sends it to the browser
-        return true
-      }
+/** What the preview hides on one line, in order */
+export function hiddenOnLine(state: EditorState, line: Line): Hidden[] {
+  return collect(state, [{ from: line.from, to: line.to }])
+    .hidden.filter((h) => h.from >= line.from && h.to <= line.to)
+    .sort((a, b) => a.from - b.from || a.to - b.to)
+}
+
+class Preview {
+  decorations!: DecorationSet
+  /** What's hidden: the cursor steps over it as a whole */
+  atoms!: RangeSet<Decoration>
+  constructor(view: EditorView) {
+    this.compute(view)
+  }
+  compute(view: EditorView) {
+    const { decos, hidden } = collect(view.state, view.visibleRanges)
+    this.decorations = Decoration.set(decos, true)
+    this.atoms = RangeSet.of(
+      hidden.map((h) => hide.range(h.from, h.to)),
+      true
+    )
+  }
+  update(u: ViewUpdate) {
+    if (
+      u.docChanged ||
+      u.viewportChanged ||
+      u.selectionSet ||
+      u.focusChanged ||
+      syntaxTree(u.startState) !== syntaxTree(u.state) ||
+      u.transactions.some((tr) => tr.effects.some((e) => e.is(refreshLinks)))
+    ) {
+      this.compute(u.view)
     }
   }
-)
+}
+
+const previewPlugin = ViewPlugin.fromClass(Preview, {
+  decorations: (v) => v.decorations,
+  eventHandlers: {
+    mousedown(e, view) {
+      if (e.button !== 0 && e.button !== 1) return false
+      const el = (e.target as HTMLElement).closest('[data-url], [data-wikilink]')
+      if (!el) return false
+      const mod = e.ctrlKey || e.metaKey
+      e.preventDefault()
+      const wiki = el.getAttribute('data-wikilink')
+      if (wiki !== null) {
+        view.state.facet(linkContext)?.open(wiki, mod || e.button === 1)
+        return true
+      }
+      const url = el.getAttribute('data-url')
+      if (url && /^https?:\/\//i.test(url)) window.open(url) // main process sends it to the browser
+      return true
+    }
+  }
+})
+
+export const livePreview: Extension = [
+  editorFocused,
+  EditorView.focusChangeEffect.of((_state, focusing) => setFocused.of(focusing)),
+  previewPlugin,
+  EditorView.atomicRanges.of((view) => view.plugin(previewPlugin)?.atoms ?? RangeSet.empty)
+]

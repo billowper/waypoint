@@ -172,6 +172,10 @@ export default function App() {
           })
         } else if (k === 'b') run(s.toggleBacklinks)
         else if (k === 'o') run(s.toggleToc)
+        else if (k === 'm' && s.view.kind === 'file') {
+          const docId = s.view.docId
+          run(() => s.toggleRaw(docId))
+        }
       } else if ((k === '=' || k === '+' || k === '-' || k === '0') && s.prefs) {
         const p = s.prefs
         const next = k === '0' ? 1 : Math.round((p.uiScale + (k === '-' ? -0.1 : 0.1)) * 100) / 100
@@ -242,7 +246,7 @@ export default function App() {
             {/* Every open note keeps its editor (and undo history); only the active one shows */}
             {tabs.map((t) =>
               t.view.kind === 'file' ? (
-                <Editor key={t.view.docId} tabId={t.id} path={t.view.path} active={t.id === activeTab} />
+                <Editor key={t.view.docId} tabId={t.id} docId={t.view.docId} path={t.view.path} active={t.id === activeTab} />
               ) : null
             )}
           </div>

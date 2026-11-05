@@ -128,7 +128,7 @@ export function TabBar() {
 
 /** Folder path, title (click to rename) and note actions for the open note */
 export function PathBar() {
-  const { view, activeTab, saveStates, rename, backlinksOpen, toggleBacklinks, tocOpen, toggleToc, openHistory, git, projects, notes, openFile, openProject, openBoard, revealFolder, openIconPicker } =
+  const { view, activeTab, saveStates, rawDocs, toggleRaw, rename, backlinksOpen, toggleBacklinks, tocOpen, toggleToc, openHistory, git, projects, notes, openFile, openProject, openBoard, revealFolder, openIconPicker } =
     useStore()
   if (view.kind !== 'file') return null
   const crumbs = view.path.replace(/\.md$/i, '').split('/')
@@ -194,6 +194,13 @@ export function PathBar() {
         )}
       </nav>
       <span className={`save-state ${saveState}`}>{SAVE_LABEL[saveState]}</span>
+      <button
+        className={`icon-btn md-toggle ${rawDocs[view.docId] ? 'on' : ''}`}
+        title={rawDocs[view.docId] ? 'Back to the page (Ctrl+Shift+M)' : 'Show the markdown (Ctrl+Shift+M)'}
+        onClick={() => toggleRaw(view.docId)}
+      >
+        M↓
+      </button>
       {git?.isRepo && (
         <button className="icon-btn" title="History of this note" onClick={(e) => openHistory(view.path, { newTab: e.ctrlKey })}>
           ⟲

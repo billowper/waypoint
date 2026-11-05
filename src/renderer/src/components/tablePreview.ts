@@ -1,9 +1,9 @@
 import { syntaxTree } from '@codemirror/language'
-import { StateEffect, StateField, type EditorState, type Extension, type Range, type Text } from '@codemirror/state'
+import { StateField, type EditorState, type Extension, type Range, type Text } from '@codemirror/state'
 import { Decoration, EditorView, WidgetType, type DecorationSet, type KeyBinding } from '@codemirror/view'
 import type { SyntaxNode } from '@lezer/common'
 import { parseLinks, resolveLink, type WikiLink } from '@shared/links'
-import { linkContext, refreshLinks } from './livePreview'
+import { editorFocused, linkContext, refreshLinks } from './livePreview'
 
 // Markdown tables in live preview. A table is drawn as a real one until the selection touches
 // its lines, when the raw text comes back so it can be edited.
@@ -286,18 +286,9 @@ class TableWidget extends WidgetType {
   }
 }
 
-const setFocused = StateEffect.define<boolean>()
-const focused = StateField.define<boolean>({
-  create: () => false,
-  update(value, tr) {
-    for (const e of tr.effects) if (e.is(setFocused)) value = e.value
-    return value
-  }
-})
-
 function build(state: EditorState): DecorationSet {
   const { doc, selection } = state
-  const hasFocus = state.field(focused)
+  const hasFocus = state.field(editorFocused, false) ?? false
   const decos: Range<Decoration>[] = []
   // Only top-level tables: in a list or quote, the markers on each line have to stay visible
   for (let node = syntaxTree(state).topNode.firstChild; node; node = node.nextSibling) {
@@ -318,7 +309,8 @@ const tables = StateField.define<DecorationSet>({
       tr.docChanged ||
       tr.selection ||
       syntaxTree(tr.startState) !== syntaxTree(tr.state) ||
-      tr.effects.some((e) => e.is(setFocused) || e.is(refreshLinks))
+      tr.startState.field(editorFocused, false) !== tr.state.field(editorFocused, false) ||
+      tr.effects.some((e) => e.is(refreshLinks))
     return rebuild ? build(tr.state) : decos
   },
   provide: (field) => EditorView.decorations.from(field)
@@ -335,8 +327,10 @@ function moveIntoTable(view: EditorView, forward: boolean): boolean {
   const line = doc.lineAt(main.head)
   if (line.number === (forward ? doc.lines : 1)) return false
   const next = doc.line(line.number + (forward ? 1 : -1))
+  const drawn = view.state.field(tables, false)
+  if (!drawn) return false // the markdown view: no tables drawn
   let table: { from: number; to: number } | null = null
-  view.state.field(tables).between(next.from, next.from, (from, to) => {
+  drawn.between(next.from, next.from, (from, to) => {
     table = { from, to }
   })
   if (!table) return false
@@ -356,9 +350,8 @@ export const tableKeymap: readonly KeyBinding[] = [
   { key: 'ArrowDown', run: (view) => moveIntoTable(view, true) }
 ]
 
+/** Goes after livePreview, which keeps track of focus */
 export const tablePreview: Extension = [
-  focused,
-  EditorView.focusChangeEffect.of((_state, focusing) => setFocused.of(focusing)),
   tables,
   EditorView.domEventHandlers({
     // Clicking a cell puts the cursor in its text, which brings the raw table back to edit

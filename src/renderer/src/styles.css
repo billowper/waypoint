@@ -791,6 +791,7 @@ button.crumb.current:hover {
 .editor .cm-md-bullet {
   display: inline-block;
   width: 1ch;
+  margin-right: 0.45em; /* stands in for the hidden space after "-" */
   text-align: center;
   color: var(--highlight);
 }
@@ -798,7 +799,7 @@ button.crumb.current:hover {
 .editor .cm-md-task {
   width: 14px;
   height: 14px;
-  margin: 0 8px 0 0;
+  margin: 0 10px 0 0;
   vertical-align: -2px;
   accent-color: var(--accent);
   cursor: pointer;
@@ -866,6 +867,13 @@ button.crumb.current:hover {
   border-left: 3px solid var(--quote);
   padding-left: 14px;
   color: var(--text-dim);
+}
+
+/* A code block's language, where its opening ``` is */
+.editor .cm-md-code-lang {
+  font-family: var(--sans);
+  font-size: 0.78em;
+  color: var(--text-faint);
 }
 
 /* YAML properties at the top of a note (project and task settings) */

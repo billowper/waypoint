@@ -92,6 +92,8 @@ interface State {
   backlinksOpen: boolean
   /** The contents pane beside the note */
   tocOpen: boolean
+  /** Notes shown as their markdown source rather than the live preview, by docId */
+  rawDocs: Record<number, boolean>
   /** Where Back and Forward go in this window, nearest last */
   navBack: ViewRef[]
   navForward: ViewRef[]
@@ -165,6 +167,8 @@ interface State {
   reorderProjects(slugs: string[]): Promise<void>
   toggleBacklinks(): void
   toggleToc(): void
+  /** Switch an open note between the live preview and its markdown source */
+  toggleRaw(docId: number): void
   /** Back (-1) or forward (1) through the places visited in this window */
   navigate(step: -1 | 1): Promise<void>
   clearReveal(): void
@@ -460,6 +464,7 @@ export const useStore = create<State>((set, get) => {
     nudge: null,
     backlinksOpen: true,
     tocOpen: loadToc(),
+    rawDocs: {},
     navBack: [],
     navForward: [],
     prompt: null,
@@ -990,6 +995,10 @@ ${(e as Error).message}`)
       const tocOpen = !get().tocOpen
       saveToc(tocOpen)
       set({ tocOpen })
+    },
+
+    toggleRaw(docId) {
+      set((s) => ({ rawDocs: { ...s.rawDocs, [docId]: !s.rawDocs[docId] } }))
     },
 
     async navigate(step) {

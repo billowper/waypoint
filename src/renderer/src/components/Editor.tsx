@@ -1,5 +1,5 @@
 import { useEffect, useRef, useState } from 'react'
-import { EditorSelection, EditorState } from '@codemirror/state'
+import { Compartment, EditorSelection, EditorState } from '@codemirror/state'
 import { EditorView, keymap, drawSelection, highlightActiveLine, placeholder } from '@codemirror/view'
 import { defaultKeymap, history, historyKeymap, indentWithTab } from '@codemirror/commands'
 import { searchKeymap, highlightSelectionMatches } from '@codemirror/search'
@@ -13,6 +13,7 @@ import { resolveLink } from '@shared/links'
 import { enqueue, registerEditor, useStore, type Reveal, type SaveState } from '../store'
 import { linkContext, livePreview, refreshLinks } from './livePreview'
 import { tableKeymap, tablePreview } from './tablePreview'
+import { formatKeymap, wysiwyg } from './wysiwyg'
 import { wikiComplete } from './wikiComplete'
 import { frontmatterSyntax } from './frontmatterSyntax'
 import Toc, { readHeadings, type Heading } from './Toc'
@@ -25,7 +26,7 @@ const TOC_JUMP_SETTLE = 200
 /** How long the # title has to sit still before the file is renamed to match it */
 const TITLE_RENAME_DELAY = 1200
 
-// Obsidian-ish: markdown stays visible but is styled so the document reads like a page
+// Styles the markdown itself, so the source view (Ctrl+Shift+M) still reads like a page
 const mdHighlight = HighlightStyle.define([
   { tag: t.heading1, fontSize: '1.75em', fontWeight: '700', color: 'var(--text-strong)' },
   { tag: t.heading2, fontSize: '1.4em', fontWeight: '650', color: 'var(--text-strong)' },
@@ -45,6 +46,9 @@ const mdHighlight = HighlightStyle.define([
   { tag: t.comment, color: 'var(--text-faint)', fontStyle: 'italic' },
   { tag: [t.function(t.variableName), t.propertyName], color: '#8caaee' }
 ])
+
+/** Everything that draws the page over its markdown; left out when showing the source */
+const preview = [livePreview, tablePreview, wysiwyg]
 
 const theme = EditorView.theme(
   {
@@ -88,11 +92,12 @@ const theme = EditorView.theme(
 
 interface Props {
   tabId: number
+  docId: number
   path: string
   active: boolean
 }
 
-export default function Editor({ tabId, path, active }: Props) {
+export default function Editor({ tabId, docId, path, active }: Props) {
   const host = useRef<HTMLDivElement>(null)
   const viewRef = useRef<EditorView | null>(null)
   // The file can be renamed while it's open; the editor keeps going under the new path
@@ -119,6 +124,8 @@ export default function Editor({ tabId, path, active }: Props) {
     // While a note's file name matches its "# Title", editing the title renames the file
     let follow = false
     let renamingSelf = false
+    const previewSlot = new Compartment()
+    const previewFor = (raw: boolean) => (raw ? [] : preview)
 
     const trackScroll = () => {
       if (!view || !store().tocOpen || performance.now() - jumpedAt.current < TOC_JUMP_SETTLE) return
@@ -230,8 +237,7 @@ export default function Editor({ tabId, path, active }: Props) {
             markdown({ base: markdownLanguage, codeLanguages: languages, extensions: [frontmatterSyntax] }),
             syntaxHighlighting(mdHighlight),
             linkContext.of({ notes: () => store().notes, from: () => pathRef.current, open: openLink }),
-            livePreview,
-            tablePreview,
+            previewSlot.of(previewFor(!!store().rawDocs[docId])),
             wikiComplete,
             theme,
             placeholder('Start writing…'),
@@ -239,6 +245,7 @@ export default function Editor({ tabId, path, active }: Props) {
               { key: 'Mod-s', run: () => (save(), true), preventDefault: true },
               ...completionKeymap,
               ...tableKeymap,
+              ...formatKeymap,
               indentWithTab,
               ...defaultKeymap,
               ...historyKeymap,
@@ -281,6 +288,10 @@ export default function Editor({ tabId, path, active }: Props) {
     const offReveal = useStore.subscribe((s, prev) => {
       if (s.reveal !== prev.reveal) revealIfAsked(s.reveal)
       if (s.tocOpen !== prev.tocOpen) refreshToc()
+      if (!!s.rawDocs[docId] !== !!prev.rawDocs[docId] && view) {
+        view.dispatch({ effects: previewSlot.reconfigure(previewFor(!!s.rawDocs[docId])) })
+        if (activeRef.current) view.focus()
+      }
       // Links re-check whether they resolve when notes come and go
       if (s.notes !== prev.notes && view) view.dispatch({ effects: refreshLinks.of(null) })
     })
