@@ -3,7 +3,6 @@ import {
   Facet,
   RangeSet,
   StateEffect,
-  StateField,
   type EditorState,
   type Extension,
   type Line,
@@ -26,8 +25,11 @@ import { parseLinks, resolveLink } from '@shared/links'
 // button (Ctrl+Shift+M) turns all of this off to show and edit the source.
 // wysiwyg.ts makes the cursor, arrows and deleting behave around what's hidden here.
 //
-// Two things stay raw: a table while the selection is in it (tablePreview.ts), and syntax that
-// isn't finished yet (an unclosed ``` fence, a ** with no partner), so you can see what you type.
+// Syntax that isn't finished yet stays raw (an unclosed ``` fence, a ** with no partner), so you
+// can see what you type.
+//
+// A top-level table is its own text laid out as a grid: each row's line is a flex row, each
+// cell's text a column, and the | and the |---| line are hidden. So cells are edited in place.
 //
 // Links: a click follows a link; Ctrl+click (or middle-click) on a [[wiki link]] opens it in a new tab.
 
@@ -43,24 +45,16 @@ export const linkContext = Facet.define<LinkContext, LinkContext | null>({ combi
 /** Dispatch when the set of notes changes, so links re-check whether they resolve. */
 export const refreshLinks = StateEffect.define<null>()
 
-/** Whether the editor has focus, kept in the state so state fields (tablePreview.ts) can see it */
-const setFocused = StateEffect.define<boolean>()
-export const editorFocused = StateField.define<boolean>({
-  create: () => false,
-  update(value, tr) {
-    for (const e of tr.effects) if (e.is(setFocused)) value = e.value
-    return value
-  }
-})
-
 /**
  * Markdown the preview hides or draws over:
  * - inline: marks around text (** _ ~~ ` [ ](url) [[ ]])
  * - prefix: block markers at the start of a line (# > - [ ])
  * - open / close: the ``` lines of a code block
  * - rule: a --- line (a divider, or the underline of a heading)
+ * - pipe: a table's | (with any space outside the first and last)
+ * - skip: a table's |---| line, which the cursor passes over
  */
-export type HiddenKind = 'inline' | 'prefix' | 'open' | 'close' | 'rule'
+export type HiddenKind = 'inline' | 'prefix' | 'open' | 'close' | 'rule' | 'pipe' | 'skip'
 export interface Hidden {
   from: number
   to: number
@@ -141,6 +135,22 @@ class LangWidget extends WidgetType {
   }
 }
 
+/** Holds an empty table cell's place (one written || with no space in it) */
+class EmptyCellWidget extends WidgetType {
+  constructor(readonly style: string) {
+    super()
+  }
+  eq(other: EmptyCellWidget) {
+    return other.style === this.style
+  }
+  toDOM() {
+    const el = document.createElement('span')
+    el.className = 'cm-md-cell'
+    el.setAttribute('style', this.style)
+    return el
+  }
+}
+
 /** Whether a fenced code block has its closing fence (an unclosed one shows its ``` until it does) */
 export function fenceClosed(node: SyntaxNode, doc: Text): boolean {
   const marks = node.getChildren('CodeMark')
@@ -151,8 +161,10 @@ function collect(state: EditorState, ranges: readonly { from: number; to: number
   const doc = state.doc
   const decos: Range<Decoration>[] = []
   const hidden: Hidden[] = []
-  /** Top-level tables belong to tablePreview.ts, so nothing here decorates inside them */
-  const tables: { from: number; to: number }[] = []
+  /** Backslash escapes, hidden after the wiki links are known (a link's \| is the link's) */
+  const escapes: number[] = []
+  /** Table cells, marked once what's hidden in them is known */
+  const cellMarks: { from: number; to: number; style: string }[] = []
 
   const hideRange = (from: number, to: number, kind: HiddenKind, widget?: WidgetType) => {
     if (to <= from) return
@@ -173,9 +185,11 @@ function collect(state: EditorState, ranges: readonly { from: number; to: number
         const parent = node.parent
         switch (node.name) {
           case 'Table':
-            if (parent?.name !== 'Document') return
-            tables.push({ from: node.from, to: node.to })
-            return false
+            if (parent?.name === 'Document') table(node)
+            return // cells can have formatting in them
+          case 'Escape':
+            escapes.push(node.from)
+            return
           case 'HeaderMark': {
             const line = doc.lineAt(node.from)
             if (parent?.name.startsWith('SetextHeading') && line.number > doc.lineAt(parent.from).number) {
@@ -191,10 +205,16 @@ function collect(state: EditorState, ranges: readonly { from: number; to: number
           case 'StrikethroughMark':
             hideRange(node.from, node.to, 'inline')
             return
-          case 'InlineCode':
-            decos.push(Decoration.mark({ class: 'cm-md-inline-code' }).range(node.from, node.to))
-            for (const m of node.getChildren('CodeMark')) hideRange(m.from, m.to, 'inline')
+          case 'InlineCode': {
+            // Over the code only, not the hidden ` (in a table, a mark starting where a cell does
+            // would end up outside the cell)
+            const marks = node.getChildren('CodeMark')
+            const from = marks.length >= 2 ? marks[0].to : node.from
+            const to = marks.length >= 2 ? marks[marks.length - 1].from : node.to
+            if (to > from) decos.push(Decoration.mark({ class: 'cm-md-inline-code' }).range(from, to))
+            for (const m of marks) hideRange(m.from, m.to, 'inline')
             return false
+          }
           case 'FencedCode':
             fencedCode(node)
             return false
@@ -269,6 +289,93 @@ function collect(state: EditorState, ranges: readonly { from: number; to: number
     hideRange(close.from, close.to, 'close')
   }
 
+  function table(node: SyntaxNode) {
+    const rows: { line: Line; head: boolean; pipes: { from: number; to: number }[]; cells: { from: number; to: number }[] }[] =
+      []
+    let aligns: string[] = []
+    for (let child = node.firstChild; child; child = child.nextSibling) {
+      if (child.name === 'TableDelimiter') {
+        // The |---| line: kept, as the editor needs every line, but flattened and passed over
+        const line = doc.lineAt(child.from)
+        decos.push(Decoration.line({ class: 'cm-md-tdelim' }).range(line.from))
+        hideRange(line.from, line.to, 'skip')
+        aligns = line.text
+          .trim()
+          .replace(/^\||\|$/g, '')
+          .split('|')
+          .map((part) => {
+            const s = part.trim()
+            const left = s.startsWith(':')
+            const right = s.endsWith(':')
+            return left && right ? 'center' : right ? 'right' : left ? 'left' : ''
+          })
+        continue
+      }
+      if (child.name !== 'TableHeader' && child.name !== 'TableRow') continue
+      const line = doc.lineAt(child.from)
+      const pipes = child.getChildren('TableDelimiter').map((p) => ({ from: p.from, to: p.to }))
+      // Cells are what's between the |s; text before the first or after the last is one only if not blank
+      const cells: { from: number; to: number }[] = []
+      const cuts = [line.from, ...pipes.flatMap((p) => [p.from, p.to]), line.to]
+      for (let i = 0; i < cuts.length; i += 2) {
+        const edge = i === 0 || i === cuts.length - 2
+        if (edge && pipes.length && !doc.sliceString(cuts[i], cuts[i + 1]).trim()) {
+          // Blank space outside the table's edge | goes with it
+          if (i === 0) pipes[0].from = cuts[i]
+          else pipes[pipes.length - 1].to = cuts[i + 1]
+          continue
+        }
+        cells.push({ from: cuts[i], to: cuts[i + 1] })
+      }
+      // The spaces padding a cell's text go with the | beside them, so the cursor can't stop in
+      // them (typing there would put a space between you and the text). An empty cell keeps its
+      // spaces as somewhere to type.
+      for (const c of cells) {
+        const text = doc.sliceString(c.from, c.to)
+        if (!text.trim()) continue
+        const lead = text.length - text.trimStart().length
+        const trail = text.length - text.trimEnd().length
+        const before = pipes.find((p) => p.to === c.from)
+        const after = pipes.find((p) => p.from === c.to)
+        if (before) before.to += lead
+        if (after) after.from -= trail
+        c.from += before ? lead : 0
+        c.to -= after ? trail : 0
+      }
+      rows.push({ line, head: child.name === 'TableHeader', pipes, cells })
+    }
+    // Columns share the width by their longest text, as shown (without ** [[ ]] and the like)
+    const shown = (from: number, to: number) =>
+      doc
+        .sliceString(from, to)
+        .replace(/\]\([^)]*\)|\[\[[^\]|]*\||[*_`~\\[\]]/g, '')
+        .trim().length
+    const widths: number[] = []
+    // and are never narrower than their longest word (up to a point), so "10" doesn't wrap to "1 0"
+    const words: number[] = []
+    for (const row of rows) {
+      row.cells.forEach((c, i) => {
+        widths[i] = Math.max(widths[i] ?? 3, Math.min(40, shown(c.from, c.to)))
+        const longest = Math.max(0, ...doc.sliceString(c.from, c.to).split(/\s+/).map((w) => w.length))
+        words[i] = Math.max(words[i] ?? 1, Math.min(14, longest))
+      })
+    }
+    rows.forEach((row, r) => {
+      const cls = 'cm-md-trow' + (row.head ? ' cm-md-thead' : '') + (r === rows.length - 1 ? ' cm-md-tlast' : '')
+      decos.push(Decoration.line({ class: cls }).range(row.line.from))
+      for (const p of row.pipes) hideRange(p.from, p.to, 'pipe')
+      row.cells.forEach((c, i) => {
+        // Every cell in a column gets the same grow and minimum (in em, which bold text doesn't change),
+        // so the columns line up from row to row
+        const style =
+          `flex-grow: ${widths[i] ?? 3}; min-width: ${((words[i] ?? 1) * 0.62).toFixed(2)}em;` +
+          (aligns[i] ? ` text-align: ${aligns[i]};` : '')
+        if (c.to > c.from) cellMarks.push({ from: c.from, to: c.to, style })
+        else decos.push(Decoration.widget({ widget: new EmptyCellWidget(style), side: 1 }).range(c.from))
+      })
+    })
+  }
+
   function link(node: SyntaxNode) {
     const marks = node.getChildren('LinkMark')
     const url = node.getChild('URL')
@@ -297,13 +404,14 @@ function collect(state: EditorState, ranges: readonly { from: number; to: number
   const ctx = state.facet(linkContext)
   const notes = ctx?.notes() ?? []
   const fromPath = ctx?.from() ?? ''
+  const wikis: { from: number; to: number }[] = []
   for (const { from, to } of ranges) {
     const start = doc.lineAt(from).from
     for (const l of parseLinks(doc.sliceString(start, doc.lineAt(to).to))) {
       const lf = start + l.from
       const lt = start + l.to
       if (CODE.has(syntaxTree(state).resolveInner(lf + 2, 1).name)) continue
-      if (tables.some((t) => lf >= t.from && lt <= t.to)) continue
+      wikis.push({ from: lf, to: lt })
       const raw = doc.sliceString(lf + 2, lt - 2)
       const pipe = raw.indexOf('|')
       const textFrom = pipe === -1 ? lf + 2 : lf + 3 + pipe
@@ -323,6 +431,17 @@ function collect(state: EditorState, ranges: readonly { from: number; to: number
       hideRange(lf, textFrom, 'inline')
       hideRange(lt - 2, lt, 'inline')
     }
+  }
+  // \* shows as *
+  for (const e of escapes) {
+    if (!wikis.some((w) => e >= w.from && e < w.to)) hideRange(e, e + 1, 'inline')
+  }
+  // A cell's span has to be the row's flex item, so it must be outside any other mark that covers
+  // the same text (a link filling the cell): inclusive puts it outside. But not when the cell starts
+  // with hidden markdown, which would then sit inside the cell and let its text wrap before it.
+  for (const c of cellMarks) {
+    const inclusive = !hidden.some((h) => h.from === c.from)
+    decos.push(Decoration.mark({ class: 'cm-md-cell', inclusive, attributes: { style: c.style } }).range(c.from, c.to))
   }
 
   return { decos, hidden }
@@ -354,8 +473,6 @@ class Preview {
     if (
       u.docChanged ||
       u.viewportChanged ||
-      u.selectionSet ||
-      u.focusChanged ||
       syntaxTree(u.startState) !== syntaxTree(u.state) ||
       u.transactions.some((tr) => tr.effects.some((e) => e.is(refreshLinks)))
     ) {
@@ -386,8 +503,6 @@ const previewPlugin = ViewPlugin.fromClass(Preview, {
 })
 
 export const livePreview: Extension = [
-  editorFocused,
-  EditorView.focusChangeEffect.of((_state, focusing) => setFocused.of(focusing)),
   previewPlugin,
   EditorView.atomicRanges.of((view) => view.plugin(previewPlugin)?.atoms ?? RangeSet.empty)
 ]

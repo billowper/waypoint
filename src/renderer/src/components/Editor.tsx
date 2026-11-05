@@ -12,7 +12,6 @@ import { baseName, movedPath, sanitize, titleOf } from '@shared/names'
 import { resolveLink } from '@shared/links'
 import { enqueue, registerEditor, useStore, type Reveal, type SaveState } from '../store'
 import { linkContext, livePreview, refreshLinks } from './livePreview'
-import { tableKeymap, tablePreview } from './tablePreview'
 import { formatKeymap, wysiwyg } from './wysiwyg'
 import { wikiComplete } from './wikiComplete'
 import { frontmatterSyntax } from './frontmatterSyntax'
@@ -48,7 +47,7 @@ const mdHighlight = HighlightStyle.define([
 ])
 
 /** Everything that draws the page over its markdown; left out when showing the source */
-const preview = [livePreview, tablePreview, wysiwyg]
+const preview = [livePreview, wysiwyg]
 
 const theme = EditorView.theme(
   {
@@ -244,7 +243,6 @@ export default function Editor({ tabId, docId, path, active }: Props) {
             keymap.of([
               { key: 'Mod-s', run: () => (save(), true), preventDefault: true },
               ...completionKeymap,
-              ...tableKeymap,
               ...formatKeymap,
               indentWithTab,
               ...defaultKeymap,

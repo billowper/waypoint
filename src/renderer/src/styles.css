@@ -898,50 +898,52 @@ button.crumb.current:hover {
   background: var(--border);
 }
 
-/* Tables (see tablePreview.ts). Spacing is padding, not margin, so the editor measures it. */
-.editor .cm-md-table-wrap {
-  padding: 8px 0;
-  overflow-x: auto;
-  /* A wide table scrolls here, instead of its width stretching the whole note */
-  contain: inline-size;
-}
-
-.editor .cm-md-table {
-  border-collapse: collapse;
+/* Tables (see livePreview.ts): each row is its own line laid out as a flex row, each cell's text
+   a column sized by flex-grow. No margins: the editor measures lines by their boxes. */
+.editor .cm-line.cm-md-trow {
+  display: flex;
   font-size: 0.92em;
   line-height: 1.5;
-}
-
-.editor .cm-md-table th,
-.editor .cm-md-table td {
-  padding: 5px 10px;
   border: 1px solid var(--border);
-  text-align: left;
-  vertical-align: top;
-  white-space: normal;
-  /* The editor's "break anywhere" would squeeze columns down to a letter or two */
-  word-break: normal;
-  overflow-wrap: normal;
-  cursor: text;
+  border-top: none;
 }
 
-.editor .cm-md-table th {
+.editor .cm-line.cm-md-thead {
+  border-top: 1px solid var(--border);
+  border-radius: 6px 6px 0 0;
   background: var(--panel);
   color: var(--text-strong);
   font-weight: 600;
 }
 
-.editor .cm-md-table strong {
-  color: var(--text-strong);
+.editor .cm-line.cm-md-tlast {
+  border-radius: 0 0 6px 6px;
 }
 
-.editor .cm-md-table del {
-  color: var(--text-dim);
+.editor .cm-line.cm-md-thead.cm-md-tlast {
+  border-radius: 6px;
 }
 
-.editor .cm-md-table code {
-  font-family: var(--mono);
-  color: var(--code);
+/* Width comes from flex-grow and a minimum set per column (livePreview.ts), never from the text
+   in this row, so the columns line up */
+.editor .cm-md-cell {
+  box-sizing: content-box; /* the minimum is for the text, not counting padding */
+  flex-basis: 0;
+  flex-shrink: 0;
+  padding: 4px 10px;
+  overflow-wrap: anywhere;
+}
+
+/* ~ not +: the hidden | leave empty placeholders between cells */
+.editor .cm-md-cell ~ .cm-md-cell {
+  border-left: 1px solid var(--border);
+}
+
+/* The |---| line under the header: there for the editor, flat on screen */
+.editor .cm-line.cm-md-tdelim {
+  height: 0;
+  overflow: hidden;
+  padding: 0;
 }
 
 /* Home ------------------------------------------------------------------ */

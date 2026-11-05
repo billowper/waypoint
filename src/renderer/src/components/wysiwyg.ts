@@ -1,3 +1,4 @@
+import { completionStatus } from '@codemirror/autocomplete'
 import { syntaxTree } from '@codemirror/language'
 import { deleteMarkupBackward } from '@codemirror/lang-markdown'
 import { deleteCharBackward } from '@codemirror/commands'
@@ -23,13 +24,33 @@ import { fenceClosed, hiddenOnLine, type Hidden } from './livePreview'
 //   marker (heading → text, task → bullet → text), a divider. Formatting left empty goes too.
 // - typing on a hidden ``` or --- line starts a new line after it
 // - Enter after an opening ``` closes the block; Enter at the start of a heading adds a line above
+// - in a table: the | stay put, Tab and Shift+Tab go between cells, Enter adds a row, and a typed |
+//   is written \| so it stays in its cell
 //
 // formatKeymap (Ctrl+B, Ctrl+I, Ctrl+E, Ctrl+Shift+S) is apart, as it works in the markdown view too.
 
-const SOLID = new Set(['open', 'close', 'rule'])
+const SOLID = new Set(['open', 'close', 'rule', 'skip'])
 const isSolid = (h: Hidden) => SOLID.has(h.kind)
-const isMark = (h: Hidden) => h.kind === 'inline' || h.kind === 'prefix'
+/** Lines the cursor passes over and never rests on */
+const passOver = (h: Hidden) => h.kind === 'open' || h.kind === 'skip'
+const isMark = (h: Hidden) => h.kind === 'inline' || h.kind === 'prefix' || h.kind === 'pipe'
 const ofKind = (hidden: Hidden[], kind: Hidden['kind']) => hidden.filter((h) => h.kind === kind)
+/** A table row: its | are hidden */
+const isRow = (hidden: Hidden[]) => hidden.some((h) => h.kind === 'pipe')
+const tableLine = (hidden: Hidden[]) => hidden.some((h) => h.kind === 'pipe' || h.kind === 'skip')
+
+/** A table row's cells: what's between its hidden | */
+function cellsOf(line: Line, hidden: Hidden[]): { from: number; to: number }[] {
+  const pipes = ofKind(hidden, 'pipe')
+  const cuts = [line.from, ...pipes.flatMap((p) => [p.from, p.to]), line.to]
+  const cells: { from: number; to: number }[] = []
+  for (let i = 0; i < cuts.length; i += 2) {
+    const edge = i === 0 || i === cuts.length - 2
+    if (edge && cuts[i] === cuts[i + 1]) continue
+    cells.push({ from: cuts[i], to: cuts[i + 1] })
+  }
+  return cells
+}
 
 /** End of the run of hidden ranges that starts at pos (pos itself if none does) */
 function runForward(hidden: Hidden[], pos: number): number {
@@ -81,14 +102,23 @@ function settle(state: EditorState, head: number, before: number, moved: boolean
     const line = state.doc.lineAt(head)
     const hidden = hiddenOnLine(state, line)
     const solid = hidden.find(isSolid)
-    if (!solid) return runForward(ofKind(hidden, 'prefix'), head)
-    if (solid.kind !== 'open' && head === line.to && !moved) return head
+    if (!solid) {
+      // Not after a table row's last |, where typing would start another cell
+      const last = hidden[hidden.length - 1]
+      if (head === line.to && last?.kind === 'pipe' && last.to === line.to) return last.from
+      // Not in front of a line's markers, or a table row's first |
+      return runForward(
+        hidden.filter((h) => h.kind === 'prefix' || (h.kind === 'pipe' && h.from === line.from)),
+        head
+      )
+    }
+    if (!passOver(solid) && head === line.to && !moved) return head
     const up = head < before
     const prev = lineBefore(state, line)
     const next = lineAfter(state, line)
     let to: number
     if (up && prev) to = prev.to
-    else if (next && (!up || solid.kind === 'open')) to = next.from
+    else if (next && (!up || passOver(solid))) to = next.from
     else to = line.to
     if (to === head) return head
     head = to
@@ -131,6 +161,26 @@ const solidLineInput = EditorState.transactionFilter.of((tr) => {
   }
 })
 
+/** A | typed in a table cell is written \| so it stays text, not a new column */
+const pipeInput = EditorState.transactionFilter.of((tr) => {
+  if (!tr.docChanged || !tr.isUserEvent('input.type')) return tr
+  let count = 0
+  let at = -1
+  tr.changes.iterChanges((fromA, toA, _fromB, _toB, inserted) => {
+    count++
+    if (fromA === toA && inserted.toString() === '|') at = fromA
+  })
+  if (count !== 1 || at < 0) return tr
+  const start = tr.startState
+  if (!isRow(hiddenOnLine(start, start.doc.lineAt(at)))) return tr
+  return {
+    changes: { from: at, insert: '\\|' },
+    selection: EditorSelection.cursor(at + 2),
+    userEvent: 'input.type',
+    scrollIntoView: true
+  }
+})
+
 // ---------------------------------------------------------------------------------------------
 // Arrows
 
@@ -156,10 +206,88 @@ function arrow(forward: boolean, lineStart = false): Command {
   }
 }
 
+/** Up and down over a table's hidden |---| line, keeping to the same column */
+function vertical(forward: boolean): Command {
+  return (view) => {
+    const { state } = view
+    if (completionStatus(state)) return false
+    const sel = state.selection
+    if (sel.ranges.length > 1 || !sel.main.empty) return false
+    let range = view.moveVertically(sel.main, forward)
+    if (!hiddenOnLine(state, state.doc.lineAt(range.head)).some((h) => h.kind === 'skip')) return false
+    range = view.moveVertically(range, forward)
+    view.dispatch({ selection: range, scrollIntoView: true, userEvent: 'select' })
+    return true
+  }
+}
+
+// ---------------------------------------------------------------------------------------------
+// Tables
+
+/** The row after (or before) a table row, past the |---| line; null at the table's edge */
+function rowBeside(state: EditorState, line: Line, forward: boolean): { line: Line; hidden: Hidden[] } | null {
+  for (let l: Line | null = line; ; ) {
+    l = forward ? lineAfter(state, l) : lineBefore(state, l)
+    if (!l) return null
+    const hidden = hiddenOnLine(state, l)
+    if (hidden.some((h) => h.kind === 'skip')) continue
+    return isRow(hidden) ? { line: l, hidden } : null
+  }
+}
+
+/** Adds an empty row after this one (after the |---| line, from the header) and puts the cursor in it */
+function addRow(view: EditorView, line: Line, hidden: Hidden[]): boolean {
+  const { state } = view
+  let after = line
+  const next = lineAfter(state, line)
+  if (next && hiddenOnLine(state, next).some((h) => h.kind === 'skip')) after = next
+  const cells = Math.max(1, cellsOf(line, hidden).length)
+  const insert = state.lineBreak + '|' + '  |'.repeat(cells)
+  view.dispatch({
+    changes: { from: after.to, insert },
+    selection: EditorSelection.cursor(after.to + 1 + 2),
+    userEvent: 'input',
+    scrollIntoView: true
+  })
+  return true
+}
+
+/** Selects a cell's text, or puts the cursor in it if it's empty */
+function selectCell(view: EditorView, cell: { from: number; to: number }): boolean {
+  const text = view.state.sliceDoc(cell.from, cell.to)
+  const from = cell.from + (text.length - text.trimStart().length)
+  const to = cell.to - (text.length - text.trimEnd().length)
+  const selection =
+    to > from ? EditorSelection.range(from, to) : EditorSelection.cursor(Math.min(cell.from + 1, cell.to))
+  view.dispatch({ selection, scrollIntoView: true, userEvent: 'select' })
+  return true
+}
+
+/** Tab and Shift+Tab: the next or previous cell, across rows; Tab past the last cell adds a row */
+function tab(forward: boolean): Command {
+  return (view) => {
+    const { state } = view
+    const sel = state.selection.main
+    const line = state.doc.lineAt(sel.head)
+    const hidden = hiddenOnLine(state, line)
+    if (!isRow(hidden)) return false
+    const cells = cellsOf(line, hidden)
+    const i = cells.findIndex((c) => sel.head >= c.from && sel.head <= c.to)
+    const j = i + (forward ? 1 : -1)
+    if (i >= 0 && j >= 0 && j < cells.length) return selectCell(view, cells[j])
+    const row = rowBeside(state, line, forward)
+    if (row) {
+      const next = cellsOf(row.line, row.hidden)
+      if (next.length) return selectCell(view, forward ? next[0] : next[next.length - 1])
+    }
+    return forward ? addRow(view, line, hidden) : true
+  }
+}
+
 // ---------------------------------------------------------------------------------------------
 // Deleting
 
-const INLINE = new Set(['Emphasis', 'StrongEmphasis', 'Strikethrough', 'InlineCode', 'Link'])
+const INLINE = new Set(['Emphasis', 'StrongEmphasis', 'Strikethrough', 'InlineCode', 'Link', 'Escape'])
 const MARK_OF: Record<string, string> = {
   Emphasis: 'EmphasisMark',
   StrongEmphasis: 'EmphasisMark',
@@ -170,6 +298,7 @@ const MARK_OF: Record<string, string> = {
 
 /** The text inside a piece of inline formatting, between its marks */
 function contentOf(node: SyntaxNode): { from: number; to: number } | null {
+  if (node.name === 'Escape') return { from: node.from + 1, to: node.to } // \| counts as one character
   const marks = node.getChildren(MARK_OF[node.name])
   if (node.name === 'Link') return marks.length >= 3 && node.getChild('URL') ? { from: marks[0].to, to: marks[1].from } : null
   return marks.length >= 2 ? { from: marks[0].to, to: marks[marks.length - 1].from } : null
@@ -226,6 +355,7 @@ function moveTo(view: EditorView, pos: number): boolean {
 
 /** A selection never takes half a mark, and takes formatting it empties whole */
 function deleteSelection(view: EditorView, from: number, to: number): boolean {
+  if (deleteInTable(view, from, to)) return true
   const { state } = view
   const doc = state.doc
   const marks = [...hiddenOnLine(state, doc.lineAt(from)), ...hiddenOnLine(state, doc.lineAt(to))].filter(
@@ -238,6 +368,43 @@ function deleteSelection(view: EditorView, from: number, to: number): boolean {
   if (to <= from) return true
   const [f, t] = widenToEmptied(state, from, to)
   return remove(view, f, t, 'delete.selection')
+}
+
+/**
+ * A selection that takes in part of a table empties its cells but keeps the table: its |, its
+ * |---| line and the line breaks between rows stay. False if the selection misses tables.
+ */
+function deleteInTable(view: EditorView, from: number, to: number): boolean {
+  const { state } = view
+  const doc = state.doc
+  const first = doc.lineAt(from).number
+  const last = doc.lineAt(to).number
+  if (last - first > 2000) return false
+  const lines: { line: Line; hidden: Hidden[]; table: boolean }[] = []
+  for (let n = first; n <= last; n++) {
+    const line = doc.line(n)
+    const hidden = hiddenOnLine(state, line)
+    lines.push({ line, hidden, table: tableLine(hidden) })
+  }
+  if (!lines.some((l) => l.table)) return false
+  const changes: { from: number; to: number }[] = []
+  lines.forEach(({ line, hidden, table }, i) => {
+    let pos = Math.max(from, line.from)
+    const end = Math.min(to, line.to)
+    if (table) {
+      for (const k of hidden) {
+        if ((k.kind !== 'pipe' && k.kind !== 'skip') || k.to <= pos) continue
+        if (k.from >= end) break
+        if (k.from > pos) changes.push({ from: pos, to: k.from })
+        pos = Math.max(pos, k.to)
+      }
+    }
+    if (end > pos) changes.push({ from: pos, to: end })
+    const next = lines[i + 1]
+    if (next && !table && !next.table) changes.push({ from: line.to, to: line.to + 1 })
+  })
+  view.dispatch({ changes, selection: EditorSelection.cursor(from), userEvent: 'delete.selection', scrollIntoView: true })
+  return true
 }
 
 const backspace: Command = (view) => {
@@ -262,9 +429,15 @@ const backspace: Command = (view) => {
   }
 
   const at = runBack(ofKind(hidden, 'inline'), head)
-  // At the start of a line under a code block or divider: joining would break it
+  // At the start of a table cell: the | stays
+  if (isRow(hidden) && (at === line.from || hidden.some((h) => h.kind === 'pipe' && h.to === at))) return true
+  // At the start of a line under a code block, divider or table: joining would break it
   if (at === line.from && prev) {
-    const above = solidOf(state, prev)
+    const prevHidden = hiddenOnLine(state, prev)
+    if (isRow(prevHidden)) {
+      return line.length === 0 ? remove(view, prev.to, line.to, 'delete.backward') : moveTo(view, prev.to)
+    }
+    const above = prevHidden.find(isSolid)
     if (above) {
       if (line.length === 0) return remove(view, prev.to, line.to, 'delete.backward')
       if (above.kind === 'rule') return remove(view, prev.from, line.from, 'delete.backward', head)
@@ -308,6 +481,8 @@ const deleteForward: Command = (view) => {
   }
 
   const at = runForward(ofKind(hidden, 'inline'), head)
+  // At the end of a table cell: the | stays
+  if (isRow(hidden) && (at === line.to || hidden.some((h) => h.kind === 'pipe' && h.from === at))) return true
   if (at < line.to) {
     const c = step(line, at, true)
     const [f, t] = widenToEmptied(state, at, c)
@@ -318,6 +493,8 @@ const deleteForward: Command = (view) => {
   // At the end of the line: pull the next line's text up, without its markers
   if (!next) return at !== head
   const below = hiddenOnLine(state, next)
+  // Above a table: only an empty line goes, so the table moves up
+  if (isRow(below)) return line.length === 0 ? remove(view, line.to, next.from, 'delete.forward', head) : true
   const solid = below.find(isSolid)
   if (solid) return solid.kind === 'rule' ? remove(view, line.to, next.to, 'delete.forward', head) : true
   const textStart = next.from + /^\s*/.exec(next.text)![0].length
@@ -342,6 +519,10 @@ const enter: Command = (view) => {
   if (sel.ranges.length > 1 || !sel.main.empty) return false
   const head = sel.main.head
   const line = state.doc.lineAt(head)
+
+  // In a table: a new row below (a cell can't hold a line break)
+  const rowHidden = hiddenOnLine(state, line)
+  if (isRow(rowHidden)) return addRow(view, line, rowHidden)
 
   // After an opening ```: close the block, so the rest of the page doesn't turn into code
   const fence = /^(\s*)(`{3,}|~{3,})[^`]*$/.exec(line.text)
@@ -379,8 +560,13 @@ const enter: Command = (view) => {
 export const wysiwyg: Extension = [
   cursorFilter,
   solidLineInput,
+  pipeInput,
   Prec.highest(
     keymap.of([
+      { key: 'Tab', run: tab(true) },
+      { key: 'Shift-Tab', run: tab(false) },
+      { key: 'ArrowUp', run: vertical(false) },
+      { key: 'ArrowDown', run: vertical(true) },
       { key: 'Backspace', run: backspace },
       { key: 'Delete', run: deleteForward },
       { key: 'Enter', run: enter },
