@@ -16,7 +16,7 @@ import {
   saveProject,
   saveProjectOrder
 } from './projects'
-import { claudeStatus, connectClaude, disconnectClaude, openInClaudeApp, openInClaudeTerminal, taskPrompt, writeInstructions } from './claudeCode'
+import { CLI_NOT_FOUND, claudeStatus, connectClaude, disconnectClaude, openInClaudeApp, openInClaudeTerminal, taskPrompt, writeInstructions } from './claudeCode'
 import { createTask, isTaskPath, listTasks, updateTask } from './tasks'
 import { VaultGit } from './git'
 import type { ProjectSettings, TaskFields, VaultSettings } from '@shared/types'
@@ -661,7 +661,7 @@ function registerIpc() {
     if (!task) throw new Error(`Couldn't find the task ${rel}.`)
     const p = await repoOf(task.project)
     const status = await claudeStatus(p.repo.path)
-    if (!status.cli) throw new Error('Claude Code isn\'t installed (no "claude" command found).')
+    if (!status.cli) throw new Error(CLI_NOT_FOUND)
     if (status.connector !== 'connected' || !status.instructions) {
       const { response } = await dialog.showMessageBox(BrowserWindow.fromWebContents(e.sender) ?? win!, {
         type: 'question',

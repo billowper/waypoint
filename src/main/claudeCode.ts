@@ -1,6 +1,6 @@
 import { app, shell } from 'electron'
 import { execFile, spawn } from 'child_process'
-import { existsSync, promises as fs } from 'fs'
+import { existsSync, promises as fs, type Dirent } from 'fs'
 import { homedir } from 'os'
 import { join } from 'path'
 import { promisify } from 'util'
@@ -17,22 +17,68 @@ const run = promisify(execFile)
 const SERVER = app.isPackaged ? 'waypoint' : 'waypoint-dev'
 const START = '<!-- waypoint:start -->'
 const END = '<!-- waypoint:end -->'
-/** Testing only: point Claude Code's config somewhere else (Electron won't start with a different USERPROFILE) */
+/** Testing only: point Claude Code's config and standalone install somewhere else (Electron won't start with a different USERPROFILE) */
 const HOME = process.env.WAYPOINT_CLAUDE_HOME || homedir()
 const cliOpts = { windowsHide: true, env: { ...process.env, USERPROFILE: HOME } }
+export const CLI_NOT_FOUND = 'Couldn\'t find Claude Code (no "claude" command, and no copy in the Claude desktop app).'
 
-/** claude.exe on PATH, or where its installer puts it */
+/**
+ * The Claude desktop app's own copy, which it never puts on PATH: Claude-Data\<package>\claude-code\<version>\<build>\claude.exe.
+ * The path changes with every update, so the folder is searched each time and the newest version wins.
+ */
+async function bundledCli(): Promise<string | null> {
+  const root = join(process.env.LOCALAPPDATA || join(homedir(), 'AppData', 'Local'), 'Claude-Data')
+  const dirs = async (p: string) =>
+    (await fs.readdir(p, { withFileTypes: true }).catch(() => [] as Dirent[])).filter((d) => d.isDirectory()).map((d) => d.name)
+  const found: { version: number[]; exe: string }[] = []
+  for (const pkg of await dirs(root)) {
+    const versions = join(root, pkg, 'claude-code')
+    for (const version of await dirs(versions)) {
+      if (!/^\d+(\.\d+)*$/.test(version)) continue
+      for (const build of await dirs(join(versions, version))) {
+        const exe = join(versions, version, build, 'claude.exe')
+        if (existsSync(exe)) found.push({ version: version.split('.').map(Number), exe })
+      }
+    }
+  }
+  found.sort((a, b) => {
+    for (let i = 0; i < Math.max(a.version.length, b.version.length); i++) {
+      const diff = (b.version[i] ?? 0) - (a.version[i] ?? 0)
+      if (diff) return diff
+    }
+    return 0
+  })
+  return found[0]?.exe ?? null
+}
+
+/** claude on PATH (an .exe if there is one), then where its installer puts it, then the desktop app's copy */
 async function findCli(): Promise<string | null> {
   try {
     const { stdout } = await run('where.exe', ['claude'], { windowsHide: true })
-    const first = stdout.split(/\r?\n/).find((l) => /\.(exe|cmd)$/i.test(l.trim()))
-    if (first) return first.trim()
+    const hits = stdout.split(/\r?\n/).map((l) => l.trim())
+    const first = hits.find((l) => /\.exe$/i.test(l)) ?? hits.find((l) => /\.cmd$/i.test(l))
+    if (first) return first
   } catch {
     /* not on PATH */
   }
-  const local = join(homedir(), '.local', 'bin', 'claude.exe')
-  return existsSync(local) ? local : null
+  const local = join(HOME, '.local', 'bin', 'claude.exe')
+  return existsSync(local) ? local : bundledCli()
 }
+
+/** Run the CLI. Node refuses to start a .cmd (npm's claude.cmd) without a shell, so that goes through cmd.exe */
+function runCli(cli: string, args: string[]) {
+  if (!/\.cmd$/i.test(cli)) return run(cli, args, cliOpts)
+  const quote = (a: string) => `"${a.replace(/(\\*)"/g, '$1$1\\"').replace(/\\+$/, '$&$&')}"`
+  const line = [cli, ...args].map(quote).join(' ')
+  return run('cmd.exe', ['/d', '/s', '/c', `"${line}"`], { ...cliOpts, windowsVerbatimArguments: true })
+}
+
+/**
+ * JSON for a command line. cmd.exe parses claude.cmd's arguments more than once, so quoting can't protect them: anything it
+ * might act on or mangle goes as a JSON \u escape instead. Only strings can hold these, so the value parses back the same.
+ */
+const commandLineJson = (value: unknown) =>
+  JSON.stringify(value).replace(/[&|<>^%!()]|[^\x20-\x7e]/g, (c) => `\\u${c.charCodeAt(0).toString(16).padStart(4, '0')}`)
 
 /** How Claude Code should start the connector: this exe in node mode, running out/main/mcp.js */
 function serverConfig() {
@@ -74,15 +120,15 @@ export async function claudeStatus(repo?: string): Promise<ClaudeStatus> {
 /** Register (or re-point) the connector for every Claude Code session: the desktop app's Code tab and the terminal */
 export async function connectClaude(): Promise<void> {
   const cli = await findCli()
-  if (!cli) throw new Error('Claude Code isn\'t installed (no "claude" command found).')
-  if (await registered()) await run(cli, ['mcp', 'remove', SERVER, '--scope', 'user'], cliOpts).catch(() => undefined)
-  await run(cli, ['mcp', 'add-json', SERVER, JSON.stringify(serverConfig()), '--scope', 'user'], cliOpts)
+  if (!cli) throw new Error(CLI_NOT_FOUND)
+  if (await registered()) await runCli(cli, ['mcp', 'remove', SERVER, '--scope', 'user']).catch(() => undefined)
+  await runCli(cli, ['mcp', 'add-json', SERVER, commandLineJson(serverConfig()), '--scope', 'user'])
 }
 
 export async function disconnectClaude(): Promise<void> {
   const cli = await findCli()
-  if (!cli) throw new Error('Claude Code isn\'t installed (no "claude" command found).')
-  await run(cli, ['mcp', 'remove', SERVER, '--scope', 'user'], cliOpts)
+  if (!cli) throw new Error(CLI_NOT_FOUND)
+  await runCli(cli, ['mcp', 'remove', SERVER, '--scope', 'user'])
 }
 
 function instructionsBlock(title: string, slug: string): string {
@@ -150,7 +196,7 @@ export async function openInClaudeApp(repo: string, prompt: string): Promise<voi
 /** Claude Code in a terminal at the repo folder (Windows Terminal if there, else a console window); a prompt starts work straight away */
 export async function openInClaudeTerminal(repo: string, prompt?: string): Promise<void> {
   const cli = await findCli()
-  if (!cli) throw new Error('Claude Code isn\'t installed (no "claude" command found).')
+  if (!cli) throw new Error(CLI_NOT_FOUND)
   // wt.exe is a Store app alias: "where" finds it, existsSync can't see it
   const hasWt = await run('where.exe', ['wt'], { windowsHide: true }).then(() => true, () => false)
   const q = (s: string) => `"${s}"`

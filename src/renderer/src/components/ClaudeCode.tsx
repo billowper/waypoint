@@ -38,7 +38,8 @@ function useAction(reload: () => void) {
 
 const NOT_INSTALLED = (
   <>
-    Claude Code isn't installed on this PC, so there's nothing to connect. Waypoint works the same without it.
+    Waypoint couldn't find Claude Code on this PC, as a "claude" command or in the Claude desktop app, so there's nothing to
+    connect. Waypoint works the same without it.
   </>
 )
 
