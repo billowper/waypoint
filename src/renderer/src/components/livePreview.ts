@@ -173,6 +173,59 @@ class ImageWidget extends WidgetType {
   }
 }
 
+/** Callout types (GitHub's and Obsidian's) → [colour group, icon] */
+const CALLOUTS: Record<string, [string, string]> = {
+  note: ['blue', 'ℹ️'],
+  info: ['blue', 'ℹ️'],
+  abstract: ['blue', '📄'],
+  summary: ['blue', '📄'],
+  tldr: ['blue', '📄'],
+  todo: ['blue', '☑️'],
+  tip: ['green', '💡'],
+  hint: ['green', '💡'],
+  success: ['green', '✅'],
+  check: ['green', '✅'],
+  done: ['green', '✅'],
+  important: ['purple', '❗'],
+  question: ['yellow', '❓'],
+  help: ['yellow', '❓'],
+  faq: ['yellow', '❓'],
+  warning: ['yellow', '⚠️'],
+  caution: ['red', '⚠️'],
+  attention: ['yellow', '⚠️'],
+  danger: ['red', '⛔'],
+  error: ['red', '⛔'],
+  failure: ['red', '⛔'],
+  bug: ['red', '🐞'],
+  example: ['purple', '📋'],
+  quote: ['gray', '❝']
+}
+
+/** Stands in for a callout's [!type]: its icon, and its name when it has no title */
+class CalloutWidget extends WidgetType {
+  constructor(
+    readonly icon: string,
+    readonly label: string
+  ) {
+    super()
+  }
+  eq(other: CalloutWidget) {
+    return other.icon === this.icon && other.label === this.label
+  }
+  toDOM() {
+    const el = document.createElement('span')
+    el.className = 'cm-md-callout-icon'
+    el.textContent = this.icon
+    if (this.label) {
+      const label = document.createElement('span')
+      label.className = 'cm-md-callout-label'
+      label.textContent = this.label
+      el.append(label)
+    }
+    return el
+  }
+}
+
 /** Holds an empty table cell's place (one written || with no space in it) */
 class EmptyCellWidget extends WidgetType {
   constructor(readonly style: string) {
@@ -203,6 +256,8 @@ function collect(state: EditorState, ranges: readonly { from: number; to: number
   const escapes: number[] = []
   /** Table cells, marked once what's hidden in them is known */
   const cellMarks: { from: number; to: number; style: string }[] = []
+  /** Lines of callouts, which are drawn as boxes rather than quotes */
+  const callouts: { from: number; to: number }[] = []
 
   const hideRange = (from: number, to: number, kind: HiddenKind, widget?: WidgetType) => {
     if (to <= from) return
@@ -295,9 +350,14 @@ function collect(state: EditorState, ranges: readonly { from: number; to: number
             hideRange(node.from, end, 'prefix', new CheckboxWidget(checked, node.from))
             return
           }
+          case 'Blockquote':
+            callout(node)
+            return
           case 'QuoteMark': {
             const line = doc.lineAt(node.from)
-            decos.push(Decoration.line({ class: 'cm-md-quote' }).range(line.from))
+            if (!callouts.some((c) => line.from >= c.from && line.from <= c.to)) {
+              decos.push(Decoration.line({ class: 'cm-md-quote' }).range(line.from))
+            }
             hideRange(node.from, withSpace(node.to), 'prefix')
             return
           }
@@ -413,6 +473,31 @@ function collect(state: EditorState, ranges: readonly { from: number; to: number
         else decos.push(Decoration.widget({ widget: new EmptyCellWidget(style), side: 1 }).range(c.from))
       })
     })
+  }
+
+  /** A quote that starts with [!note], [!warning] and so on: a coloured box with an icon */
+  function callout(node: SyntaxNode) {
+    const first = doc.lineAt(node.from)
+    const m = /^(\s*>\s?)\[!([\w-]+)\]([+-]?)([ \t]*)(.*)$/.exec(first.text)
+    if (!m) return
+    const type = m[2].toLowerCase()
+    const [colour, icon] = CALLOUTS[type] ?? ['blue', 'ℹ️']
+    const end = node.to > node.from && doc.sliceString(node.to - 1, node.to) === '\n' ? node.to - 1 : node.to
+    const last = doc.lineAt(end)
+    callouts.push({ from: first.from, to: last.to })
+    for (let l = first.number; l <= last.number; l++) {
+      const line = doc.line(l)
+      const cls =
+        `cm-md-callout cm-md-callout-${colour}` +
+        (l === first.number ? ' cm-md-callout-first' : '') +
+        (l === last.number ? ' cm-md-callout-last' : '')
+      decos.push(Decoration.line({ class: cls }).range(line.from))
+    }
+    const markFrom = first.from + m[1].length
+    const markTo = markFrom + 2 + m[2].length + 1 + m[3].length + m[4].length
+    const label = m[5].trim() ? '' : type.charAt(0).toUpperCase() + type.slice(1)
+    hideRange(markFrom, markTo, 'prefix', new CalloutWidget(icon, label))
+    if (m[5].trim()) decos.push(Decoration.mark({ class: 'cm-md-callout-title' }).range(markTo, first.to))
   }
 
   function image(node: SyntaxNode) {

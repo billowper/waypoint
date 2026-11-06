@@ -943,6 +943,107 @@ button.crumb.current:hover {
   font-size: 0.9em;
 }
 
+/* Block handles (handles.ts): a grip left of the hovered block, and where a dragged one would land */
+.editor .cm-block-handle {
+  position: absolute;
+  z-index: 3;
+  width: 20px;
+  height: 22px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  border-radius: 4px;
+  color: var(--text-faint);
+  font-size: 13px;
+  letter-spacing: -3px;
+  cursor: grab;
+  user-select: none;
+  touch-action: none;
+}
+
+.editor .cm-block-handle:hover,
+.editor .cm-block-handle.dragging {
+  background: var(--tint);
+  color: var(--text-dim);
+}
+
+.editor .cm-block-handle.dragging {
+  cursor: grabbing;
+}
+
+.editor .cm-block-drop {
+  position: absolute;
+  z-index: 3;
+  height: 3px;
+  border-radius: 2px;
+  background: var(--accent);
+  pointer-events: none;
+}
+
+/* Callouts: > [!note] and the like (livePreview.ts). Padding, not margin, so the editor measures it. */
+.editor .cm-line.cm-md-callout {
+  --callout: #6ea8fe;
+  padding: 1px 14px 1px 16px;
+  border-left: 3px solid var(--callout);
+  background: color-mix(in srgb, var(--callout) 10%, transparent);
+}
+
+.editor .cm-line.cm-md-callout-first {
+  padding-top: 6px;
+  border-top-right-radius: 6px;
+}
+
+.editor .cm-line.cm-md-callout-last {
+  padding-bottom: 6px;
+  border-bottom-right-radius: 6px;
+}
+
+.editor .cm-line.cm-md-callout-green {
+  --callout: #63c174;
+}
+
+.editor .cm-line.cm-md-callout-yellow {
+  --callout: #e5b84b;
+}
+
+.editor .cm-line.cm-md-callout-red {
+  --callout: #ef6b6b;
+}
+
+.editor .cm-line.cm-md-callout-purple {
+  --callout: #b48ef0;
+}
+
+.editor .cm-line.cm-md-callout-gray {
+  --callout: var(--text-faint);
+}
+
+/* Plain text, not the quote's italic grey */
+.editor .cm-line.cm-md-callout {
+  color: var(--text);
+}
+
+.editor
+  .cm-line.cm-md-callout
+  span:not(.cm-md-link, .cm-md-wikilink, .cm-md-inline-code, .cm-md-callout-title, .cm-md-callout-label) {
+  font-style: normal;
+  color: inherit;
+}
+
+.editor .cm-md-callout-icon {
+  margin-right: 8px;
+}
+
+.editor .cm-md-callout-label,
+.editor .cm-md-callout-title {
+  font-weight: 600;
+  color: var(--callout);
+}
+
+.editor .cm-md-callout-label {
+  margin-left: 8px;
+}
+
 /* A code block's language, where its opening ``` is */
 .editor .cm-md-code-lang {
   font-family: var(--sans);

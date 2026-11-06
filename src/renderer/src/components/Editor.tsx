@@ -18,6 +18,8 @@ import { formatToolbar } from './toolbar'
 import { slashMenuOn } from './slashMenu'
 import { editorHost, relativePath, resolvePath } from './host'
 import { pastePictures } from './images'
+import { blockHandles } from './handles'
+import { tableContextMenu } from './tableOps'
 import { wikiComplete } from './wikiComplete'
 import { frontmatterSyntax } from './frontmatterSyntax'
 import Toc, { readHeadings, type Heading } from './Toc'
@@ -52,7 +54,7 @@ const mdHighlight = HighlightStyle.define([
 ])
 
 /** Everything that draws the page over its markdown; left out when showing the source */
-const preview = [livePreview, wysiwyg, formatToolbar, slashMenuOn.of(true)]
+const preview = [livePreview, wysiwyg, formatToolbar, blockHandles, tableContextMenu, slashMenuOn.of(true)]
 
 const dirOf = (p: string) => (p.includes('/') ? p.slice(0, p.lastIndexOf('/')) : '')
 const decodePath = (p: string) => {
