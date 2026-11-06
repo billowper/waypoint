@@ -3,6 +3,7 @@ import {
   Facet,
   RangeSet,
   StateEffect,
+  StateField,
   type EditorState,
   type Extension,
   type Line,
@@ -45,6 +46,87 @@ export const linkContext = Facet.define<LinkContext, LinkContext | null>({ combi
 
 /** Dispatch when the set of notes changes, so links re-check whether they resolve. */
 export const refreshLinks = StateEffect.define<null>()
+
+/** A callout's first line: > [!type] (then + or - if foldable) and its title */
+const CALLOUT_LINE = /^(\s*>\s?)\[!([\w-]+)\]([+-]?)([ \t]*)(.*)$/
+
+/** Folds or unfolds the callout whose first line starts here */
+export const toggleCallout = StateEffect.define<number>()
+
+/** The callout (a Blockquote node) whose first line starts at `pos` */
+function calloutAt(state: EditorState, pos: number): SyntaxNode | null {
+  for (let n: SyntaxNode | null = syntaxTree(state).resolveInner(pos, 1); n; n = n.parent) {
+    if (n.name === 'Blockquote') return CALLOUT_LINE.test(state.doc.lineAt(n.from).text) ? n : null
+  }
+  return null
+}
+
+/** Hides a folded callout's body: everything after its first line */
+function foldDecorations(state: EditorState, folded: Set<number>): DecorationSet {
+  const ranges: Range<Decoration>[] = []
+  for (const pos of folded) {
+    const node = calloutAt(state, pos)
+    if (!node) continue
+    const doc = state.doc
+    const end = node.to > node.from && doc.sliceString(node.to - 1, node.to) === '\n' ? node.to - 1 : node.to
+    const first = doc.lineAt(node.from)
+    const last = doc.lineAt(end)
+    if (last.number > first.number) {
+      ranges.push(Decoration.replace({ block: true }).range(doc.line(first.number + 1).from, last.to))
+    }
+  }
+  return Decoration.set(ranges, true)
+}
+
+/**
+ * Which foldable callouts (> [!note]- or +) are folded. On screen only, like Obsidian: folding never
+ * changes the file. A callout written with - starts folded. Block decorations have to come from a
+ * state field, hence this rather than the view plugin below.
+ */
+interface Folds {
+  folded: Set<number>
+  /** Callouts already met: one written with - folds the first time it's seen (as the page opens or it's pasted in), not when a - is typed later */
+  seen: Set<number>
+  decos: DecorationSet
+}
+
+/** Meets callouts the parser has got to since last time; ones written with - start folded */
+function meetCallouts(state: EditorState, folded: Set<number>, seen: Set<number>) {
+  syntaxTree(state).iterate({
+    enter: (n) => {
+      if (n.name !== 'Blockquote') return
+      const line = state.doc.lineAt(n.from)
+      const m = CALLOUT_LINE.exec(line.text)
+      if (!m || seen.has(line.from)) return
+      seen.add(line.from)
+      if (m[3] === '-') folded.add(line.from)
+    }
+  })
+}
+
+export const calloutFolds = StateField.define<Folds>({
+  create(state) {
+    const folded = new Set<number>()
+    const seen = new Set<number>()
+    meetCallouts(state, folded, seen)
+    return { folded, seen, decos: foldDecorations(state, folded) }
+  },
+  update(value, tr) {
+    const treeChanged = syntaxTree(tr.startState) !== syntaxTree(tr.state)
+    const toggles = tr.effects.filter((e) => e.is(toggleCallout))
+    if (!toggles.length && !tr.docChanged && !treeChanged) return value
+    const map = (set: Set<number>) => (tr.docChanged ? new Set([...set].map((p) => tr.changes.mapPos(p, -1))) : new Set(set))
+    const folded = map(value.folded)
+    const seen = map(value.seen)
+    meetCallouts(tr.state, folded, seen)
+    for (const e of toggles) {
+      if (folded.has(e.value)) folded.delete(e.value)
+      else folded.add(e.value)
+    }
+    return { folded, seen, decos: foldDecorations(tr.state, folded) }
+  },
+  provide: (f) => EditorView.decorations.from(f, (v) => v.decos)
+})
 
 /**
  * Markdown the preview hides or draws over:
@@ -143,9 +225,19 @@ export function splitAlt(alt: string): { text: string; width: number | null } {
   return m ? { text: m[1], width: Number(m[2]) } : { text: alt, width: null }
 }
 
-/** Writes a width into a picture's alt text; null takes it out */
+/** Writes a width into a picture's alt text (or an embed's |); null takes it out */
 function setPictureWidth(view: EditorView, dom: HTMLElement, width: number | null) {
   const pos = view.posAtDOM(dom)
+  // An embed, ![[picture.png|300]], first: the markdown parser also reads it as a ![...] picture
+  const line = view.state.doc.lineAt(pos)
+  for (const l of parseLinks(line.text)) {
+    if (line.from + l.from - 1 !== pos) continue
+    const from = line.from + l.from + 2
+    const to = line.from + l.to - 2
+    const target = view.state.sliceDoc(from, to).split(/\\?\|/)[0]
+    view.dispatch({ changes: { from, to, insert: width === null ? target : `${target}|${width}` }, userEvent: 'input.resize' })
+    return
+  }
   for (let n: SyntaxNode | null = syntaxTree(view.state).resolveInner(pos, 1); n; n = n.parent) {
     if (n.name !== 'Image') continue
     const marks = n.getChildren('LinkMark')
@@ -158,6 +250,8 @@ function setPictureWidth(view: EditorView, dom: HTMLElement, width: number | nul
     return
   }
 }
+
+const PICTURE = /\.(png|jpe?g|gif|webp|svg|bmp|avif)$/i
 
 /** A picture: ![alt](path), at its own size or the width after a | in its alt text */
 class ImageWidget extends WidgetType {
@@ -258,21 +352,38 @@ const CALLOUTS: Record<string, [string, string]> = {
   quote: ['gray', '❝']
 }
 
-/** Stands in for a callout's [!type]: its icon, and its name when it has no title */
+/** Stands in for a callout's [!type]: its icon, its name when it has no title, and a fold arrow if foldable */
 class CalloutWidget extends WidgetType {
   constructor(
     readonly icon: string,
-    readonly label: string
+    readonly label: string,
+    readonly fold: 'open' | 'folded' | null
   ) {
     super()
   }
   eq(other: CalloutWidget) {
-    return other.icon === this.icon && other.label === this.label
+    return other.icon === this.icon && other.label === this.label && other.fold === this.fold
   }
-  toDOM() {
+  toDOM(view: EditorView) {
     const el = document.createElement('span')
     el.className = 'cm-md-callout-icon'
-    el.textContent = this.icon
+    if (this.fold) {
+      const arrow = document.createElement('span')
+      arrow.className = `cm-md-callout-fold ${this.fold}`
+      arrow.textContent = '▸'
+      arrow.title = this.fold === 'folded' ? 'Show' : 'Fold'
+      arrow.addEventListener('mousedown', (e) => {
+        e.preventDefault()
+        const line = view.state.doc.lineAt(view.posAtDOM(el))
+        const sel = view.state.selection.main
+        const node = calloutAt(view.state, line.from)
+        // Folding with the cursor inside: it goes to the title line
+        const inside = node && this.fold === 'open' && sel.head > line.to && sel.head <= node.to
+        view.dispatch({ effects: toggleCallout.of(line.from), ...(inside ? { selection: { anchor: line.to } } : {}) })
+      })
+      el.append(arrow)
+    }
+    el.append(this.icon)
     if (this.label) {
       const label = document.createElement('span')
       label.className = 'cm-md-callout-label'
@@ -535,25 +646,28 @@ function collect(state: EditorState, ranges: readonly { from: number; to: number
   /** A quote that starts with [!note], [!warning] and so on: a coloured box with an icon */
   function callout(node: SyntaxNode) {
     const first = doc.lineAt(node.from)
-    const m = /^(\s*>\s?)\[!([\w-]+)\]([+-]?)([ \t]*)(.*)$/.exec(first.text)
+    const m = CALLOUT_LINE.exec(first.text)
     if (!m) return
     const type = m[2].toLowerCase()
     const [colour, icon] = CALLOUTS[type] ?? ['blue', 'ℹ️']
     const end = node.to > node.from && doc.sliceString(node.to - 1, node.to) === '\n' ? node.to - 1 : node.to
     const last = doc.lineAt(end)
     callouts.push({ from: first.from, to: last.to })
+    const folds = state.field(calloutFolds, false)
+    const fold = m[3] ? (folds?.folded.has(first.from) ? 'folded' : 'open') : null
     for (let l = first.number; l <= last.number; l++) {
       const line = doc.line(l)
       const cls =
         `cm-md-callout cm-md-callout-${colour}` +
         (l === first.number ? ' cm-md-callout-first' : '') +
-        (l === last.number ? ' cm-md-callout-last' : '')
+        // Folded, the title line is the whole box
+        (l === last.number || (fold === 'folded' && l === first.number) ? ' cm-md-callout-last' : '')
       decos.push(Decoration.line({ class: cls }).range(line.from))
     }
     const markFrom = first.from + m[1].length
     const markTo = markFrom + 2 + m[2].length + 1 + m[3].length + m[4].length
     const label = m[5].trim() ? '' : type.charAt(0).toUpperCase() + type.slice(1)
-    hideRange(markFrom, markTo, 'prefix', new CalloutWidget(icon, label))
+    hideRange(markFrom, markTo, 'prefix', new CalloutWidget(icon, label, fold))
     if (m[5].trim()) decos.push(Decoration.mark({ class: 'cm-md-callout-title' }).range(markTo, first.to))
   }
 
@@ -607,6 +721,14 @@ function collect(state: EditorState, ranges: readonly { from: number; to: number
       wikis.push({ from: lf, to: lt })
       const raw = doc.sliceString(lf + 2, lt - 2)
       const pipe = raw.indexOf('|')
+      // Obsidian's picture embed: ![[picture.png]] or ![[picture.png|300]], found by name in the vault
+      if (lf > 0 && doc.sliceString(lf - 1, lf) === '!' && PICTURE.test(l.target)) {
+        const alias = pipe === -1 ? '' : raw.slice(pipe + 1)
+        const width = /^\d+$/.test(alias.trim()) ? Number(alias.trim()) : null
+        const src = state.facet(editorHost)?.embedSrc(l.target) ?? 'wp-file://v/missing.png'
+        hideRange(lf - 1, lt, 'object', new ImageWidget(src, width === null ? alias : '', l.target, width))
+        continue
+      }
       const textFrom = pipe === -1 ? lf + 2 : lf + 3 + pipe
       const resolved = resolveLink(l.target, fromPath, notes) !== null
       if (lt - 2 > textFrom) {
@@ -667,7 +789,7 @@ class Preview {
       u.docChanged ||
       u.viewportChanged ||
       syntaxTree(u.startState) !== syntaxTree(u.state) ||
-      u.transactions.some((tr) => tr.effects.some((e) => e.is(refreshLinks)))
+      u.transactions.some((tr) => tr.effects.some((e) => e.is(refreshLinks) || e.is(toggleCallout)))
     ) {
       this.compute(u.view)
     }
@@ -696,6 +818,7 @@ const previewPlugin = ViewPlugin.fromClass(Preview, {
 })
 
 export const livePreview: Extension = [
+  calloutFolds,
   previewPlugin,
   EditorView.atomicRanges.of((view) => view.plugin(previewPlugin)?.atoms ?? RangeSet.empty)
 ]

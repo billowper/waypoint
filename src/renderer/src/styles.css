@@ -1065,6 +1065,20 @@ button.crumb.current:hover {
   margin-right: 8px;
 }
 
+/* A foldable callout's arrow (> [!note]- or +); folding is on screen only */
+.editor .cm-md-callout-fold {
+  display: inline-block;
+  width: 1em;
+  margin-right: 4px;
+  color: var(--callout);
+  cursor: pointer;
+  transition: transform 0.1s;
+}
+
+.editor .cm-md-callout-fold.open {
+  transform: rotate(90deg);
+}
+
 .editor .cm-md-callout-label,
 .editor .cm-md-callout-title {
   font-weight: 600;

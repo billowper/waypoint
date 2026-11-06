@@ -9,6 +9,7 @@ import { languages } from '@codemirror/language-data'
 import { syntaxHighlighting, HighlightStyle, indentOnInput, bracketMatching } from '@codemirror/language'
 import { tags as t } from '@lezer/highlight'
 import { baseName, movedPath, sanitize, titleOf } from '@shared/names'
+import type { TreeNode } from '@shared/types'
 import { resolveLink } from '@shared/links'
 import { enqueue, registerEditor, useStore, type Reveal, type SaveState } from '../store'
 import { linkContext, livePreview, refreshLinks } from './livePreview'
@@ -57,6 +58,23 @@ const mdHighlight = HighlightStyle.define([
 const preview = [livePreview, wysiwyg, formatToolbar, blockHandles, tableContextMenu, slashMenuOn.of(true)]
 
 const dirOf = (p: string) => (p.includes('/') ? p.slice(0, p.lastIndexOf('/')) : '')
+
+/** A file by name or path anywhere in the vault, as Obsidian finds ![[embeds]]: the note's own folder first */
+function findFile(tree: TreeNode[], name: string, near: string): string | null {
+  const want = name.replace(/\\/g, '/').replace(/^\/+/, '').toLowerCase()
+  const found: string[] = []
+  const walk = (nodes: TreeNode[]) => {
+    for (const n of nodes) {
+      if (n.type === 'dir') walk(n.children ?? [])
+      else {
+        const p = n.path.toLowerCase()
+        if (p === want || p.endsWith('/' + want)) found.push(n.path)
+      }
+    }
+  }
+  walk(tree)
+  return found.find((p) => dirOf(p) === near) ?? found.sort((a, b) => a.length - b.length)[0] ?? null
+}
 const decodePath = (p: string) => {
   try {
     return decodeURI(p)
@@ -262,6 +280,10 @@ export default function Editor({ tabId, docId, path, active }: Props) {
               pickImage: async () => {
                 const saved = await window.api.pickAttachment()
                 return saved && relativePath(dirOf(pathRef.current), saved)
+              },
+              embedSrc: (name) => {
+                const found = findFile(store().tree, name, dirOf(pathRef.current))
+                return found && `wp-file://v/${encodeURIComponent(found)}`
               },
               imageSrc: (p) =>
                 /^(https?|data|blob|wp-file):/i.test(p)

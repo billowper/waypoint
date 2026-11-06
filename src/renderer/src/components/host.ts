@@ -19,6 +19,8 @@ export interface EditorHost {
   pickImage(): Promise<string | null>
   /** A URL the page can show for a picture's path as written in the note */
   imageSrc(path: string): string
+  /** A URL for an embedded picture, ![[name]], found by name anywhere in the vault; null if there's none */
+  embedSrc(name: string): string | null
 }
 
 export const editorHost = Facet.define<EditorHost, EditorHost | null>({ combine: (v) => v[0] ?? null })
