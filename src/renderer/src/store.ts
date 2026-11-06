@@ -1,4 +1,5 @@
 import { create } from 'zustand'
+import type { Suggestion } from './components/Prompt'
 import type { ViewRef } from '@shared/types'
 import type { GitStatus, NudgeInfo, Project, Task, TaskFields, TreeNode, TreeOrder, VaultInfo, VaultSettings, VaultStats } from '@shared/types'
 import { baseName, IDEAS_DIR, movedPath, pagesFolder } from '@shared/names'
@@ -30,6 +31,7 @@ interface PromptState {
   initial?: string
   action?: string
   allowEmpty?: boolean
+  suggest?: (text: string) => Suggestion[]
   resolve: (value: string | null) => void
 }
 
@@ -148,7 +150,10 @@ interface State {
   place(path: string, destDir: string, anchor: { name: string; after: boolean }): Promise<void>
   duplicate(path: string): Promise<void>
   remove(path: string): Promise<void>
-  ask(title: string, opts?: { placeholder?: string; initial?: string; action?: string; allowEmpty?: boolean }): Promise<string | null>
+  ask(
+    title: string,
+    opts?: { placeholder?: string; initial?: string; action?: string; allowEmpty?: boolean; suggest?: (text: string) => Suggestion[] }
+  ): Promise<string | null>
   setSaveState(tabId: number, s: SaveState): void
   openMenu(menu: MenuState): void
   closeMenu(): void

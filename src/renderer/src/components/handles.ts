@@ -166,7 +166,8 @@ class Handles {
   }
 
   update(u: ViewUpdate) {
-    if (u.docChanged && !this.drag) this.hide()
+    // Anything that moves the text (edits, fonts or pictures loading, resizing) leaves the grip behind
+    if ((u.docChanged || u.geometryChanged) && !this.drag) this.hide()
   }
 
   destroy() {

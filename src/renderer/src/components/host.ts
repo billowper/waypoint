@@ -1,12 +1,16 @@
 import { Facet } from '@codemirror/state'
 import type { MenuItem } from '../store'
+import type { Suggestion } from './Prompt'
 
 /**
  * What the editor asks of the app around it: the prompt box, right-click style menus, and the
  * vault for pictures. Editor.tsx provides it.
  */
 export interface EditorHost {
-  ask(title: string, opts?: { placeholder?: string; initial?: string; action?: string; allowEmpty?: boolean }): Promise<string | null>
+  ask(
+    title: string,
+    opts?: { placeholder?: string; initial?: string; action?: string; allowEmpty?: boolean; suggest?: (text: string) => Suggestion[] }
+  ): Promise<string | null>
   /** A menu at a point on screen */
   menu(x: number, y: number, items: MenuItem[]): void
   /** Save a pasted or dropped picture for this note; resolves to its path relative to the note */

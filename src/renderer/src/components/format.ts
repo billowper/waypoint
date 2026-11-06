@@ -3,6 +3,9 @@ import { EditorSelection } from '@codemirror/state'
 import type { Command, EditorView, KeyBinding } from '@codemirror/view'
 import type { SyntaxNode } from '@lezer/common'
 import { linkTextFor, parseLinks, resolveLink } from '@shared/links'
+import { baseName } from '@shared/names'
+import { fuzzy } from './Picker'
+import type { Suggestion } from './Prompt'
 import { editorHost } from './host'
 import { linkContext } from './livePreview'
 
@@ -86,6 +89,32 @@ const inTableRow = (view: EditorView, pos: number) => {
   return false
 }
 
+const dirOf = (p: string) => (p.includes('/') ? p.slice(0, p.lastIndexOf('/')) : '')
+
+/** Pages matching what's typed in the link box (best first), then a new page by that name */
+function pageSuggestions(notes: string[], self: string): (text: string) => Suggestion[] {
+  return (text) => {
+    const typed = text.trim()
+    const q = typed.toLowerCase()
+    if (!q || isUrl(typed)) return []
+    const found = notes
+      .filter((p) => p !== self)
+      .map((p) => {
+        const byName = fuzzy(q, baseName(p))
+        const byPath = fuzzy(q, p)
+        return { p, s: Math.max(byName === null ? -1 : byName * 2, byPath ?? -1) }
+      })
+      .filter((x) => x.s >= 0)
+      .sort((a, b) => b.s - a.s || a.p.length - b.p.length)
+      .slice(0, 8)
+      .map(({ p }): Suggestion => ({ label: baseName(p), detail: dirOf(p), value: linkTextFor(p, notes) }))
+    if (!notes.some((p) => baseName(p).toLowerCase() === q)) {
+      found.push({ label: `New page “${typed}”`, detail: 'made when you first open the link', value: typed })
+    }
+    return found
+  }
+}
+
 /** The [text](url) or [[wiki link]] the selection is in */
 function linkAt(view: EditorView): { from: number; to: number; text: string; target: string; wiki: boolean } | null {
   const { state } = view
@@ -130,7 +159,8 @@ export const linkCommand: Command = (view) => {
       placeholder: existing ? 'Clear this to take the link off' : 'Paste a web address, or type a page name',
       initial: existing?.target ?? '',
       action: existing ? 'Save' : 'Link',
-      allowEmpty: !!existing
+      allowEmpty: !!existing,
+      suggest: pageSuggestions(links?.notes() ?? [], links?.from() ?? '')
     })
     .then((answer) => {
       view.focus()

@@ -925,7 +925,38 @@ button.crumb.current:hover {
   font-size: 12px;
 }
 
-/* Pictures in notes (livePreview.ts) */
+/* Pictures in notes (livePreview.ts); the grip in the corner resizes */
+.editor .cm-md-image {
+  position: relative;
+  display: inline-block;
+  max-width: 100%;
+  vertical-align: bottom;
+}
+
+.editor .cm-md-image-grip {
+  position: absolute;
+  right: 4px;
+  bottom: 8px;
+  width: 14px;
+  height: 14px;
+  border-right: 3px solid var(--accent);
+  border-bottom: 3px solid var(--accent);
+  border-radius: 0 0 4px 0;
+  cursor: nwse-resize;
+  opacity: 0;
+  transition: opacity 0.1s;
+  touch-action: none;
+}
+
+.editor .cm-md-image:hover .cm-md-image-grip,
+.editor .cm-md-image.resizing .cm-md-image-grip {
+  opacity: 1;
+}
+
+.editor .cm-md-image.broken .cm-md-image-grip {
+  display: none;
+}
+
 .editor .cm-md-image img {
   display: inline-block;
   max-width: 100%;
@@ -1316,6 +1347,33 @@ button.crumb.current:hover {
 
 .modal input:focus {
   border-color: var(--accent);
+}
+
+/* Suggestions under a prompt's box (the link box's pages) */
+.modal.with-suggestions {
+  width: 460px;
+}
+
+.prompt-suggestions {
+  list-style: none;
+  margin: 0 -6px;
+  padding: 0;
+  max-height: 260px;
+  overflow: auto;
+}
+
+.prompt-suggestions li button {
+  display: flex;
+  align-items: baseline;
+  gap: 10px;
+  width: 100%;
+  padding: 6px 10px;
+  border-radius: 6px;
+  text-align: left;
+}
+
+.prompt-suggestions li button.selected {
+  background: var(--active);
 }
 
 .modal-actions {

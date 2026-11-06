@@ -137,17 +137,40 @@ class LangWidget extends WidgetType {
   }
 }
 
-/** A picture: ![alt](path) */
+/** A picture's alt text, and the width written after a | in it (Obsidian's ![alt|300](path)) */
+export function splitAlt(alt: string): { text: string; width: number | null } {
+  const m = /^(.*?)\s*\|\s*(\d+)(?:\s*x\s*\d+)?\s*$/.exec(alt)
+  return m ? { text: m[1], width: Number(m[2]) } : { text: alt, width: null }
+}
+
+/** Writes a width into a picture's alt text; null takes it out */
+function setPictureWidth(view: EditorView, dom: HTMLElement, width: number | null) {
+  const pos = view.posAtDOM(dom)
+  for (let n: SyntaxNode | null = syntaxTree(view.state).resolveInner(pos, 1); n; n = n.parent) {
+    if (n.name !== 'Image') continue
+    const marks = n.getChildren('LinkMark')
+    if (marks.length < 2) return
+    const from = marks[0].to
+    const to = marks[1].from
+    const { text } = splitAlt(view.state.sliceDoc(from, to))
+    const insert = width === null ? text : `${text}|${width}`
+    view.dispatch({ changes: { from, to, insert }, userEvent: 'input.resize' })
+    return
+  }
+}
+
+/** A picture: ![alt](path), at its own size or the width after a | in its alt text */
 class ImageWidget extends WidgetType {
   constructor(
     readonly src: string,
     readonly alt: string,
-    readonly path: string
+    readonly path: string,
+    readonly width: number | null
   ) {
     super()
   }
   eq(other: ImageWidget) {
-    return other.src === this.src && other.alt === this.alt
+    return other.src === this.src && other.alt === this.alt && other.width === this.width
   }
   toDOM(view: EditorView) {
     const wrap = document.createElement('span')
@@ -156,6 +179,7 @@ class ImageWidget extends WidgetType {
     img.alt = this.alt
     img.title = this.alt || this.path
     img.draggable = false
+    if (this.width) img.style.width = `${this.width}px`
     // Pictures load after the line is measured
     img.addEventListener('load', () => view.requestMeasure())
     img.addEventListener('error', () => {
@@ -164,12 +188,45 @@ class ImageWidget extends WidgetType {
       view.requestMeasure()
     })
     img.src = this.src
-    wrap.append(img)
+    // Drag the corner to resize; double-click it to go back to the picture's own size
+    const grip = document.createElement('span')
+    grip.className = 'cm-md-image-grip'
+    grip.title = 'Drag to resize · double-click for the original size'
+    grip.addEventListener('pointerdown', (e) => {
+      if (e.button !== 0) return
+      e.preventDefault()
+      e.stopPropagation()
+      grip.setPointerCapture(e.pointerId)
+      const startX = e.clientX
+      const startWidth = img.getBoundingClientRect().width
+      const max = view.contentDOM.clientWidth
+      let width = Math.round(startWidth)
+      wrap.classList.add('resizing')
+      const move = (ev: PointerEvent) => {
+        width = Math.round(Math.min(max, Math.max(40, startWidth + ev.clientX - startX)))
+        img.style.width = `${width}px`
+      }
+      const up = () => {
+        grip.removeEventListener('pointermove', move)
+        grip.removeEventListener('pointerup', up)
+        grip.removeEventListener('pointercancel', up)
+        wrap.classList.remove('resizing')
+        if (Math.abs(width - startWidth) >= 2) setPictureWidth(view, wrap, width)
+      }
+      grip.addEventListener('pointermove', move)
+      grip.addEventListener('pointerup', up)
+      grip.addEventListener('pointercancel', up)
+    })
+    grip.addEventListener('dblclick', (e) => {
+      e.preventDefault()
+      setPictureWidth(view, wrap, null)
+    })
+    wrap.append(img, grip)
     return wrap
   }
-  // A click beside or on it puts the cursor there
-  ignoreEvent() {
-    return false
+  // A click beside or on it puts the cursor there; the grip is the picture's own
+  ignoreEvent(e: Event) {
+    return (e.target as HTMLElement).classList?.contains('cm-md-image-grip') ?? false
   }
 }
 
@@ -507,9 +564,9 @@ function collect(state: EditorState, ranges: readonly { from: number; to: number
     if (marks.length < 3 || !url) return
     let path = doc.sliceString(url.from, url.to)
     if (path.startsWith('<') && path.endsWith('>')) path = path.slice(1, -1)
-    const alt = doc.sliceString(marks[0].to, marks[1].from)
+    const { text, width } = splitAlt(doc.sliceString(marks[0].to, marks[1].from))
     const src = state.facet(editorHost)?.imageSrc(path) ?? path
-    hideRange(node.from, node.to, 'object', new ImageWidget(src, alt, path))
+    hideRange(node.from, node.to, 'object', new ImageWidget(src, text, path, width))
   }
 
   function link(node: SyntaxNode) {
