@@ -869,6 +869,80 @@ button.crumb.current:hover {
   color: var(--text-dim);
 }
 
+/* The bar over selected text (toolbar.ts) */
+.editor .cm-tooltip.cm-tooltip-above:has(.cm-format-bar),
+.editor .cm-tooltip:has(.cm-format-bar) {
+  border-radius: 8px;
+}
+
+.cm-format-bar {
+  display: flex;
+  gap: 2px;
+  padding: 3px;
+  font-family: var(--sans);
+  font-size: 13px;
+}
+
+.cm-format-btn {
+  min-width: 28px;
+  height: 26px;
+  padding: 0 6px;
+  border: none;
+  border-radius: 5px;
+  background: transparent;
+  color: var(--text);
+  font: inherit;
+  cursor: pointer;
+}
+
+.cm-format-btn:hover {
+  background: var(--hover, var(--tint));
+}
+
+.cm-format-btn.on {
+  color: var(--accent);
+  background: var(--tint);
+}
+
+.cm-format-btn.wide {
+  padding: 0 10px;
+}
+
+.cm-format-btn.b {
+  font-weight: 700;
+}
+
+.cm-format-btn.i {
+  font-style: italic;
+}
+
+.cm-format-btn.s {
+  text-decoration: line-through;
+}
+
+.cm-format-btn.code {
+  font-family: var(--mono);
+  font-size: 12px;
+}
+
+/* Pictures in notes (livePreview.ts) */
+.editor .cm-md-image img {
+  display: inline-block;
+  max-width: 100%;
+  max-height: 70vh;
+  margin: 4px 0;
+  border-radius: 6px;
+  vertical-align: bottom;
+}
+
+.editor .cm-md-image.broken {
+  padding: 2px 8px;
+  border: 1px dashed var(--text-faint);
+  border-radius: 4px;
+  color: var(--text-dim);
+  font-size: 0.9em;
+}
+
 /* A code block's language, where its opening ``` is */
 .editor .cm-md-code-lang {
   font-family: var(--sans);

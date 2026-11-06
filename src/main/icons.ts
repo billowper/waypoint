@@ -26,9 +26,15 @@ const EXT_FOR_TYPE: Record<string, string> = {
   'image/bmp': '.bmp'
 }
 
-/** The page shows stored pictures as wp-icon://<file>; must be registered before the app is ready */
+/**
+ * The page shows stored pictures as wp-icon://<file>, and pictures in notes as wp-file://
+ * (attachments.ts). Electron takes one call for all schemes, before the app is ready.
+ */
 export function registerIconScheme() {
-  protocol.registerSchemesAsPrivileged([{ scheme: 'wp-icon', privileges: { standard: true, secure: true } }])
+  protocol.registerSchemesAsPrivileged([
+    { scheme: 'wp-icon', privileges: { standard: true, secure: true } },
+    { scheme: 'wp-file', privileges: { standard: true, secure: true } }
+  ])
 }
 
 /** Serve pictures from the open vault's .app/icons/ folder, and nothing else */

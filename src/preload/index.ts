@@ -85,6 +85,8 @@ const api: Api = {
   iconFromFile: (path) => ipcRenderer.invoke('icons:fromFile', path),
   iconFromUrl: (path, url) => ipcRenderer.invoke('icons:fromUrl', path, url),
   showEmojiPanel: () => ipcRenderer.send('icons:emojiPanel'),
+  saveAttachment: (name, data) => ipcRenderer.invoke('attachments:save', name, data),
+  pickAttachment: () => ipcRenderer.invoke('attachments:pick'),
   onIconsChanged: (cb) => {
     const h = () => cb()
     ipcRenderer.on('icons:changed', h)

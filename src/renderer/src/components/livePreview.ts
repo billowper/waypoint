@@ -19,6 +19,7 @@ import {
 } from '@codemirror/view'
 import type { SyntaxNode } from '@lezer/common'
 import { parseLinks, resolveLink } from '@shared/links'
+import { editorHost } from './host'
 
 // Notion-style live preview: markdown syntax is hidden and drawn as what it means, all the time,
 // including on the line being edited. The file underneath stays plain markdown. The Markdown
@@ -53,8 +54,9 @@ export const refreshLinks = StateEffect.define<null>()
  * - rule: a --- line (a divider, or the underline of a heading)
  * - pipe: a table's | (with any space outside the first and last)
  * - skip: a table's |---| line, which the cursor passes over
+ * - object: something drawn in its place, deleted whole (a picture)
  */
-export type HiddenKind = 'inline' | 'prefix' | 'open' | 'close' | 'rule' | 'pipe' | 'skip'
+export type HiddenKind = 'inline' | 'prefix' | 'open' | 'close' | 'rule' | 'pipe' | 'skip' | 'object'
 export interface Hidden {
   from: number
   to: number
@@ -132,6 +134,42 @@ class LangWidget extends WidgetType {
     el.className = 'cm-md-code-lang'
     el.textContent = this.lang
     return el
+  }
+}
+
+/** A picture: ![alt](path) */
+class ImageWidget extends WidgetType {
+  constructor(
+    readonly src: string,
+    readonly alt: string,
+    readonly path: string
+  ) {
+    super()
+  }
+  eq(other: ImageWidget) {
+    return other.src === this.src && other.alt === this.alt
+  }
+  toDOM(view: EditorView) {
+    const wrap = document.createElement('span')
+    wrap.className = 'cm-md-image'
+    const img = document.createElement('img')
+    img.alt = this.alt
+    img.title = this.alt || this.path
+    img.draggable = false
+    // Pictures load after the line is measured
+    img.addEventListener('load', () => view.requestMeasure())
+    img.addEventListener('error', () => {
+      wrap.classList.add('broken')
+      wrap.textContent = `Picture not found: ${this.path}`
+      view.requestMeasure()
+    })
+    img.src = this.src
+    wrap.append(img)
+    return wrap
+  }
+  // A click beside or on it puts the cursor there
+  ignoreEvent() {
+    return false
   }
 }
 
@@ -242,7 +280,8 @@ function collect(state: EditorState, ranges: readonly { from: number; to: number
             }
             return
           case 'Image':
-            return false // rendered images come later; keep the raw syntax for now
+            image(node)
+            return false
           case 'ListMark':
             listMark(node)
             return
@@ -374,6 +413,18 @@ function collect(state: EditorState, ranges: readonly { from: number; to: number
         else decos.push(Decoration.widget({ widget: new EmptyCellWidget(style), side: 1 }).range(c.from))
       })
     })
+  }
+
+  function image(node: SyntaxNode) {
+    const marks = node.getChildren('LinkMark')
+    const url = node.getChild('URL')
+    // Only inline pictures: ![alt](path). Reference ones stay raw.
+    if (marks.length < 3 || !url) return
+    let path = doc.sliceString(url.from, url.to)
+    if (path.startsWith('<') && path.endsWith('>')) path = path.slice(1, -1)
+    const alt = doc.sliceString(marks[0].to, marks[1].from)
+    const src = state.facet(editorHost)?.imageSrc(path) ?? path
+    hideRange(node.from, node.to, 'object', new ImageWidget(src, alt, path))
   }
 
   function link(node: SyntaxNode) {

@@ -29,6 +29,7 @@ interface PromptState {
   placeholder?: string
   initial?: string
   action?: string
+  allowEmpty?: boolean
   resolve: (value: string | null) => void
 }
 
@@ -147,7 +148,7 @@ interface State {
   place(path: string, destDir: string, anchor: { name: string; after: boolean }): Promise<void>
   duplicate(path: string): Promise<void>
   remove(path: string): Promise<void>
-  ask(title: string, opts?: { placeholder?: string; initial?: string; action?: string }): Promise<string | null>
+  ask(title: string, opts?: { placeholder?: string; initial?: string; action?: string; allowEmpty?: boolean }): Promise<string | null>
   setSaveState(tabId: number, s: SaveState): void
   openMenu(menu: MenuState): void
   closeMenu(): void

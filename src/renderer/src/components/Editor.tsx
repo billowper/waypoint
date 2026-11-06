@@ -12,7 +12,12 @@ import { baseName, movedPath, sanitize, titleOf } from '@shared/names'
 import { resolveLink } from '@shared/links'
 import { enqueue, registerEditor, useStore, type Reveal, type SaveState } from '../store'
 import { linkContext, livePreview, refreshLinks } from './livePreview'
-import { formatKeymap, wysiwyg } from './wysiwyg'
+import { wysiwyg } from './wysiwyg'
+import { formatKeymap } from './format'
+import { formatToolbar } from './toolbar'
+import { slashMenuOn } from './slashMenu'
+import { editorHost, relativePath, resolvePath } from './host'
+import { pastePictures } from './images'
 import { wikiComplete } from './wikiComplete'
 import { frontmatterSyntax } from './frontmatterSyntax'
 import Toc, { readHeadings, type Heading } from './Toc'
@@ -47,7 +52,16 @@ const mdHighlight = HighlightStyle.define([
 ])
 
 /** Everything that draws the page over its markdown; left out when showing the source */
-const preview = [livePreview, wysiwyg]
+const preview = [livePreview, wysiwyg, formatToolbar, slashMenuOn.of(true)]
+
+const dirOf = (p: string) => (p.includes('/') ? p.slice(0, p.lastIndexOf('/')) : '')
+const decodePath = (p: string) => {
+  try {
+    return decodeURI(p)
+  } catch {
+    return p
+  }
+}
 
 const theme = EditorView.theme(
   {
@@ -236,6 +250,23 @@ export default function Editor({ tabId, docId, path, active }: Props) {
             markdown({ base: markdownLanguage, codeLanguages: languages, extensions: [frontmatterSyntax] }),
             syntaxHighlighting(mdHighlight),
             linkContext.of({ notes: () => store().notes, from: () => pathRef.current, open: openLink }),
+            editorHost.of({
+              ask: (title, opts) => store().ask(title, opts),
+              menu: (x, y, items) => store().openMenu({ x, y, items }),
+              saveImage: async (data, name) => {
+                const saved = await window.api.saveAttachment(name, new Uint8Array(await data.arrayBuffer()))
+                return relativePath(dirOf(pathRef.current), saved)
+              },
+              pickImage: async () => {
+                const saved = await window.api.pickAttachment()
+                return saved && relativePath(dirOf(pathRef.current), saved)
+              },
+              imageSrc: (p) =>
+                /^(https?|data|blob|wp-file):/i.test(p)
+                  ? p
+                  : `wp-file://v/${encodeURIComponent(resolvePath(dirOf(pathRef.current), decodePath(p)))}`
+            }),
+            pastePictures,
             previewSlot.of(previewFor(!!store().rawDocs[docId])),
             wikiComplete,
             theme,

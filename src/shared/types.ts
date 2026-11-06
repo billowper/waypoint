@@ -289,6 +289,10 @@ export interface Api {
   iconFromUrl(path: string, url: string): Promise<string>
   /** Open Windows' emoji panel (it types into the focused box) */
   showEmojiPanel(): void
+  /** Save a picture for a note in attachments/; resolves to its vault-relative path */
+  saveAttachment(name: string, data: Uint8Array): Promise<string>
+  /** Pick a picture file and save it the same way; null if cancelled */
+  pickAttachment(): Promise<string | null>
   onIconsChanged(cb: () => void): () => void
   /** Font families installed on this PC (sorted) */
   installedFonts(): Promise<string[]>

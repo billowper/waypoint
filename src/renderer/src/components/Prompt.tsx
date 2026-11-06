@@ -5,10 +5,12 @@ interface Props {
   placeholder?: string
   initial?: string
   action?: string
+  /** An empty answer counts (as ""), rather than as Cancel */
+  allowEmpty?: boolean
   resolve: (v: string | null) => void
 }
 
-export default function Prompt({ title, placeholder, initial = '', action = 'OK', resolve }: Props) {
+export default function Prompt({ title, placeholder, initial = '', action = 'OK', allowEmpty = false, resolve }: Props) {
   const [value, setValue] = useState(initial)
   return (
     <div className="modal-backdrop" onMouseDown={() => resolve(null)}>
@@ -17,7 +19,7 @@ export default function Prompt({ title, placeholder, initial = '', action = 'OK'
         onMouseDown={(e) => e.stopPropagation()}
         onSubmit={(e) => {
           e.preventDefault()
-          resolve(value.trim() || null)
+          resolve(allowEmpty ? value.trim() : value.trim() || null)
         }}
       >
         <label>{title}</label>

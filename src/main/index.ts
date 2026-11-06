@@ -37,6 +37,7 @@ import { withDefaults, type Prefs } from '@shared/prefs'
 import { startNudges } from './nudges'
 import { backupNow } from './backups'
 import { installedFonts } from './fonts'
+import { IMAGE_EXT, fixRelativeLinks, saveAttachment, serveAttachments } from './attachments'
 import { dropIcons, iconFromFile, iconFromUrl, moveIcons, readIcons, registerIconScheme, serveIcons, setIcon } from './icons'
 import {
   appWindows,
@@ -269,6 +270,7 @@ async function relocate(rel: string, op: (v: Vault) => Promise<string>, sender?:
   await renameInProjectOrder(v, rel, to)
   await moveInTreeOrder(v, rel, to)
   const changed = await updateLinks(v, index, before, rel, to)
+  for (const p of await fixRelativeLinks(v, before, rel, to)) if (!changed.includes(p)) changed.push(p)
   await index.rebuild()
   notify(changed.map((path) => ({ event: 'change', path })))
   return to
@@ -753,6 +755,20 @@ function registerIpc() {
     iconChanged()
     return icon
   })
+  // Pictures in notes: saved to attachments/, returned as vault-relative paths
+  ipcMain.handle('attachments:save', (_e, name: string, data: Uint8Array) =>
+    saveAttachment(requireVault(), name, Buffer.from(data))
+  )
+  ipcMain.handle('attachments:pick', async (e) => {
+    const r = await dialog.showOpenDialog(BrowserWindow.fromWebContents(e.sender) ?? win!, {
+      title: 'Add a picture',
+      properties: ['openFile'],
+      filters: [{ name: 'Pictures', extensions: IMAGE_EXT }]
+    })
+    if (r.canceled || !r.filePaths[0]) return null
+    const file = r.filePaths[0]
+    return saveAttachment(requireVault(), basename(file), await readFile(file))
+  })
   // Windows' own emoji panel (Win+.); it types into whatever has focus
   ipcMain.on('icons:emojiPanel', () => app.showEmojiPanel())
 
@@ -879,6 +895,7 @@ if (!gotLock) {
     if (app.isPackaged) Menu.setApplicationMenu(null)
     registerIpc()
     serveIcons(() => vault)
+    serveAttachments(() => vault)
     initWindows({
       main: () => win,
       create: (opts, hash) => makeAppWindow(opts, hash),

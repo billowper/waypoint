@@ -11,7 +11,7 @@ import {
   type Extension,
   type Line
 } from '@codemirror/state'
-import { EditorView, keymap, type Command, type KeyBinding } from '@codemirror/view'
+import { EditorView, keymap, type Command } from '@codemirror/view'
 import type { SyntaxNode } from '@lezer/common'
 import { parseLinks } from '@shared/links'
 import { fenceClosed, hiddenOnLine, type Hidden } from './livePreview'
@@ -27,7 +27,7 @@ import { fenceClosed, hiddenOnLine, type Hidden } from './livePreview'
 // - in a table: the | stay put, Tab and Shift+Tab go between cells, Enter adds a row, and a typed |
 //   is written \| so it stays in its cell
 //
-// formatKeymap (Ctrl+B, Ctrl+I, Ctrl+E, Ctrl+Shift+S) is apart, as it works in the markdown view too.
+// The formatting keys (format.ts) are apart, as they work in the markdown view too.
 
 const SOLID = new Set(['open', 'close', 'rule', 'skip'])
 const isSolid = (h: Hidden) => SOLID.has(h.kind)
@@ -429,6 +429,9 @@ const backspace: Command = (view) => {
   }
 
   const at = runBack(ofKind(hidden, 'inline'), head)
+  // Just after a picture: the picture goes
+  const picture = hidden.find((h) => h.kind === 'object' && h.to === at)
+  if (picture) return remove(view, picture.from, picture.to, 'delete.backward')
   // At the start of a table cell: the | stays
   if (isRow(hidden) && (at === line.from || hidden.some((h) => h.kind === 'pipe' && h.to === at))) return true
   // At the start of a line under a code block, divider or table: joining would break it
@@ -481,6 +484,9 @@ const deleteForward: Command = (view) => {
   }
 
   const at = runForward(ofKind(hidden, 'inline'), head)
+  // Just before a picture: the picture goes
+  const picture = hidden.find((h) => h.kind === 'object' && h.from === at)
+  if (picture) return remove(view, picture.from, picture.to, 'delete.forward', head)
   // At the end of a table cell: the | stays
   if (isRow(hidden) && (at === line.to || hidden.some((h) => h.kind === 'pipe' && h.from === at))) return true
   if (at < line.to) {
@@ -575,60 +581,4 @@ export const wysiwyg: Extension = [
       { key: 'Mod-ArrowLeft', run: arrow(false, true) }
     ])
   )
-]
-
-// ---------------------------------------------------------------------------------------------
-// Formatting keys
-
-/** Takes the formatting off if the selection is in it, otherwise wraps the selection in `mark` */
-function toggleFormat(mark: string, node: string): Command {
-  return (view) => {
-    const { state } = view
-    const sel = state.selection.main
-    for (let n: SyntaxNode | null = syntaxTree(state).resolveInner(sel.from, 1); n; n = n.parent) {
-      if (n.name !== node || n.to < sel.to) continue
-      const marks = n.getChildren(MARK_OF[node])
-      if (marks.length < 2) break
-      const open = marks[0]
-      const close = marks[marks.length - 1]
-      view.dispatch({
-        changes: [
-          { from: open.from, to: open.to },
-          { from: close.from, to: close.to }
-        ],
-        userEvent: 'input.format'
-      })
-      return true
-    }
-    if (sel.empty) {
-      view.dispatch({
-        changes: { from: sel.from, insert: mark + mark },
-        selection: EditorSelection.cursor(sel.from + mark.length),
-        userEvent: 'input.format'
-      })
-      return true
-    }
-    // Markdown formatting can't start or end with a space
-    const text = state.sliceDoc(sel.from, sel.to)
-    const from = sel.from + (text.length - text.trimStart().length)
-    const to = sel.to - (text.length - text.trimEnd().length)
-    if (to <= from) return true
-    view.dispatch({
-      changes: [
-        { from, insert: mark },
-        { from: to, insert: mark }
-      ],
-      selection: EditorSelection.range(from + mark.length, to + mark.length),
-      userEvent: 'input.format'
-    })
-    return true
-  }
-}
-
-/** Goes ahead of the default keys, which use Ctrl+I to select the enclosing syntax */
-export const formatKeymap: readonly KeyBinding[] = [
-  { key: 'Mod-b', run: toggleFormat('**', 'StrongEmphasis'), preventDefault: true },
-  { key: 'Mod-i', run: toggleFormat('*', 'Emphasis'), preventDefault: true },
-  { key: 'Mod-e', run: toggleFormat('`', 'InlineCode'), preventDefault: true },
-  { key: 'Mod-Shift-s', run: toggleFormat('~~', 'Strikethrough'), preventDefault: true }
 ]

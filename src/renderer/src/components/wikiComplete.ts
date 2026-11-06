@@ -2,6 +2,7 @@ import { autocompletion, type CompletionContext, type CompletionResult } from '@
 import { baseName } from '@shared/names'
 import { linkTextFor } from '@shared/links'
 import { linkContext } from './livePreview'
+import { slashMenu } from './slashMenu'
 
 /** Typing "[[" suggests notes; picking one completes the link (and its closing brackets). */
 function wikiLinks(ctx: CompletionContext): CompletionResult | null {
@@ -36,7 +37,7 @@ function wikiLinks(ctx: CompletionContext): CompletionResult | null {
 }
 
 export const wikiComplete = autocompletion({
-  override: [wikiLinks],
+  override: [wikiLinks, slashMenu],
   icons: false,
   activateOnTyping: true
 })
