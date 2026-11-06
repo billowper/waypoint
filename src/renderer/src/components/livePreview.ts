@@ -253,6 +253,38 @@ function setPictureWidth(view: EditorView, dom: HTMLElement, width: number | nul
 
 const PICTURE = /\.(png|jpe?g|gif|webp|svg|bmp|avif)$/i
 
+/** Another note shown inline: ![[Note]] or ![[Note#Heading]]. Drawn by the app (editorHost.renderEmbed). */
+class NoteEmbedWidget extends WidgetType {
+  private destroyers = new WeakMap<HTMLElement, () => void>()
+  constructor(
+    readonly target: string,
+    readonly heading: string | undefined
+  ) {
+    super()
+  }
+  // The same embed keeps its view as the page around it changes
+  eq(other: NoteEmbedWidget) {
+    return other.target === this.target && other.heading === this.heading
+  }
+  get estimatedHeight() {
+    return 120
+  }
+  toDOM(view: EditorView) {
+    const dom = document.createElement('div')
+    dom.className = 'cm-embed'
+    const stop = view.state.facet(editorHost)?.renderEmbed?.(view, dom, this.target, this.heading)
+    if (stop) this.destroyers.set(dom, stop)
+    return dom
+  }
+  destroy(dom: HTMLElement) {
+    this.destroyers.get(dom)?.()
+  }
+  // Clicks and keys inside belong to the embed
+  ignoreEvent() {
+    return true
+  }
+}
+
 /** A picture: ![alt](path), at its own size or the width after a | in its alt text */
 class ImageWidget extends WidgetType {
   constructor(
@@ -727,6 +759,11 @@ function collect(state: EditorState, ranges: readonly { from: number; to: number
         const width = /^\d+$/.test(alias.trim()) ? Number(alias.trim()) : null
         const src = state.facet(editorHost)?.embedSrc(l.target) ?? 'wp-file://v/missing.png'
         hideRange(lf - 1, lt, 'object', new ImageWidget(src, width === null ? alias : '', l.target, width))
+        continue
+      }
+      // A note embed: ![[Note]], when the app can draw one (not inside another embed)
+      if (lf > 0 && doc.sliceString(lf - 1, lf) === '!' && state.facet(editorHost)?.renderEmbed) {
+        hideRange(lf - 1, lt, 'object', new NoteEmbedWidget(l.target, l.heading))
         continue
       }
       const textFrom = pipe === -1 ? lf + 2 : lf + 3 + pipe

@@ -1,6 +1,6 @@
 import { syntaxTree } from '@codemirror/language'
 import { ChangeSet, EditorSelection, type ChangeSpec, type EditorState, type Extension } from '@codemirror/state'
-import { EditorView, ViewPlugin, type ViewUpdate } from '@codemirror/view'
+import { EditorView, ViewPlugin, keymap, type ViewUpdate } from '@codemirror/view'
 import type { SyntaxNode } from '@lezer/common'
 import type { MenuItem } from '../store'
 import { LINE_KINDS, turnInto, turnIntoCode } from './blocks'
@@ -106,28 +106,49 @@ function reindent(text: string, by: number): string {
     .join('\n')
 }
 
-/** Takes a page block out with one of the gaps beside it; the wider gap stays */
-function removal(state: EditorState, tops: Block[], i: number) {
-  const b = tops[i]
+/** Takes page blocks `i` to `j` out with one of the gaps beside them; the wider gap stays */
+function removal(state: EditorState, tops: Block[], i: number, j = i) {
+  const from = tops[i].from
+  const to = tops[j].to
   const prev = i > 0 ? tops[i - 1] : null
-  const next = i < tops.length - 1 ? tops[i + 1] : null
+  const next = j < tops.length - 1 ? tops[j + 1] : null
   if (prev && next) {
-    const before = state.sliceDoc(prev.to, b.from)
-    const after = state.sliceDoc(b.to, next.from)
-    return after.includes('\n\n') && !before.includes('\n\n') ? { from: prev.to, to: b.to } : { from: b.from, to: next.from }
+    const before = state.sliceDoc(prev.to, from)
+    const after = state.sliceDoc(to, next.from)
+    return after.includes('\n\n') && !before.includes('\n\n') ? { from: prev.to, to } : { from, to: next.from }
   }
-  if (next) return { from: b.from, to: next.from }
-  if (prev) return { from: prev.to, to: b.to }
-  return { from: b.from, to: b.to }
+  if (next) return { from, to: next.from }
+  if (prev) return { from: prev.to, to }
+  return { from, to }
+}
+
+/** Which of the page's blocks `x` spans (one, or several selected together); null for a nested item */
+function topSpan(tops: Block[], x: Block): [number, number] | null {
+  if (x.depth !== 0) return null
+  const i = tops.findIndex((b) => b.from === x.from)
+  const j = tops.findIndex((b) => b.to === x.to)
+  return i >= 0 && j >= i ? [i, j] : null
 }
 
 /** Takes any block out: page blocks with their gap, nested items as whole lines */
 function removalOf(state: EditorState, x: Block) {
   const tops = blocksOf(state)
-  const i = x.depth === 0 ? tops.findIndex((b) => b.from === x.from && b.to === x.to) : -1
-  if (i >= 0) return removal(state, tops, i)
+  const span = topSpan(tops, x)
+  if (span) return removal(state, tops, span[0], span[1])
   if (x.to < state.doc.length) return { from: x.from, to: x.to + 1 }
   return { from: Math.max(0, x.from - 1), to: x.to }
+}
+
+/** The page's blocks a selection runs across, as one block, when it's more than one */
+export function selectedBlocks(state: EditorState): Block | null {
+  const sel = state.selection.main
+  if (sel.empty) return null
+  const covered = blocksOf(state).filter((b) => b.to >= sel.from && b.from <= sel.to)
+  if (covered.length < 2) return null
+  const first = covered[0]
+  const last = covered[covered.length - 1]
+  const list = covered.every((b) => b.list && b.list === first.list) ? first.list : undefined
+  return { from: first.from, to: last.to, name: 'Blocks', list, depth: 0, indent: 0 }
 }
 
 /** Where a dragged block can go */
@@ -189,7 +210,7 @@ function renumber(state: EditorState, spots: { pos: number; start: number | null
 function applyEdit(
   view: EditorView,
   spec: ChangeSpec[],
-  cursor: (changes: ChangeSet) => number,
+  cursor: (changes: ChangeSet) => number | [number, number],
   touched: { was: number; now: (changes: ChangeSet) => number }[],
   userEvent: string
 ) {
@@ -203,17 +224,19 @@ function applyEdit(
   })
   const fixes = mid.changes(renumber(mid, spots))
   const changes = first.compose(fixes)
+  const at = cursor(first)
+  const [anchor, head] = typeof at === 'number' ? [at, at] : at
   view.dispatch({
     changes,
-    selection: EditorSelection.cursor(fixes.mapPos(cursor(first))),
+    selection: EditorSelection.range(fixes.mapPos(anchor), fixes.mapPos(head)),
     userEvent,
     scrollIntoView: true
   })
   view.focus()
 }
 
-/** Moves block `x` to a gap */
-export function moveTo(view: EditorView, x: Block, gap: Gap): void {
+/** Moves block `x` to a gap; `keep` is a selection inside it (offsets from its start) to carry along */
+export function moveTo(view: EditorView, x: Block, gap: Gap, keep?: { anchor: number; head: number }): void {
   const { state } = view
   const rem = removalOf(state, x)
   let text = state.sliceDoc(x.from, x.to)
@@ -228,7 +251,7 @@ export function moveTo(view: EditorView, x: Block, gap: Gap): void {
       const t = tops[gap.index]
       const p = gap.index > 0 ? tops[gap.index - 1] : null
       // If the block before is followed by just a line break, x needs a blank line of its own
-      const pIsX = p && p.from === x.from && p.to === x.to
+      const pIsX = p && p.from >= x.from && p.to <= x.to
       if (p && !pIsX && !state.sliceDoc(p.to, t.from).includes('\n\n') && !together(p, asTop)) lead = '\n'
       at = t.from
       insert = lead + text + gapText(asTop, t)
@@ -250,7 +273,12 @@ export function moveTo(view: EditorView, x: Block, gap: Gap): void {
   applyEdit(
     view,
     [rem, { from: at, insert }],
-    (c) => c.mapPos(at, -1) + lead.length,
+    (c) => {
+      const start = c.mapPos(at, -1) + lead.length
+      if (!keep) return start
+      const end = start + insert.length - lead.length
+      return [Math.min(end, start + keep.anchor), Math.min(end, start + keep.head)]
+    },
     [
       { was: x.from + x.indent, now: (c) => c.mapPos(rem.from, -1) },
       { was: at, now: (c) => c.mapPos(at, -1) + lead.length }
@@ -268,6 +296,36 @@ function duplicate(view: EditorView, b: Block) {
 function remove(view: EditorView, b: Block) {
   const rem = removalOf(view.state, b)
   applyEdit(view, [rem], (c) => c.mapPos(rem.from), [{ was: b.from + b.indent, now: (c) => c.mapPos(rem.from) }], 'delete')
+}
+
+/** Where Move up or Move down takes a block: past the page block (or sibling item) beside it */
+function stepGap(state: EditorState, b: Block, up: boolean): Gap | null {
+  const tops = blocksOf(state)
+  const span = topSpan(tops, b)
+  if (span) {
+    const [i, j] = span
+    if (up) return i > 0 ? { kind: 'top', index: i - 1 } : null
+    return j < tops.length - 1 ? { kind: 'top', index: j + 2 } : null
+  }
+  if (up) {
+    const prev = sibling(state, b, false)
+    return prev ? { kind: 'before', item: prev } : null
+  }
+  const next = sibling(state, b, true)
+  if (!next) return null
+  const after = sibling(state, next, true)
+  return after ? { kind: 'before', item: after } : { kind: 'after', item: next }
+}
+
+/** Ctrl+Shift+Up/Down: moves the block the cursor is in (or the blocks selected), keeping the selection */
+function moveCurrent(view: EditorView, up: boolean): boolean {
+  const { state } = view
+  const sel = state.selection.main
+  const b = selectedBlocks(state) ?? blockAt(state, sel.head)
+  if (!b) return false
+  const gap = stepGap(state, b, up)
+  if (gap) moveTo(view, b, gap, { anchor: sel.anchor - b.from, head: sel.head - b.from })
+  return true
 }
 
 /** The list item before or after an item, in the same list */
@@ -291,7 +349,10 @@ function blockMenu(view: EditorView, b: Block): MenuItem[] {
     return out
   }
   const items: MenuItem[] = []
-  if (TEXTUAL.has(b.name)) {
+  const tops = blocksOf(state)
+  const span = topSpan(tops, b)
+  const textual = b.name === 'Blocks' ? !!span && tops.slice(span[0], span[1] + 1).every((t) => TEXTUAL.has(t.name)) : TEXTUAL.has(b.name)
+  if (textual) {
     const own = b.name === 'ListItem' ? () => [view.state.doc.lineAt(b.from)] : lines
     for (const { kind, label } of LINE_KINDS) items.push({ label: `Turn into ${label.toLowerCase()}`, run: () => turnInto(view, kind, own()) })
     if (b.name === 'Paragraph') items.push({ label: 'Turn into code block', run: () => turnIntoCode(view, lines()) })
@@ -303,23 +364,8 @@ function blockMenu(view: EditorView, b: Block): MenuItem[] {
     items.push({ label: 'Add column', run: () => insertColumn(view, table, Number.MAX_SAFE_INTEGER) })
     items.push('separator')
   }
-  // Up and down: among the page's blocks, or a nested item among its siblings
-  let up: Gap | null = null
-  let down: Gap | null = null
-  if (b.depth === 0) {
-    const tops = blocksOf(state)
-    const i = tops.findIndex((t) => t.from === b.from)
-    if (i > 0) up = { kind: 'top', index: i - 1 }
-    if (i >= 0 && i < tops.length - 1) down = { kind: 'top', index: i + 2 }
-  } else {
-    const prev = sibling(state, b, false)
-    const next = sibling(state, b, true)
-    if (prev) up = { kind: 'before', item: prev }
-    if (next) {
-      const after = sibling(state, next, true)
-      down = after ? { kind: 'before', item: after } : { kind: 'after', item: next }
-    }
-  }
+  const up = stepGap(state, b, true)
+  const down = stepGap(state, b, false)
   items.push(
     { label: 'Duplicate', run: () => duplicate(view, b) },
     { label: 'Move up', disabled: !up, run: () => up && moveTo(view, b, up) },
@@ -360,7 +406,7 @@ class Handles {
 
   update(u: ViewUpdate) {
     // Anything that moves the text (edits, fonts or pictures loading, resizing) leaves the grip behind
-    if ((u.docChanged || u.geometryChanged) && !this.drag) this.hide()
+    if ((u.docChanged || u.geometryChanged || u.selectionSet) && !this.drag) this.hide()
   }
 
   destroy() {
@@ -391,7 +437,9 @@ class Handles {
     if (this.drag || e.target === this.handle) return
     const view = this.view
     const line = view.lineBlockAtHeight(e.clientY - view.documentTop)
-    const b = blockAt(view.state, line.from)
+    // Over a selection that runs across blocks, the grip takes them all
+    const group = selectedBlocks(view.state)
+    const b = group && line.from >= group.from && line.from <= group.to ? group : blockAt(view.state, line.from)
     if (!b) return this.hide()
     if (this.current && b.from === this.current.from && b.to === this.current.to && !this.handle.hidden) return
     this.current = b
@@ -437,9 +485,9 @@ class Handles {
       }
     }
     const tops = blocksOf(state)
-    const xi = x.depth === 0 ? tops.findIndex((b) => b.from === x.from && b.to === x.to) : -1
+    const span = topSpan(tops, x)
     for (let i = 0; i <= tops.length; i++) {
-      if (xi >= 0 && (i === xi || i === xi + 1)) continue
+      if (span && i >= span[0] && i <= span[1] + 1) continue
       const pos = i < tops.length ? tops[i].from : tops[tops.length - 1].to
       if (i < tops.length && taken.has(pos)) continue
       if (i < tops.length && inX(pos)) continue
@@ -507,4 +555,10 @@ class Handles {
   }
 }
 
-export const blockHandles: Extension = ViewPlugin.fromClass(Handles)
+export const blockHandles: Extension = [
+  ViewPlugin.fromClass(Handles),
+  keymap.of([
+    { key: 'Mod-Shift-ArrowUp', run: (view) => moveCurrent(view, true), preventDefault: true },
+    { key: 'Mod-Shift-ArrowDown', run: (view) => moveCurrent(view, false), preventDefault: true }
+  ])
+]

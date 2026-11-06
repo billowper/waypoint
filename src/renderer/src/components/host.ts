@@ -1,4 +1,5 @@
 import { Facet } from '@codemirror/state'
+import type { EditorView } from '@codemirror/view'
 import type { MenuItem } from '../store'
 import type { Suggestion } from './Prompt'
 
@@ -21,6 +22,11 @@ export interface EditorHost {
   imageSrc(path: string): string
   /** A URL for an embedded picture, ![[name]], found by name anywhere in the vault; null if there's none */
   embedSrc(name: string): string | null
+  /**
+   * Draws an embedded note, ![[Note]] or ![[Note#Heading]], into `dom` (read-only, kept up to date).
+   * Returns what to call when it goes. Missing in embedded notes themselves, so embeds don't nest.
+   */
+  renderEmbed?(view: EditorView, dom: HTMLElement, target: string, heading?: string): () => void
 }
 
 export const editorHost = Facet.define<EditorHost, EditorHost | null>({ combine: (v) => v[0] ?? null })

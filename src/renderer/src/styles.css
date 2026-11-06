@@ -1089,6 +1089,56 @@ button.crumb.current:hover {
   margin-left: 8px;
 }
 
+/* An embedded note, ![[Note]] (Editor.tsx drawEmbed). The page editor's theme reaches in here too,
+   so its height, padding and width are undone for the embed's own view. */
+.editor .cm-embed {
+  display: block;
+  margin: 4px 0;
+  border: 1px solid var(--border);
+  border-left: 3px solid var(--accent);
+  border-radius: 6px;
+  background: var(--tint);
+  cursor: default;
+}
+
+.editor .cm-embed-head {
+  display: block;
+  width: 100%;
+  padding: 6px 14px 2px;
+  border: none;
+  background: none;
+  color: var(--text-dim);
+  font: inherit;
+  font-size: 0.82em;
+  font-weight: 600;
+  text-align: left;
+  cursor: pointer;
+}
+
+.editor .cm-embed-head:hover {
+  color: var(--accent);
+}
+
+.editor .cm-embed.missing .cm-embed-head {
+  color: var(--text-faint);
+  cursor: default;
+  padding-bottom: 6px;
+}
+
+.editor .cm-embed-body .cm-editor {
+  height: auto !important;
+}
+
+.editor .cm-embed-body .cm-scroller {
+  overflow: visible !important;
+}
+
+.editor .cm-embed-body .cm-content {
+  max-width: none !important;
+  margin: 0 !important;
+  padding: 2px 14px 8px !important;
+}
+
 /* A code block's language, where its opening ``` is */
 .editor .cm-md-code-lang {
   font-family: var(--sans);

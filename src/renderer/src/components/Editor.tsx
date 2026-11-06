@@ -123,6 +123,96 @@ const theme = EditorView.theme(
   { dark: true }
 )
 
+/**
+ * The part of a note an embed shows: from a heading to the next heading at its level or above, or
+ * the whole note without its frontmatter and title (the embed's header shows the name)
+ */
+function embedPart(text: string, heading?: string): string {
+  const lines = text.replace(/^---\r?\n[\s\S]*?\r?\n---\r?\n?/, '').split('\n')
+  if (heading) {
+    const want = heading.trim().toLowerCase()
+    const level = (l: string) => /^(#{1,6})\s/.exec(l)?.[1].length ?? 0
+    const start = lines.findIndex((l) => level(l) && l.replace(/^#+\s+/, '').replace(/\s+#*\s*$/, '').toLowerCase() === want)
+    if (start === -1) return `_No heading “${heading}” in this note._`
+    const end = lines.findIndex((l, i) => i > start && level(l) && level(l) <= level(lines[start]))
+    return lines.slice(start, end === -1 ? undefined : end).join('\n').trim()
+  }
+  if (/^#\s/.test(lines[0] ?? '')) lines.shift()
+  return lines.join('\n').trim()
+}
+
+/** Draws ![[Note]] into `dom`: a header that opens the note, and the note itself, read-only, kept up to date */
+function drawEmbed(outer: EditorView, dom: HTMLElement, target: string, heading: string | undefined, fromPath: string): () => void {
+  const store = useStore.getState
+  const path = resolveLink(target, fromPath, store().notes)
+  const head = document.createElement('button')
+  head.className = 'cm-embed-head'
+  head.textContent = `${path ? baseName(path) : target}${heading ? ` › ${heading}` : ''}`
+  head.title = path ? 'Open this note (Ctrl+click: new tab)' : 'Not created yet'
+  head.addEventListener('click', (e) => {
+    if (path) void store().openFile(path, { newTab: e.ctrlKey })
+  })
+  dom.append(head)
+  if (!path) {
+    dom.classList.add('missing')
+    return () => undefined
+  }
+  const body = document.createElement('div')
+  body.className = 'cm-embed-body'
+  dom.append(body)
+  const inner = new EditorView({
+    parent: body,
+    state: EditorState.create({
+      doc: '',
+      extensions: [
+        EditorState.readOnly.of(true),
+        EditorView.editable.of(false),
+        EditorView.lineWrapping,
+        markdown({ base: markdownLanguage, codeLanguages: languages, extensions: [frontmatterSyntax] }),
+        syntaxHighlighting(mdHighlight),
+        linkContext.of({
+          notes: () => store().notes,
+          from: () => path,
+          open: (t, newTab) => {
+            const found = resolveLink(t, path, store().notes)
+            if (found) void store().openFile(found, { newTab })
+          }
+        }),
+        // Pictures from the embedded note's own folder; no renderEmbed, so embeds don't nest
+        editorHost.of({
+          ask: (title, opts) => store().ask(title, opts),
+          menu: (x, y, items) => store().openMenu({ x, y, items }),
+          saveImage: async () => null,
+          pickImage: async () => null,
+          embedSrc: (name) => {
+            const found = findFile(store().tree, name, dirOf(path))
+            return found && `wp-file://v/${encodeURIComponent(found)}`
+          },
+          imageSrc: (p) =>
+            /^(https?|data|blob|wp-file):/i.test(p) ? p : `wp-file://v/${encodeURIComponent(resolvePath(dirOf(path), decodePath(p)))}`
+        }),
+        livePreview,
+        EditorView.updateListener.of((u) => {
+          if (u.heightChanged || u.docChanged) outer.requestMeasure()
+        })
+      ]
+    })
+  })
+  const load = () =>
+    window.api
+      .read(path)
+      .then((text) => inner.dispatch({ changes: { from: 0, to: inner.state.doc.length, insert: embedPart(text, heading) } }))
+      .catch(() => undefined)
+  void load()
+  const off = window.api.onChanged((events) => {
+    if (events.some((e) => e.path === path)) void load()
+  })
+  return () => {
+    off()
+    inner.destroy()
+  }
+}
+
 interface Props {
   tabId: number
   docId: number
@@ -281,6 +371,7 @@ export default function Editor({ tabId, docId, path, active }: Props) {
                 const saved = await window.api.pickAttachment()
                 return saved && relativePath(dirOf(pathRef.current), saved)
               },
+              renderEmbed: (view, dom, target, heading) => drawEmbed(view, dom, target, heading, pathRef.current),
               embedSrc: (name) => {
                 const found = findFile(store().tree, name, dirOf(pathRef.current))
                 return found && `wp-file://v/${encodeURIComponent(found)}`
