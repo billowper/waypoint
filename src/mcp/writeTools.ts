@@ -21,7 +21,8 @@ import { recordChange, type NewChange } from '../main/claudeLog'
 import { PRIORITIES, PROJECT_STATUSES, TASK_STATUSES, type Priority, type ProjectSettings, type ProjectStatus, type TaskFields, type TaskStatus } from '@shared/types'
 import { joinFrontmatter, splitFrontmatter } from '@shared/frontmatter'
 import { IDEAS_DIR } from '@shared/names'
-import { findNote, findTask, openVault, pickProject, safely, taskLine, today } from './common'
+import { findNote, findTask, openVault, pickProject, refuseLinked, safely, taskLine, today } from './common'
+import { createLinked, readLinked } from '../main/linkedDocs'
 
 const WRITE = { readOnlyHint: false, destructiveHint: false, idempotentHint: false, openWorldHint: false }
 
@@ -183,16 +184,24 @@ export function registerWriteTools(server: McpServer) {
       title: 'Create note',
       description:
         'Create a markdown note or doc. Goes in `folder` if given, else the project\'s docs folder (named or this session\'s project), ' +
-        'else notes/. A taken name gets a number. Link other notes with [[Note name]].',
+        'else notes/. A taken name gets a number. Link other notes with [[Note name]]. For a doc that belongs next to the code ' +
+        '(a README, a pipeline guide), pass `source` instead of copying the text in: the doc then shows that repo file, always current.',
       inputSchema: {
         name: z.string().min(1).describe('Note name (becomes the file name and "# Title")'),
         content: z.string().optional().describe('Markdown body (without the "# Title" line)'),
         folder: z.string().optional().describe('Vault-relative folder, e.g. notes/meetings or projects/x/docs/api'),
-        project: z.string().optional().describe('Put it in this project\'s docs folder')
+        project: z.string().optional().describe('Put it in this project\'s docs folder'),
+        source: z
+          .string()
+          .optional()
+          .describe(
+            'Make it a linked doc showing this markdown file: a path relative to the project\'s repo folder (e.g. pipeline/README.md), ' +
+              'or a full path. `content` then becomes a short note above the file'
+          )
       },
       annotations: WRITE
     },
-    safely(async (a: { name: string; content?: string; folder?: string; project?: string }) => {
+    safely(async (a: { name: string; content?: string; folder?: string; project?: string; source?: string }) => {
       const vault = openVault()
       let folder: string
       if (a.folder) folder = checkPath(vault, a.folder, 'folder')
@@ -202,6 +211,13 @@ export function registerWriteTools(server: McpServer) {
           return null
         })
         folder = p ? docsDir(vault, p.dir) : 'notes'
+      }
+      const source = a.source?.trim()
+      if (source) {
+        const rel = await createLinked(vault, folder, a.name, source, a.content)
+        const linked = await readLinked(vault, rel)
+        await logChange(vault, { tool: 'create_note', action: 'created', path: rel, summary: `${a.name} (shows ${source})` })
+        return `Created ${rel}, a linked doc showing ${linked?.file || source}${linked?.problem ? `\nBut there is nothing to show yet: ${linked.problem}` : ''}`
       }
       const rel = await vault.createNote(folder, a.name)
       if (a.content?.trim()) {
@@ -234,6 +250,7 @@ export function registerWriteTools(server: McpServer) {
       await flushApp(vault)
       const path = await findNote(vault, a.note)
       checkPath(vault, path)
+      await refuseLinked(vault, path)
       // Notes may have Windows line endings; match against \n and write back what the file used
       const original = await vault.read(path)
       const crlf = original.includes('\r\n')
@@ -267,6 +284,7 @@ export function registerWriteTools(server: McpServer) {
       await flushApp(vault)
       const path = await findNote(vault, a.note)
       checkPath(vault, path)
+      await refuseLinked(vault, path)
       const old = await vault.read(path)
       const doc = old.replace(/\r\n/g, '\n')
       const text = a.text.trim()
@@ -295,6 +313,7 @@ export function registerWriteTools(server: McpServer) {
       await flushApp(vault)
       const path = await findNote(vault, a.note)
       checkPath(vault, path)
+      await refuseLinked(vault, path)
       const old = await vault.read(path)
       await vault.write(path, a.content.endsWith('\n') ? a.content : a.content + '\n')
       await logChange(vault, { tool: 'replace_note', action: 'updated', path, summary: 'rewritten' }, old)

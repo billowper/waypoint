@@ -6,8 +6,9 @@ import { homedir } from 'os'
 import { Vault } from '../main/vault'
 import { listProjects } from '../main/projects'
 import { listTasks } from '../main/tasks'
+import { readLinked } from '../main/linkedDocs'
 import { baseName } from '@shared/names'
-import { TASK_STATUSES, TASK_STATUS_LABEL, type Project, type Task } from '@shared/types'
+import { TASK_STATUSES, TASK_STATUS_LABEL, type LinkedDoc, type Project, type Task } from '@shared/types'
 
 // --- Which vault ---------------------------------------------------------------------------
 
@@ -133,6 +134,28 @@ export async function findNote(vault: Vault, note: string): Promise<string> {
   if (matches.length > 1) throw new Error(`Several notes are called "${note}": ${matches.join(', ')}`)
   if (!matches[0]) throw new Error(`No note "${note}"`)
   return matches[0]
+}
+
+/** A linked doc as the read tools return it: the repo file's text, marked as linked and read-only */
+export function linkedNoteText(path: string, d: LinkedDoc): string {
+  const when = d.modified ? `, last changed ${new Date(d.modified).toISOString().slice(0, 16).replace('T', ' ')} UTC` : ''
+  return [
+    `${path}\n[Linked doc, read-only here: it shows ${d.file || d.source}${when}. To change it, edit that file in the repo.]`,
+    d.note ? `Note kept on the doc:\n${d.note}` : '',
+    d.content ?? `Nothing to show: ${d.problem}`
+  ]
+    .filter(Boolean)
+    .join('\n\n')
+}
+
+/** Linked docs show a file from the repo; writing to the doc itself would change nothing anyone sees */
+export async function refuseLinked(vault: Vault, path: string): Promise<void> {
+  const d = await readLinked(vault, path)
+  if (!d) return
+  throw new Error(
+    `${path} is a linked doc: it shows ${d.file || d.source} and can't be edited here. Edit that file in the repo instead. ` +
+      "(Which file it shows is the `source` in its frontmatter; the user can change that in Waypoint's markdown view.)"
+  )
 }
 
 /** A task by ID (WR-003) or path */

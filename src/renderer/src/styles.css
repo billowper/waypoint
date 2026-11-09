@@ -1858,6 +1858,7 @@ button.crumb.current:hover {
 .quick-add,
 .taskbar input,
 .taskbar select,
+.board-sort select,
 .task-table select {
   font: inherit;
   font-size: 13px;
@@ -1877,6 +1878,54 @@ button.crumb.current:hover {
 
 .board-filter {
   width: 180px;
+}
+
+/* A filter that's on or off (and the task bar's "Assign to Claude", which works the same way) */
+.filter-chip {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  padding: 3px 10px;
+  border: 1px solid var(--border);
+  border-radius: 999px;
+  font-size: 12.5px;
+  color: var(--text-dim);
+  white-space: nowrap;
+}
+
+.filter-chip:hover {
+  color: var(--text-strong);
+  background: var(--hover);
+}
+
+.filter-chip.on,
+.label.for-claude {
+  color: var(--accent);
+  border-color: var(--accent);
+  background: var(--selection);
+}
+
+.filter-chip .count {
+  font-size: 11px;
+  opacity: 0.8;
+}
+
+.board-sort {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  font-size: 12px;
+  color: var(--text-faint);
+}
+
+.board-sort button {
+  color: var(--text-dim);
+  font-size: 10px;
+  padding: 4px;
+}
+
+.board-sort button:hover {
+  color: var(--text-strong);
 }
 
 .columns {
@@ -3307,4 +3356,102 @@ img.item-icon {
   padding: 4px 10px;
   color: var(--accent);
   font-size: 12.5px;
+}
+
+/* Linked docs: a doc that shows a file from the project's repo (LinkedDoc.tsx) ------------- */
+
+.linked {
+  flex: 1;
+  min-width: 0;
+  min-height: 0;
+  display: flex;
+  flex-direction: column;
+}
+
+.linked .editor {
+  flex: 1;
+  min-height: 0;
+  height: auto;
+}
+
+.linked .editor[hidden] {
+  display: none;
+}
+
+.linked-head {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 6px 12px 6px 20px;
+  background: var(--panel);
+  border-bottom: 1px solid var(--border);
+  flex: none;
+  font-size: 13px;
+}
+
+.linked-badge {
+  flex: none;
+  padding: 2px 8px;
+  border-radius: 999px;
+  border: 1px solid var(--border);
+  font-size: 11px;
+  font-weight: 600;
+  color: var(--accent);
+  cursor: default;
+}
+
+.linked-path {
+  flex: 1;
+  min-width: 60px;
+  overflow: hidden;
+  white-space: nowrap;
+  text-overflow: ellipsis;
+  font-family: var(--mono);
+  font-size: 12px;
+  color: var(--text-dim);
+  user-select: text;
+}
+
+.linked-when {
+  flex: none;
+  color: var(--text-faint);
+  font-size: 12px;
+}
+
+.linked-head .btn {
+  flex: none;
+}
+
+.linked-note {
+  flex: none;
+  max-height: 30%;
+  overflow: auto;
+  padding: 8px 20px;
+  border-bottom: 1px solid var(--border);
+  white-space: pre-wrap;
+  font-size: 13px;
+  color: var(--text-dim);
+  user-select: text;
+}
+
+.linked-problem {
+  max-width: 640px;
+  margin: 48px auto;
+  padding: 0 24px;
+  color: var(--text);
+  user-select: text;
+}
+
+.linked-problem strong {
+  color: var(--text-strong);
+}
+
+.linked-problem .dim {
+  color: var(--text-faint);
+  font-size: 13px;
+}
+
+.linked-problem code {
+  font-family: var(--mono);
+  color: var(--code);
 }

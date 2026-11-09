@@ -90,6 +90,8 @@ interface State {
   gitBusy: string | null
   vaultSettings: VaultSettings | null
   prefs: Prefs | null
+  /** Slugs of the projects set up for Claude Code, where tasks can be assigned to Claude (see `claudeOn`) */
+  claudeProjects: string[]
   /** The nudge Bill clicked through, shown as a banner until dismissed */
   nudge: NudgeInfo | null
   backlinksOpen: boolean
@@ -116,6 +118,8 @@ interface State {
   openBoard(slug: string, opts?: { newTab?: boolean }): void
   createTask(project: string, fields: Partial<TaskFields>): Promise<string | null>
   updateTask(path: string, patch: Partial<TaskFields>): Promise<void>
+  /** Re-check which projects are set up for Claude Code */
+  refreshClaude(): Promise<void>
   refreshGit(): Promise<void>
   /** Run a git action with a busy label; errors are shown to the user */
   runGit(label: string, fn: () => Promise<unknown>): Promise<boolean>
@@ -140,6 +144,8 @@ interface State {
   toggle(dir: string): void
   selectDir(dir: string): void
   newNote(dir?: string, name?: string): Promise<string>
+  /** Pick a file from the project's repo and make a doc in `dir` that shows it */
+  linkFile(dir: string): Promise<void>
   newFolder(dir?: string): Promise<void>
   /** Ask for a new name, then rename. */
   rename(path: string): Promise<void>
@@ -184,6 +190,10 @@ const parentOf = (p: string) => (p.includes('/') ? p.slice(0, p.lastIndexOf('/')
 
 /** The vault root and the top-level projects/ folder are relied on by name */
 export const canRename = (p: string) => p !== '' && p !== 'projects'
+
+/** Tasks in this project can be assigned to Claude: the Claude Code controls are on and the project is set up for it */
+export const claudeOn = (s: Pick<State, 'prefs' | 'claudeProjects'>, slug: string) =>
+  !!s.prefs?.claudeCode && s.claudeProjects.includes(slug)
 
 let nextId = 0
 let prefsTimer: ReturnType<typeof setTimeout> | null = null
@@ -467,6 +477,7 @@ export const useStore = create<State>((set, get) => {
     gitBusy: null,
     vaultSettings: null,
     prefs: null,
+    claudeProjects: [],
     nudge: null,
     backlinksOpen: true,
     tocOpen: loadToc(),
@@ -483,6 +494,7 @@ export const useStore = create<State>((set, get) => {
       set({ vault, prefs })
       if (!vault) return
       await get().refresh()
+      void get().refreshClaude()
       listenToOtherWindows()
       if (isContentWindow) {
         const tabs = initialViews.map((r) => ({ id: ++nextId, view: fromRef(r) }))
@@ -500,6 +512,7 @@ export const useStore = create<State>((set, get) => {
       navHere = null
       if (!vault) return
       await get().refresh()
+      void get().refreshClaude()
       listenToOtherWindows()
       if (isContentWindow) {
         const tabs = initialViews.map((r) => ({ id: ++nextId, view: fromRef(r) }))
@@ -601,6 +614,11 @@ ${(e as Error).message}`)
 ${(e as Error).message}`)
       }
       await get().refresh()
+    },
+
+    async refreshClaude() {
+      const claudeProjects = await window.api.claudeProjects().catch(() => [])
+      if (claudeProjects.join('\n') !== get().claudeProjects.join('\n')) set({ claudeProjects })
     },
 
     async refreshGit() {
@@ -803,6 +821,19 @@ ${(e as Error).message}`)
       await get().refresh()
       await get().openFile(path)
       return path
+    },
+
+    async linkFile(dir) {
+      try {
+        const path = await window.api.linkFile(dir)
+        if (!path) return
+        await get().refresh()
+        await get().openFile(path)
+      } catch (e) {
+        alert(`Couldn't link a file.
+
+${(e as Error).message.replace(/^Error invoking remote method '[^']+': (Error: )?/, '')}`)
+      }
     },
 
     async newFolder(dir) {

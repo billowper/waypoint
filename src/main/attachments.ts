@@ -1,6 +1,6 @@
 import { net, protocol } from 'electron'
 import { existsSync, promises as fs } from 'fs'
-import { extname, join, posix } from 'path'
+import { extname, join, posix, resolve } from 'path'
 import { pathToFileURL } from 'url'
 import { movedPath } from '@shared/names'
 import type { Vault } from './vault'
@@ -18,13 +18,23 @@ export const IMAGE_EXT = ['png', 'jpg', 'jpeg', 'gif', 'webp', 'svg', 'bmp', 'av
 
 const isImage = (name: string) => IMAGE_EXT.includes(extname(name).slice(1).toLowerCase())
 
-/** wp-file://v/<vault-relative path, URI-encoded>; registered as privileged in icons.ts */
-export function serveAttachments(vault: () => Vault | null) {
+/**
+ * wp-file://v/<vault-relative path, URI-encoded>; registered as privileged in icons.ts.
+ * wp-file://x/<full path, URI-encoded> is a picture beside a linked doc's file, outside the vault:
+ * `external` says whether that path is one the app is showing (inside a linked file's repo).
+ */
+export function serveAttachments(vault: () => Vault | null, external: (abs: string) => boolean = () => false) {
   protocol.handle('wp-file', async (req) => {
     const v = vault()
-    const rel = decodeURIComponent(new URL(req.url).pathname.replace(/^\/+/, ''))
+    const url = new URL(req.url)
+    const rel = decodeURIComponent(url.pathname.replace(/^\/+/, ''))
     if (!v || !isImage(rel)) return new Response('Not found', { status: 404 })
     try {
+      if (url.hostname === 'x') {
+        const abs = resolve(rel)
+        if (!external(abs)) return new Response('Not found', { status: 404 })
+        return await net.fetch(pathToFileURL(abs).toString())
+      }
       return await net.fetch(pathToFileURL(v.abs(rel)).toString())
     } catch {
       return new Response('Not found', { status: 404 })

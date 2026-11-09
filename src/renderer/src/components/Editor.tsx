@@ -34,7 +34,7 @@ const TOC_JUMP_SETTLE = 200
 const TITLE_RENAME_DELAY = 1200
 
 // Styles the markdown itself, so the source view (Ctrl+Shift+M) still reads like a page
-const mdHighlight = HighlightStyle.define([
+export const mdHighlight = HighlightStyle.define([
   { tag: t.heading1, fontSize: '1.75em', fontWeight: '700', color: 'var(--text-strong)' },
   { tag: t.heading2, fontSize: '1.4em', fontWeight: '650', color: 'var(--text-strong)' },
   { tag: t.heading3, fontSize: '1.18em', fontWeight: '600', color: 'var(--text-strong)' },
@@ -57,7 +57,7 @@ const mdHighlight = HighlightStyle.define([
 /** Everything that draws the page over its markdown; left out when showing the source */
 const preview = [livePreview, wysiwyg, formatToolbar, blockHandles, tableContextMenu, slashMenuOn.of(true)]
 
-const dirOf = (p: string) => (p.includes('/') ? p.slice(0, p.lastIndexOf('/')) : '')
+export const dirOf = (p: string) => (p.includes('/') ? p.slice(0, p.lastIndexOf('/')) : '')
 
 /** A file by name or path anywhere in the vault, as Obsidian finds ![[embeds]]: the note's own folder first */
 function findFile(tree: TreeNode[], name: string, near: string): string | null {
@@ -75,7 +75,7 @@ function findFile(tree: TreeNode[], name: string, near: string): string | null {
   walk(tree)
   return found.find((p) => dirOf(p) === near) ?? found.sort((a, b) => a.length - b.length)[0] ?? null
 }
-const decodePath = (p: string) => {
+export const decodePath = (p: string) => {
   try {
     return decodeURI(p)
   } catch {
@@ -83,7 +83,7 @@ const decodePath = (p: string) => {
   }
 }
 
-const theme = EditorView.theme(
+export const theme = EditorView.theme(
   {
     '&': { height: '100%', backgroundColor: 'transparent', color: 'var(--text)' },
     '.cm-scroller': { fontFamily: 'var(--editor-font)', lineHeight: '1.7', overflow: 'auto' },

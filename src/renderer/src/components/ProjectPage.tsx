@@ -26,7 +26,7 @@ const fail = (what: string) => (e: unknown) => alert(`${what}\n\n${(e as Error).
 
 export default function ProjectPage({ slug }: { slug: string }) {
   const prefs = useStore((st) => st.prefs)
-  const { projects, notes, tasks, boards, openFile, newNote, refresh, openBoard, createTask, openCanvas, createBoard } =
+  const { projects, notes, tasks, boards, openFile, newNote, linkFile, refresh, openBoard, createTask, openCanvas, createBoard } =
     useStore()
   const project = projects.find((p) => p.slug === slug)
   const projectTasks = tasks.filter((t) => t.project === slug)
@@ -345,6 +345,13 @@ export default function ProjectPage({ slug }: { slug: string }) {
       <section className="card">
         <div className="card-head">
           <h2>Docs</h2>
+          <button
+            className="btn small"
+            title="A doc that shows a markdown file from the project's repository, so the repo stays the one source"
+            onClick={() => linkFile(`${project.dir}/docs`)}
+          >
+            Link a file…
+          </button>
           <button className="btn small" onClick={() => newNote(`${project.dir}/docs`)}>
             New doc
           </button>

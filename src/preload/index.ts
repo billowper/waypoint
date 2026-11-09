@@ -27,10 +27,19 @@ const api: Api = {
   revealPath: (path) => ipcRenderer.invoke('ext:reveal', path),
   openInCode: (path) => ipcRenderer.invoke('ext:code', path),
   pickPath: (kind) => ipcRenderer.invoke('ext:pick', kind),
+  linkedDoc: (rel) => ipcRenderer.invoke('linked:read', rel),
+  linkedAct: (rel, action, href) => ipcRenderer.invoke('linked:act', rel, action, href),
+  linkFile: (dir) => ipcRenderer.invoke('linked:create', dir),
+  onLinkedChanged: (cb) => {
+    const h = (_e: IpcRendererEvent, file: string) => cb(file)
+    ipcRenderer.on('linked:changed', h)
+    return () => ipcRenderer.removeListener('linked:changed', h)
+  },
   claudeStatus: (slug) => ipcRenderer.invoke('claude:status', slug),
   claudeConnect: () => ipcRenderer.invoke('claude:connect'),
   claudeDisconnect: () => ipcRenderer.invoke('claude:disconnect'),
   claudeInstructions: (slug) => ipcRenderer.invoke('claude:instructions', slug),
+  claudeProjects: () => ipcRenderer.invoke('claude:projects'),
   claudeOpen: (slug, where) => ipcRenderer.invoke('claude:open', slug, where),
   claudeSendTask: (rel, where) => ipcRenderer.invoke('claude:send-task', rel, where),
   claudeChanges: (slug, limit) => ipcRenderer.invoke('claude:changes', slug, limit),

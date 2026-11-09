@@ -7,7 +7,7 @@ import { useApplyTheme } from './theme'
 import Sidebar from './components/Sidebar'
 import { PathBar, TabBar } from './components/TopBar'
 import Home from './components/Home'
-import Editor from './components/Editor'
+import DocTab from './components/LinkedDoc'
 import Welcome from './components/Welcome'
 import Prompt from './components/Prompt'
 import ContextMenu from './components/ContextMenu'
@@ -78,7 +78,7 @@ export default function App() {
       const wiki = target.closest('[data-wikilink]')?.getAttribute('data-wikilink')
       const from = s.view.kind === 'file' ? s.view.path : ''
       const linked = wiki ? resolveLink(wiki, from, s.notes) : null
-      const editable = !!target.closest('input, textarea, [contenteditable="true"], .cm-content')
+      const editable = !!target.closest('input, textarea, [contenteditable="true"]')
       const selection = (window.getSelection()?.toString() ?? '').length > 0 ||
         (target instanceof HTMLInputElement || target instanceof HTMLTextAreaElement
           ? (target.selectionEnd ?? 0) > (target.selectionStart ?? 0)
@@ -246,7 +246,7 @@ export default function App() {
             {/* Every open note keeps its editor (and undo history); only the active one shows */}
             {tabs.map((t) =>
               t.view.kind === 'file' ? (
-                <Editor key={t.view.docId} tabId={t.id} docId={t.view.docId} path={t.view.path} active={t.id === activeTab} />
+                <DocTab key={t.view.docId} tabId={t.id} docId={t.view.docId} path={t.view.path} active={t.id === activeTab} />
               ) : null
             )}
           </div>

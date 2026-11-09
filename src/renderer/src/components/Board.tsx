@@ -1,6 +1,8 @@
 import { useRef, useState, type MouseEvent, type PointerEvent } from 'react'
-import { PRIORITIES, TASK_STATUSES, TASK_STATUS_LABEL, type Task, type TaskStatus } from '@shared/types'
-import { useStore } from '../store'
+import { PRIORITIES_DESC, PRIORITY_LABEL, TASK_STATUSES, TASK_STATUS_LABEL, type Task, type TaskStatus } from '@shared/types'
+import { useEffect } from 'react'
+import { isForClaude } from '@shared/types'
+import { claudeOn, useStore } from '../store'
 import { showMenu, taskMenu } from '../menus'
 
 /** Pixels the pointer must move before a press on a card becomes a drag */
@@ -20,14 +22,30 @@ function CardBody({ t }: { t: Task }) {
       <div className="task-title">{t.title}</div>
       <div className="task-meta">
         <span className="task-id">{t.id}</span>
-        {t.priority !== 'medium' && <span className={`badge priority-${t.priority}`}>{t.priority}</span>}
+        {t.priority !== 'medium' && <span className={`badge priority-${t.priority}`}>{PRIORITY_LABEL[t.priority]}</span>}
         {t.due && <span className={`due ${dueState(t)}`}>{formatDue(t.due)}</span>}
-        {t.labels.map((l) => (
+        <Labels t={t} />
+      </div>
+    </>
+  )
+}
+
+/** A task's labels as chips; the one that assigns it to Claude stands out */
+function Labels({ t }: { t: Task }) {
+  return (
+    <>
+      {isForClaude(t) && (
+        <span className="label for-claude" title="Assigned to Claude">
+          Claude
+        </span>
+      )}
+      {t.labels
+        .filter((l) => !isForClaude({ labels: [l] }))
+        .map((l) => (
           <span key={l} className="label">
             {l}
           </span>
         ))}
-      </div>
     </>
   )
 }
@@ -57,7 +75,37 @@ export const byUrgency = (a: Task, b: Task) =>
   (a.due || '9999').localeCompare(b.due || '9999') ||
   a.id.localeCompare(b.id, undefined, { numeric: true })
 
-type SortKey = 'id' | 'title' | 'status' | 'priority' | 'due'
+const SORT_KEYS = ['priority', 'due', 'id', 'title', 'status'] as const
+type SortKey = (typeof SORT_KEYS)[number]
+const SORT_LABEL: Record<SortKey, string> = { priority: 'Priority', due: 'Due date', id: 'ID', title: 'Title', status: 'Status' }
+interface Sort {
+  key: SortKey
+  asc: boolean
+}
+
+/** One sort key; ascending means highest priority / soonest due / first status first */
+const compareBy = (k: SortKey, a: Task, b: Task) =>
+  k === 'priority'
+    ? PRIORITY_RANK[a.priority] - PRIORITY_RANK[b.priority]
+    : k === 'status'
+      ? TASK_STATUSES.indexOf(a.status) - TASK_STATUSES.indexOf(b.status)
+      : k === 'due'
+        ? (a.due || '9999').localeCompare(b.due || '9999')
+        : a[k].localeCompare(b[k], undefined, { numeric: true, sensitivity: 'base' })
+
+/** The chosen sort, with ties falling back to the default order */
+const sorter = (s: Sort) => (a: Task, b: Task) => (s.asc ? 1 : -1) * compareBy(s.key, a, b) || byUrgency(a, b)
+
+/** The sort is remembered per project; highest priority first until one is chosen */
+function loadSort(slug: string): Sort {
+  try {
+    const s = JSON.parse(localStorage.getItem(`waypoint:boardSort:${slug}`) ?? 'null')
+    if (s && SORT_KEYS.includes(s.key)) return { key: s.key, asc: s.asc !== false }
+  } catch {
+    /* ignore */
+  }
+  return { key: 'priority', asc: true }
+}
 
 function loadMode(slug: string): 'board' | 'list' {
   try {
@@ -76,12 +124,29 @@ export default function Board({ slug }: { slug: string }) {
   const [dropOn, setDropOn] = useState<TaskStatus | null>(null)
   const [adding, setAdding] = useState<TaskStatus | null>(null)
   const [draft, setDraft] = useState('')
-  const [sort, setSort] = useState<{ key: SortKey; asc: boolean }>({ key: 'id', asc: true })
+  const [sort, setSortState] = useState<Sort>(() => loadSort(slug))
+  const setSort = (next: Sort) => {
+    setSortState(next)
+    try {
+      localStorage.setItem(`waypoint:boardSort:${slug}`, JSON.stringify(next))
+    } catch {
+      /* ignore */
+    }
+  }
+
+  // Assigning tasks to Claude: offered when the project is set up for Claude Code (or some task already is assigned)
+  const canAssign = useStore((s) => claudeOn(s, slug))
+  const refreshClaude = useStore((s) => s.refreshClaude)
+  useEffect(() => void refreshClaude(), [slug, refreshClaude])
+  const [onlyClaude, setOnlyClaude] = useState(false)
+  const forClaude = mine.filter(isForClaude)
+  const claudeFilter = canAssign || forClaude.length > 0
+  const pool = onlyClaude && claudeFilter ? forClaude : mine
 
   const q = filter.trim().toLowerCase()
   const shown = q
-    ? mine.filter((t) => `${t.id} ${t.title} ${t.labels.join(' ')}`.toLowerCase().includes(q))
-    : mine
+    ? pool.filter((t) => `${t.id} ${t.title} ${t.labels.join(' ')}`.toLowerCase().includes(q))
+    : pool
 
   const switchMode = (m: 'board' | 'list') => {
     setMode(m)
@@ -150,21 +215,10 @@ export default function Board({ slug }: { slug: string }) {
 
   if (!project) return <div className="board-page"><p className="empty">This project no longer exists.</p></div>
 
-  const sorted = [...shown].sort((a, b) => {
-    const k = sort.key
-    const cmp =
-      k === 'priority'
-        ? PRIORITY_RANK[a.priority] - PRIORITY_RANK[b.priority]
-        : k === 'status'
-          ? TASK_STATUSES.indexOf(a.status) - TASK_STATUSES.indexOf(b.status)
-          : k === 'due'
-            ? (a.due || '9999').localeCompare(b.due || '9999')
-            : a[k].localeCompare(b[k], undefined, { numeric: true, sensitivity: 'base' })
-    return sort.asc ? cmp : -cmp
-  })
+  const sorted = [...shown].sort(sorter(sort))
   const header = (key: SortKey, label: string) => (
     <th>
-      <button onClick={() => setSort((s) => ({ key, asc: s.key === key ? !s.asc : true }))}>
+      <button onClick={() => setSort({ key, asc: sort.key === key ? !sort.asc : true })}>
         {label}
         {sort.key === key ? (sort.asc ? ' ▲' : ' ▼') : ''}
       </button>
@@ -179,6 +233,35 @@ export default function Board({ slug }: { slug: string }) {
         </button>
         <h1>Tasks</h1>
         <input className="board-filter" value={filter} placeholder="Filter…" onChange={(e) => setFilter(e.target.value)} />
+        {claudeFilter && (
+          <button
+            className={`filter-chip ${onlyClaude ? 'on' : ''}`}
+            aria-pressed={onlyClaude}
+            title={onlyClaude ? 'Showing only tasks assigned to Claude. Click to show all' : 'Show only tasks assigned to Claude'}
+            onClick={() => setOnlyClaude(!onlyClaude)}
+          >
+            Claude <span className="count">{forClaude.filter((t) => t.status !== 'done').length}</span>
+          </button>
+        )}
+        <label className="board-sort">
+          Sort
+          <select
+            value={mode === 'board' && sort.key === 'status' ? 'priority' : sort.key}
+            onChange={(e) => setSort({ key: e.target.value as SortKey, asc: true })}
+          >
+            {SORT_KEYS.filter((k) => mode === 'list' || k !== 'status').map((k) => (
+              <option key={k} value={k}>
+                {SORT_LABEL[k]}
+              </option>
+            ))}
+          </select>
+          <button
+            title={sort.asc ? 'Ascending (highest priority, soonest due first). Click to reverse' : 'Descending. Click to reverse'}
+            onClick={() => setSort({ ...sort, asc: !sort.asc })}
+          >
+            {sort.asc ? '▲' : '▼'}
+          </button>
+        </label>
         <div className="mode-switch">
           <button className={mode === 'board' ? 'on' : ''} onClick={() => switchMode('board')}>
             Board
@@ -195,7 +278,7 @@ export default function Board({ slug }: { slug: string }) {
       {mode === 'board' ? (
         <div className="columns">
           {TASK_STATUSES.map((status) => {
-            const cards = shown.filter((t) => t.status === status).sort(byUrgency)
+            const cards = shown.filter((t) => t.status === status).sort(sorter(sort))
             return (
               <section
                 key={status}
@@ -292,15 +375,19 @@ export default function Board({ slug }: { slug: string }) {
                       value={t.priority}
                       onChange={(e) => updateTask(t.path, { priority: e.target.value as Task['priority'] })}
                     >
-                      {PRIORITIES.map((p) => (
+                      {PRIORITIES_DESC.map((p) => (
                         <option key={p} value={p}>
-                          {p}
+                          {PRIORITY_LABEL[p]}
                         </option>
                       ))}
                     </select>
                   </td>
                   <td className={`due ${dueState(t)}`}>{formatDue(t.due)}</td>
-                  <td>{t.labels.join(', ')}</td>
+                  <td>
+                    <div className="task-meta">
+                      <Labels t={t} />
+                    </div>
+                  </td>
                 </tr>
               ))}
             </tbody>

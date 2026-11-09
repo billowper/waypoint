@@ -41,6 +41,8 @@ export interface LinkContext {
   /** Path of the note being edited */
   from(): string
   open(target: string, newTab: boolean): void
+  /** Follow a link that isn't a web address (a relative path in a linked doc's file); nothing happens without it */
+  openUrl?(url: string): void
 }
 export const linkContext = Facet.define<LinkContext, LinkContext | null>({ combine: (v) => v[0] ?? null })
 
@@ -849,6 +851,7 @@ const previewPlugin = ViewPlugin.fromClass(Preview, {
       }
       const url = el.getAttribute('data-url')
       if (url && /^https?:\/\//i.test(url)) window.open(url) // main process sends it to the browser
+      else if (url) view.state.facet(linkContext)?.openUrl?.(url)
       return true
     }
   }

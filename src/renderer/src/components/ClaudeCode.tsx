@@ -147,7 +147,13 @@ function ClaudeNotes({ dir }: { dir: string }) {
 
 /** Project page card: connect, write the repo's CLAUDE.local.md, open Claude Code in the repo, Claude's notes */
 export function ClaudeProjectCard({ slug, repo, dir }: { slug: string; repo: string; dir: string }) {
-  const [status, reload] = useClaudeStatus(slug)
+  const [status, reloadStatus] = useClaudeStatus(slug)
+  const refreshClaude = useStore((s) => s.refreshClaude)
+  // Setting a project up (or changing its repo) also decides whether its tasks can be assigned to Claude
+  const reload = useCallback(() => {
+    reloadStatus()
+    void refreshClaude()
+  }, [reloadStatus, refreshClaude])
   const [busy, act] = useAction(reload)
   useEffect(reload, [repo, reload])
   if (!status) return null

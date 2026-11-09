@@ -1,6 +1,6 @@
 import { app, BrowserWindow, dialog, globalShortcut, ipcMain, Menu, screen, shell, nativeTheme } from 'electron'
 import { basename, join, posix } from 'path'
-import { existsSync } from 'fs'
+import { existsSync, unwatchFile, watchFile } from 'fs'
 import { mkdir, readFile, rmdir, stat } from 'fs/promises'
 import { watch, type FSWatcher } from 'chokidar'
 import { Vault } from './vault'
@@ -16,10 +16,11 @@ import {
   saveProject,
   saveProjectOrder
 } from './projects'
-import { CLI_NOT_FOUND, claudeStatus, connectClaude, disconnectClaude, openInClaudeApp, openInClaudeTerminal, taskPrompt, writeInstructions } from './claudeCode'
+import { CLI_NOT_FOUND, claudeStatus, connectClaude, disconnectClaude, openInClaudeApp, openInClaudeTerminal, reposSetUp, taskPrompt, writeInstructions } from './claudeCode'
 import { createTask, isTaskPath, listTasks, updateTask } from './tasks'
 import { VaultGit } from './git'
-import type { ProjectSettings, TaskFields, VaultSettings } from '@shared/types'
+import type { LinkedDoc, ProjectSettings, TaskFields, VaultSettings } from '@shared/types'
+import { createLinked, isInside, isMarkdownFile, linkTarget, nameFor, projectOfPath, readLinked, sourceFor } from './linkedDocs'
 import { loadConfig, prefs, saveConfig } from './config'
 import {
   applyPrefs,
@@ -149,9 +150,35 @@ async function scheduleAutoCommit() {
   }, g.intervalMinutes * 60_000)
 }
 
+/**
+ * Linked docs show files outside the vault, which the vault's watcher never sees. Each one shown is
+ * polled (no handle held on the repo, and it copes with editors that save by replacing the file).
+ */
+const linkedWatches = new Map<string, () => void>()
+/** Folders pictures in linked files may be read from (see serveAttachments) */
+const linkedRoots = new Set<string>()
+
+function watchLinked(doc: LinkedDoc) {
+  if (doc.root) linkedRoots.add(doc.root)
+  const file = doc.file
+  if (!file || linkedWatches.has(file)) return
+  const onStat = (cur: { mtimeMs: number; size: number }, prev: { mtimeMs: number; size: number }) => {
+    if (cur.mtimeMs !== prev.mtimeMs || cur.size !== prev.size) broadcast('linked:changed', [file])
+  }
+  watchFile(file, { interval: 1000 }, onStat)
+  linkedWatches.set(file, () => unwatchFile(file, onStat))
+}
+
+function unwatchLinked() {
+  for (const stop of linkedWatches.values()) stop()
+  linkedWatches.clear()
+  linkedRoots.clear()
+}
+
 async function setVault(path: string | undefined) {
   await watcher?.close()
   watcher = null
+  unwatchLinked()
   bridge?.close()
   bridge = null
   vault = path ? new Vault(path) : null
@@ -639,6 +666,13 @@ function registerIpc() {
   ipcMain.handle('claude:status', async (_e, slug?: string) =>
     claudeStatus(slug && vault ? (await readProject(vault, slug)).repo.path || undefined : undefined)
   )
+  // Projects where tasks can be assigned to Claude: set up in their repo, with the connector registered
+  ipcMain.handle('claude:projects', async () => {
+    if (!vault) return []
+    const withRepo = (await listProjects(vault)).filter((p) => p.repo.path)
+    const ready = new Set(await reposSetUp(withRepo.map((p) => p.repo.path)))
+    return withRepo.filter((p) => ready.has(p.repo.path)).map((p) => p.slug)
+  })
   ipcMain.handle('claude:connect', () => connectClaude())
   // "Changed by Claude": a project's changes (or all), newest first
   ipcMain.handle('claude:changes', async (_e, slug?: string, limit = 50) => {
@@ -680,6 +714,52 @@ function registerIpc() {
     }
     const prompt = taskPrompt(task.id, task.title)
     await (where === 'app' ? openInClaudeApp(p.repo.path, prompt) : openInClaudeTerminal(p.repo.path, prompt))
+  })
+
+  // Linked docs: the file is always worked out here from the doc, never taken from the page
+  ipcMain.handle('linked:read', async (_e, rel: string) => {
+    const doc = await readLinked(requireVault(), rel)
+    if (doc) watchLinked(doc)
+    return doc
+  })
+  ipcMain.handle('linked:act', async (_e, rel: string, action: 'open' | 'code' | 'reveal' | 'link', href?: string) => {
+    const doc = await readLinked(requireVault(), rel)
+    if (!doc?.file) throw new Error("This doc doesn't link to a file.")
+    const open = async (path: string) => {
+      const err = await shell.openPath(path)
+      if (err) throw new Error(err)
+    }
+    if (action === 'link') {
+      const target = href ? linkTarget(doc, href) : null
+      if (!target || !isInside(doc.root, target)) throw new Error(`That link doesn't lead to a file in ${doc.root}.`)
+      const s = await stat(target).catch(() => null)
+      if (!s) throw new Error(`Nothing at ${target}`)
+      // Folders and documents open; anything else (it could be a program) is only shown in Explorer
+      if (s.isDirectory() || /\.(md|markdown|txt|pdf|png|jpe?g|gif|webp|svg|json|ya?ml|toml|csv|log)$/i.test(target)) return open(target)
+      return shell.showItemInFolder(target)
+    }
+    if (action === 'reveal') return shell.showItemInFolder(existsSync(doc.file) ? doc.file : doc.root)
+    if (!isMarkdownFile(doc.file)) throw new Error('Only markdown files are opened from here.')
+    if (action === 'code') return shell.openExternal(`vscode://file/${encodeURI(doc.file.replace(/\\/g, '/'))}`)
+    return open(doc.file)
+  })
+  ipcMain.handle('linked:create', async (e, dir: string) => {
+    const v = requireVault()
+    const slug = projectOfPath(`${dir}/`)
+    if (!slug) throw new Error("A linked doc shows a file from a project's repository, so it has to be made inside a project.")
+    const p = await repoOf(slug)
+    const r = await dialog.showOpenDialog(BrowserWindow.fromWebContents(e.sender) ?? win!, {
+      title: `Link a file from ${p.title}'s repository`,
+      defaultPath: p.repo.path,
+      properties: ['openFile'],
+      filters: [{ name: 'Markdown', extensions: ['md', 'markdown'] }]
+    })
+    const file = r.canceled ? undefined : r.filePaths[0]
+    if (!file) return null
+    if (!isMarkdownFile(file)) throw new Error('Only markdown files (.md) can be linked for now.')
+    const rel = await createLinked(v, dir, nameFor(file), sourceFor(p.repo.path, file))
+    await requireIndex().update(rel)
+    return rel
   })
 
   ipcMain.handle('file:reveal', (_e, rel: string) => shell.showItemInFolder(requireVault().abs(rel)))
@@ -895,7 +975,7 @@ if (!gotLock) {
     if (app.isPackaged) Menu.setApplicationMenu(null)
     registerIpc()
     serveIcons(() => vault)
-    serveAttachments(() => vault)
+    serveAttachments(() => vault, (abs) => [...linkedRoots].some((root) => isInside(root, abs)))
     initWindows({
       main: () => win,
       create: (opts, hash) => makeAppWindow(opts, hash),

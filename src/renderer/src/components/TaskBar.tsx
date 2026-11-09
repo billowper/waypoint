@@ -1,7 +1,8 @@
 import { useEffect, useState } from 'react'
-import { PRIORITIES, TASK_STATUSES, TASK_STATUS_LABEL, type Priority, type TaskStatus } from '@shared/types'
-import { useStore } from '../store'
-import { sendItems, sendToClaude, showMenu } from '../menus'
+import { PRIORITIES_DESC, PRIORITY_LABEL, TASK_STATUSES, TASK_STATUS_LABEL, type Priority, type TaskStatus } from '@shared/types'
+import { isForClaude } from '@shared/types'
+import { claudeOn, useStore } from '../store'
+import { sendItems, sendToClaude, setForClaude, showMenu } from '../menus'
 import { dueState } from './Board'
 
 /** Task properties for the open task note, edited without touching its YAML */
@@ -10,6 +11,9 @@ export default function TaskBar({ path }: { path: string }) {
   const task = tasks.find((t) => t.path === path)
   const [title, setTitle] = useState(task?.title ?? '')
   const [labels, setLabels] = useState(task?.labels.join(', ') ?? '')
+  const canAssign = useStore((s) => !!task && claudeOn(s, task.project))
+  const refreshClaude = useStore((s) => s.refreshClaude)
+  useEffect(() => void refreshClaude(), [task?.project, refreshClaude])
 
   useEffect(() => {
     setTitle(task?.title ?? '')
@@ -17,6 +21,7 @@ export default function TaskBar({ path }: { path: string }) {
   }, [task?.title, task?.labels.join(',')]) // eslint-disable-line react-hooks/exhaustive-deps
 
   if (!task) return null
+  const assigned = isForClaude(task)
   const commitTitle = () => title.trim() && title.trim() !== task.title && updateTask(path, { title: title.trim() })
   const commitLabels = () => {
     const next = labels.split(',').map((l) => l.trim()).filter(Boolean)
@@ -43,10 +48,10 @@ export default function TaskBar({ path }: { path: string }) {
           </option>
         ))}
       </select>
-      <select value={task.priority} onChange={(e) => updateTask(path, { priority: e.target.value as Priority })}>
-        {PRIORITIES.map((p) => (
+      <select value={task.priority} aria-label="Priority" title="Priority" onChange={(e) => updateTask(path, { priority: e.target.value as Priority })}>
+        {PRIORITIES_DESC.map((p) => (
           <option key={p} value={p}>
-            {p}
+            {PRIORITY_LABEL[p]}
           </option>
         ))}
       </select>
@@ -66,6 +71,16 @@ export default function TaskBar({ path }: { path: string }) {
         onKeyDown={(e) => e.key === 'Enter' && (e.currentTarget as HTMLInputElement).blur()}
         aria-label="Labels"
       />
+      {(canAssign || assigned) && (
+        <button
+          className={`filter-chip ${assigned ? 'on' : ''}`}
+          aria-pressed={assigned}
+          title={assigned ? 'Assigned to Claude (the "claude" label). Click to unassign' : 'Assign this task to Claude (adds the "claude" label)'}
+          onClick={() => setForClaude(task, !assigned)}
+        >
+          {assigned ? 'Assigned to Claude' : 'Assign to Claude'}
+        </button>
+      )}
       {prefs?.claudeCode && (
         <button
           className="btn small"

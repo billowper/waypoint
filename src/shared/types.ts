@@ -69,6 +69,27 @@ export interface Project extends ProjectSettings {
   hasFile: boolean
 }
 
+/**
+ * A linked doc: a doc whose frontmatter `source` names a file in the project's repo, shown read-only
+ * in place of the doc's own text (see src/main/linkedDocs.ts)
+ */
+export interface LinkedDoc {
+  /** As written in the doc's frontmatter */
+  source: string
+  /** Full path of the file it names ('' when that can't be worked out) */
+  file: string
+  /** Folder that pictures and links in the file may reach into: the repo, or the file's folder for a full-path source */
+  root: string
+  /** The file's text; null when there's nothing to show (see `problem`) */
+  content: string | null
+  /** When the file last changed (ms) */
+  modified: number
+  /** Why there's nothing to show: no repo folder, missing file… */
+  problem?: string
+  /** Text under the doc's own frontmatter, shown as a note above the file */
+  note: string
+}
+
 export const TASK_STATUSES = ['backlog', 'todo', 'doing', 'done'] as const
 export type TaskStatus = (typeof TASK_STATUSES)[number]
 export const TASK_STATUS_LABEL: Record<TaskStatus, string> = {
@@ -79,6 +100,19 @@ export const TASK_STATUS_LABEL: Record<TaskStatus, string> = {
 }
 export const PRIORITIES = ['low', 'medium', 'high', 'urgent'] as const
 export type Priority = (typeof PRIORITIES)[number]
+export const PRIORITY_LABEL: Record<Priority, string> = { low: 'Low', medium: 'Medium', high: 'High', urgent: 'Urgent' }
+/** Highest first: the order for menus, dropdowns and sorting */
+export const PRIORITIES_DESC: readonly Priority[] = [...PRIORITIES].reverse()
+
+/**
+ * A task with this label is assigned to Claude Code. It's an ordinary label, so it lives in the task's frontmatter,
+ * shows wherever labels do, and the board's filter box finds it like any other.
+ */
+export const CLAUDE_LABEL = 'claude'
+const isClaudeLabel = (l: string) => l.trim().toLowerCase() === CLAUDE_LABEL
+export const isForClaude = (t: { labels: string[] }) => t.labels.some(isClaudeLabel)
+/** The labels with the Claude one added (last) or taken out */
+export const assignClaude = (labels: string[], on: boolean) => [...labels.filter((l) => !isClaudeLabel(l)), ...(on ? [CLAUDE_LABEL] : [])]
 
 /** Editable task fields (frontmatter of projects/<slug>/tasks/<ID>.md) */
 export interface TaskFields {
@@ -210,11 +244,21 @@ export interface Api {
   revealPath(path: string): Promise<void>
   openInCode(path: string): Promise<void>
   pickPath(kind: 'file' | 'folder'): Promise<string | null>
+  /** What a doc links to; null for an ordinary doc. Also starts watching the file (see onLinkedChanged) */
+  linkedDoc(rel: string): Promise<LinkedDoc | null>
+  /** Open the linked file (default app or VS Code), show it in Explorer, or follow a relative link written in it */
+  linkedAct(rel: string, action: 'open' | 'code' | 'reveal' | 'link', href?: string): Promise<void>
+  /** Pick a markdown file from the project's repo and make a doc in `dir` that shows it; null if cancelled */
+  linkFile(dir: string): Promise<string | null>
+  /** A linked file changed on disk (its full path) */
+  onLinkedChanged(cb: (file: string) => void): () => void
   /** Optional Claude Code integration (nothing else depends on it) */
   claudeStatus(slug?: string): Promise<ClaudeStatus>
   claudeConnect(): Promise<void>
   claudeDisconnect(): Promise<void>
   claudeInstructions(slug: string): Promise<void>
+  /** Slugs of the projects set up for Claude Code (connector registered, instructions in the repo) */
+  claudeProjects(): Promise<string[]>
   claudeOpen(slug: string, where: 'app' | 'terminal'): Promise<void>
   /** A new session in the task's project repo, starting on that task */
   claudeSendTask(rel: string, where: 'app' | 'terminal'): Promise<void>

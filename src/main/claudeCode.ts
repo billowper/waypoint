@@ -117,6 +117,18 @@ export async function claudeStatus(repo?: string): Promise<ClaudeStatus> {
   return { cli: !!cli, connector, instructions, serverName: SERVER }
 }
 
+/**
+ * Which of these repo folders are set up for Claude Code: the connector is registered and the repo has Waypoint's
+ * section in CLAUDE.local.md. Only reads files (no CLI), so the UI can ask whenever it likes.
+ */
+export async function reposSetUp(repos: string[]): Promise<string[]> {
+  if (!(await registered())) return []
+  const ok = await Promise.all(
+    repos.map(async (repo) => (await fs.readFile(instructionsFile(repo), 'utf8').catch(() => '')).includes(START))
+  )
+  return repos.filter((_, i) => ok[i])
+}
+
 /** Register (or re-point) the connector for every Claude Code session: the desktop app's Code tab and the terminal */
 export async function connectClaude(): Promise<void> {
   const cli = await findCli()
@@ -142,6 +154,8 @@ function instructionsBlock(title: string, slug: string): string {
     '',
     '- At the start of a session, call `waypoint_overview`: open tasks, your memory for this project and the last session.',
     '- When you start on a task, move it to `doing`; when it\'s finished, move it to `done` with a short progress note.',
+    '- Tasks labelled `claude` are assigned to you (`waypoint_overview` lists them). When asked to work through your tasks,',
+    '  take those; leave the label on when you finish, and don\'t add it to tasks yourself.',
     '- Add tasks for follow-ups and bugs you find but don\'t fix now.',
     '- Record decisions, designs and how-tos in the project\'s docs (small edits, not rewrites).',
     '- Save things worth knowing next time (conventions, gotchas, preferences) with `waypoint_remember`.',

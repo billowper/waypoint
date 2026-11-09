@@ -14,15 +14,16 @@ import { z } from 'zod'
 import type { Vault } from '../main/vault'
 import { listProjects, readProject } from '../main/projects'
 import { listTasks } from '../main/tasks'
+import { readLinked, sourceOf } from '../main/linkedDocs'
 import { NotesIndex } from '../main/notesIndex'
-import { TASK_STATUSES, type Project, type TaskStatus } from '@shared/types'
+import { CLAUDE_LABEL, TASK_STATUSES, isForClaude, type Project, type TaskStatus } from '@shared/types'
 import { splitFrontmatter } from '@shared/frontmatter'
 import { IDEAS_DIR } from '@shared/names'
-import { findNote, findTask, openVault, pickProject, projectForFolder, projectSummary, safely, sessionFolders, taskLine } from './common'
+import { findNote, findTask, linkedNoteText, openVault, pickProject, projectForFolder, projectSummary, safely, sessionFolders, taskLine } from './common'
 import { registerWriteTools } from './writeTools'
 import { memoryPath, readMemory, recentSessions, registerMemoryTools } from './memoryTools'
 
-const VERSION = '0.3.0'
+const VERSION = '0.4.0'
 
 // --- Server ----------------------------------------------------------------------------------
 
@@ -34,6 +35,7 @@ const server = new McpServer(
       '(project.md = settings + overview, docs/, tasks/<KEY>-NNN.md, boards/). Start with waypoint_overview to see the ' +
       'project this session belongs to and what is open. Task statuses: backlog, todo, doing, done. ' +
       'You can also keep things up to date: move tasks as work progresses (doing when you start, done when finished), ' +
+      'tasks labelled "claude" are the ones the user assigned to you; ' +
       'add tasks for follow-ups, and record decisions and docs in the project\'s docs. Edit notes with small exact edits ' +
       'rather than rewrites. Keep a memory per project: save durable learnings with waypoint_remember, and after a meaningful ' +
       'piece of work add a short entry with waypoint_log_session. Nothing can be deleted through these tools; every change is ' +
@@ -64,6 +66,9 @@ server.registerTool(
       lines.push(`This session's project: ${projectSummary(current, tasks)}`)
       if (current.overview) lines.push('', 'Overview:', current.overview.slice(0, 1200))
       lines.push('', open.length ? 'Open tasks (To do / Doing):' : 'No open tasks.', ...open.map(taskLine))
+      // Tasks the user assigned to Claude (the "claude" label), whatever column they're in
+      const yours = tasks.filter((t) => t.project === current!.slug && t.status !== 'done' && isForClaude(t))
+      if (yours.length) lines.push('', `Assigned to you (label "${CLAUDE_LABEL}"):`, ...yours.map(taskLine))
       // Claude's own notes for the project (M4): memory in full while it's short, plus the last session
       const memory = (await readMemory(vault, current)).trim()
       const last = await recentSessions(vault, current, 1)
@@ -115,6 +120,12 @@ server.registerTool(
     }
     walk(await vault.tree(p.dir))
     const docs = notes.filter((n) => !/\/(tasks|claude)\//.test(n) && !n.endsWith('/project.md'))
+    // Linked docs say which repo file they show
+    const shows = new Map<string, string>()
+    for (const d of docs) {
+      const source = sourceOf(await vault.read(d).catch(() => ''))
+      if (source) shows.set(d, source)
+    }
     return [
       projectSummary(p, tasks),
       `created: ${p.created || 'unknown'} · task prefix: ${p.key}`,
@@ -122,7 +133,7 @@ server.registerTool(
       p.links.length ? `links:\n${p.links.map((l) => `- ${l.title}: ${l.url}`).join('\n')}` : '',
       p.bookmarks.length ? `bookmarks:\n${p.bookmarks.map((b) => `- ${b.title}: ${b.path}`).join('\n')}` : '',
       `\nOverview (${p.dir}/project.md):\n${p.overview || '(empty)'}`,
-      `\nDocs and notes:\n${docs.map((d) => `- ${d}`).join('\n') || '(none)'}`,
+      `\nDocs and notes:\n${docs.map((d) => `- ${d}${shows.has(d) ? ` (linked doc, shows ${shows.get(d)} from the repo)` : ''}`).join('\n') || '(none)'}`,
       boards.length ? `\nBoards:\n${boards.map((b) => `- ${b}`).join('\n')}` : ''
     ]
       .filter(Boolean)
@@ -139,19 +150,22 @@ server.registerTool(
     inputSchema: {
       project: z.string().optional().describe('Project slug or title; omit for this session\'s project; "*" for all projects'),
       status: z.array(z.enum(TASK_STATUSES)).optional().describe('Only these statuses'),
+      label: z.string().optional().describe('Only tasks with this label, e.g. "claude" for the ones assigned to you'),
       include_done: z.boolean().optional().describe('Include Done tasks (default false)'),
       due_within_days: z.number().int().optional().describe('Only tasks due within this many days (overdue included)')
     },
     annotations: READ_ONLY
   },
   safely(
-    async (a: { project?: string; status?: TaskStatus[]; include_done?: boolean; due_within_days?: number }) => {
+    async (a: { project?: string; status?: TaskStatus[]; label?: string; include_done?: boolean; due_within_days?: number }) => {
       const vault = openVault()
       const all = a.project === '*'
       const slug = all ? undefined : (await pickProject(server, vault, a.project)).slug
       let tasks = await listTasks(vault, slug)
       if (a.status?.length) tasks = tasks.filter((t) => a.status!.includes(t.status))
       else if (!a.include_done) tasks = tasks.filter((t) => t.status !== 'done')
+      const label = a.label?.trim().toLowerCase()
+      if (label) tasks = tasks.filter((t) => t.labels.some((l) => l.trim().toLowerCase() === label))
       if (a.due_within_days !== undefined) {
         const limit = new Date(Date.now() + a.due_within_days * 86400000).toISOString().slice(0, 10)
         tasks = tasks.filter((t) => t.due && t.due <= limit)
@@ -183,14 +197,17 @@ server.registerTool(
   'waypoint_read_note',
   {
     title: 'Read note',
-    description: 'The full markdown of a note (any .md in the vault), by vault-relative path or by note name.',
+    description:
+      'The full markdown of a note (any .md in the vault), by vault-relative path or by note name. ' +
+      'A linked doc returns the repo file it shows, marked as linked and read-only.',
     inputSchema: { note: z.string().describe('Vault-relative path (e.g. projects/x/docs/Plan.md) or a note name') },
     annotations: READ_ONLY
   },
   safely(async ({ note }: { note: string }) => {
     const vault = openVault()
     const path = await findNote(vault, note)
-    return `${path}\n\n${await vault.read(path)}`
+    const linked = await readLinked(vault, path)
+    return linked ? linkedNoteText(path, linked) : `${path}\n\n${await vault.read(path)}`
   })
 )
 

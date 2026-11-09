@@ -1,9 +1,10 @@
 import type { MouseEvent as ReactMouseEvent } from 'react'
-import { TASK_STATUSES, TASK_STATUS_LABEL, type Task, type ViewRef } from '@shared/types'
+import { PRIORITIES_DESC, PRIORITY_LABEL, TASK_STATUSES, TASK_STATUS_LABEL, type Task, type ViewRef } from '@shared/types'
+import { assignClaude, isForClaude } from '@shared/types'
 import { linkTextFor } from '@shared/links'
 import { canNest } from '@shared/nesting'
 import { pagesFolder } from '@shared/names'
-import { canRename, flushEditors, useStore, type MenuItem, type Tab } from './store'
+import { canRename, claudeOn, flushEditors, useStore, type MenuItem, type Tab } from './store'
 
 // Right-click menus. Each builder returns the items for one kind of thing; `showMenu` opens them.
 
@@ -78,19 +79,39 @@ export function sendItems(t: Task): MenuItem[] {
   return store().prefs?.claudeSendTo === 'app' ? [items.app, items.terminal] : [items.terminal, items.app]
 }
 
-/** A task anywhere it's listed: open it, send it to Claude Code, or move it to another column */
+/** Assign a task to Claude or take it back: adds or removes the `claude` label */
+export const setForClaude = (t: Task, on: boolean) => store().updateTask(t.path, { labels: assignClaude(t.labels, on) })
+
+/** "Assign to Claude" on a task's menu, in projects set up for Claude Code (a task already assigned can always be unassigned) */
+function assignItems(t: Task): MenuItem[] {
+  const assigned = isForClaude(t)
+  if (!assigned && !claudeOn(store(), t.project)) return []
+  return [{ label: assigned ? 'Unassign from Claude' : 'Assign to Claude', run: () => setForClaude(t, !assigned) }]
+}
+
+/** A task anywhere it's listed: open it, send it to Claude Code, move it to another column, or set its priority */
 export function taskMenu(t: Task): MenuItem[] {
   const s = store()
   return [
     ...noteMenu(t.path),
     sep,
-    ...(s.prefs?.claudeCode ? [...sendItems(t), sep] : []),
+    ...(s.prefs?.claudeCode ? sendItems(t) : []),
+    ...assignItems(t),
+    sep,
     ...TASK_STATUSES.filter((st) => st !== t.status).map((st) => ({
       label: `Move to ${TASK_STATUS_LABEL[st]}`,
       run: () => s.updateTask(t.path, { status: st })
+    })),
+    sep,
+    ...PRIORITIES_DESC.filter((p) => p !== t.priority).map((p) => ({
+      label: `Priority: ${PRIORITY_LABEL[p]}`,
+      run: () => s.updateTask(t.path, { priority: p })
     }))
   ]
 }
+
+/** Linked docs (a doc showing a file from the project's repo) go anywhere in a project but its tasks */
+const canLinkIn = (dir: string) => /^projects\/[^/]+\/(?!tasks(\/|$)|claude(\/|$))[^/]/.test(dir)
 
 /** A file or folder in the tree */
 export function treeMenu(path: string, type: 'file' | 'dir'): MenuItem[] {
@@ -104,6 +125,7 @@ export function treeMenu(path: string, type: 'file' | 'dir'): MenuItem[] {
     ...(type === 'dir'
       ? [
           { label: 'New note here', run: () => s.newNote(path) },
+          ...(canLinkIn(path) ? [{ label: 'Link a file here…', run: () => s.linkFile(path) }] : []),
           { label: 'New board here', run: () => s.createBoard(path) },
           { label: 'New folder here', run: () => s.newFolder(path) },
           sep
@@ -164,6 +186,7 @@ export function projectMenu(slug: string): MenuItem[] {
         if (p) await s.openFile(p)
       } },
     { label: 'New doc', run: () => s.newNote(`${dir}/docs`) },
+    { label: 'Link a file…', run: () => s.linkFile(`${dir}/docs`) },
     { label: 'New board', run: () => s.createBoard(`${dir}/boards`) },
     sep,
     { label: 'Copy path', run: () => copy(dir) },
