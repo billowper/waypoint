@@ -1859,6 +1859,7 @@ button.crumb.current:hover {
 .taskbar input,
 .taskbar select,
 .board-sort select,
+.board-filters select,
 .task-table select {
   font: inherit;
   font-size: 13px;
@@ -1908,6 +1909,44 @@ button.crumb.current:hover {
 .filter-chip .count {
   font-size: 11px;
   opacity: 0.8;
+}
+
+/* The row of filters under the board's header */
+.board-filters {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 8px 18px;
+  margin: -4px 0 14px;
+  flex: none;
+}
+
+.filter-group {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 4px;
+  font-size: 12px;
+  color: var(--text-faint);
+}
+
+.filter-group > span {
+  margin-right: 2px;
+}
+
+.board-filters .filter-chip {
+  padding: 2px 9px;
+  font-size: 12px;
+}
+
+.board-filters select {
+  padding: 2px 6px;
+  font-size: 12px;
+}
+
+.board-filters select.on {
+  color: var(--accent);
+  border-color: var(--accent);
 }
 
 .board-sort {

@@ -4,6 +4,19 @@ import { useEffect } from 'react'
 import { isForClaude } from '@shared/types'
 import { claudeOn, useStore } from '../store'
 import { showMenu, taskMenu } from '../menus'
+import {
+  DUE_FILTERS,
+  DUE_FILTER_LABEL,
+  NO_FILTERS,
+  activeCount,
+  labelsOf,
+  liveFilters,
+  matcher,
+  parseFilters,
+  toggled,
+  type DueFilter,
+  type TaskFilters
+} from './taskFilter'
 
 /** Pixels the pointer must move before a press on a card becomes a drag */
 const DRAG_THRESHOLD = 5
@@ -107,6 +120,17 @@ function loadSort(slug: string): Sort {
   return { key: 'priority', asc: true }
 }
 
+/** The filters are remembered per project too, along with whether their row is showing */
+function loadFilters(slug: string): { filters: TaskFilters; open: boolean } {
+  try {
+    const s = JSON.parse(localStorage.getItem(`waypoint:boardFilters:${slug}`) ?? 'null')
+    const filters = parseFilters(s)
+    return { filters, open: s?.open === true || activeCount(filters) > 0 }
+  } catch {
+    return { filters: NO_FILTERS, open: false }
+  }
+}
+
 function loadMode(slug: string): 'board' | 'list' {
   try {
     return localStorage.getItem(`waypoint:boardMode:${slug}`) === 'list' ? 'list' : 'board'
@@ -143,10 +167,33 @@ export default function Board({ slug }: { slug: string }) {
   const claudeFilter = canAssign || forClaude.length > 0
   const pool = onlyClaude && claudeFilter ? forClaude : mine
 
+  const [saved, setSaved] = useState(() => loadFilters(slug))
+  const saveFilters = (next: { filters: TaskFilters; open: boolean }) => {
+    setSaved(next)
+    try {
+      localStorage.setItem(`waypoint:boardFilters:${slug}`, JSON.stringify({ ...next.filters, open: next.open }))
+    } catch {
+      /* ignore */
+    }
+  }
+  const labels = labelsOf(mine)
+  const filters = liveFilters(saved.filters, mine)
+  const setFilters = (patch: Partial<TaskFilters>) => saveFilters({ ...saved, filters: { ...filters, ...patch } })
+  const active = activeCount(filters)
+
   const q = filter.trim().toLowerCase()
-  const shown = q
-    ? pool.filter((t) => `${t.id} ${t.title} ${t.labels.join(' ')}`.toLowerCase().includes(q))
-    : pool
+  const matches = matcher(filters, todayIso())
+  const shown = pool.filter(
+    (t) => matches(t) && (!q || `${t.id} ${t.title} ${t.labels.join(' ')}`.toLowerCase().includes(q))
+  )
+  const narrowed = !!q || active > 0 || pool !== mine
+  const clearAll = () => {
+    setFilter('')
+    setOnlyClaude(false)
+    saveFilters({ ...saved, filters: NO_FILTERS })
+  }
+  /** In board mode a status filter picks the columns */
+  const columns = filters.status.length ? TASK_STATUSES.filter((s) => filters.status.includes(s)) : TASK_STATUSES
 
   const switchMode = (m: 'board' | 'list') => {
     setMode(m)
@@ -233,6 +280,14 @@ export default function Board({ slug }: { slug: string }) {
         </button>
         <h1>Tasks</h1>
         <input className="board-filter" value={filter} placeholder="Filter…" onChange={(e) => setFilter(e.target.value)} />
+        <button
+          className={`filter-chip ${active ? 'on' : ''}`}
+          aria-expanded={saved.open}
+          title={saved.open ? 'Hide the filters (they stay on)' : 'Filter by status, priority, due date and label'}
+          onClick={() => saveFilters({ ...saved, open: !saved.open })}
+        >
+          Filters {active > 0 && <span className="count">{active}</span>}
+        </button>
         {claudeFilter && (
           <button
             className={`filter-chip ${onlyClaude ? 'on' : ''}`}
@@ -275,9 +330,79 @@ export default function Board({ slug }: { slug: string }) {
         </button>
       </header>
 
+      {saved.open && (
+        <div className="board-filters">
+          <div className="filter-group" role="group" aria-label="Status">
+            <span>Status</span>
+            {TASK_STATUSES.map((s) => (
+              <button
+                key={s}
+                className={`filter-chip ${filters.status.includes(s) ? 'on' : ''}`}
+                aria-pressed={filters.status.includes(s)}
+                onClick={() => setFilters({ status: toggled(filters.status, s) })}
+              >
+                {TASK_STATUS_LABEL[s]}
+              </button>
+            ))}
+          </div>
+          <div className="filter-group" role="group" aria-label="Priority">
+            <span>Priority</span>
+            {PRIORITIES_DESC.map((p) => (
+              <button
+                key={p}
+                className={`filter-chip ${filters.priority.includes(p) ? 'on' : ''}`}
+                aria-pressed={filters.priority.includes(p)}
+                onClick={() => setFilters({ priority: toggled(filters.priority, p) })}
+              >
+                {PRIORITY_LABEL[p]}
+              </button>
+            ))}
+          </div>
+          <label className="filter-group">
+            <span>Due</span>
+            <select
+              className={filters.due ? 'on' : ''}
+              value={filters.due}
+              onChange={(e) => setFilters({ due: e.target.value as DueFilter })}
+            >
+              {DUE_FILTERS.map((d) => (
+                <option key={d} value={d}>
+                  {DUE_FILTER_LABEL[d]}
+                </option>
+              ))}
+            </select>
+          </label>
+          {labels.length > 0 && (
+            <div className="filter-group" role="group" aria-label="Labels">
+              <span>Labels</span>
+              {labels.map((l) => (
+                <button
+                  key={l}
+                  className={`filter-chip ${filters.labels.includes(l) ? 'on' : ''}`}
+                  aria-pressed={filters.labels.includes(l)}
+                  onClick={() => setFilters({ labels: toggled(filters.labels, l) })}
+                >
+                  {l}
+                </button>
+              ))}
+            </div>
+          )}
+          {narrowed && (
+            <div className="filter-group">
+              <span>
+                {shown.length} of {mine.length}
+              </span>
+              <button className="btn small" onClick={clearAll}>
+                Clear
+              </button>
+            </div>
+          )}
+        </div>
+      )}
+
       {mode === 'board' ? (
-        <div className="columns">
-          {TASK_STATUSES.map((status) => {
+        <div className="columns" style={{ gridTemplateColumns: `repeat(${columns.length}, minmax(200px, 1fr))` }}>
+          {columns.map((status) => {
             const cards = shown.filter((t) => t.status === status).sort(sorter(sort))
             return (
               <section
@@ -392,7 +517,7 @@ export default function Board({ slug }: { slug: string }) {
               ))}
             </tbody>
           </table>
-          {sorted.length === 0 && <p className="empty">No tasks{q ? ' match the filter' : ' yet'}.</p>}
+          {sorted.length === 0 && <p className="empty">No tasks{narrowed ? ' match the filter' : ' yet'}.</p>}
         </>
       )}
       {drag && (
