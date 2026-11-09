@@ -16,6 +16,7 @@ import Backlinks from './components/Backlinks'
 import ProjectPage from './components/ProjectPage'
 import IconPicker from './components/IconPicker'
 import Board from './components/Board'
+import Gallery from './components/Gallery'
 import TaskBar from './components/TaskBar'
 import History from './components/History'
 import Settings from './components/Settings'
@@ -47,7 +48,7 @@ export default function App() {
   const projectColors = useStore((s) => {
     const v = s.view
     const slug =
-      v.kind === 'project' || v.kind === 'board'
+      v.kind === 'project' || v.kind === 'board' || v.kind === 'gallery'
         ? v.slug
         : (v.kind === 'file' || v.kind === 'canvas' || v.kind === 'history') && v.path.startsWith('projects/')
           ? v.path.split('/')[1]
@@ -231,6 +232,7 @@ export default function App() {
             {view.kind === 'home' && <Home />}
             {view.kind === 'project' && <ProjectPage key={view.slug} slug={view.slug} />}
             {view.kind === 'board' && <Board key={view.slug} slug={view.slug} />}
+            {view.kind === 'gallery' && <Gallery key={view.slug} slug={view.slug} />}
             {view.kind === 'history' && <History key={view.path} path={view.path} />}
             {view.kind === 'settings' && <Settings />}
             {tabs.some((t) => t.view.kind === 'canvas') && (

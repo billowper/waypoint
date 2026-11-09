@@ -365,7 +365,7 @@ export function registerWriteTools(server: McpServer) {
     {
       title: 'Update project',
       description:
-        'Change a project\'s settings (status, title, tags, repo, links, bookmarks) or its overview text. Only the fields given change; ' +
+        'Change a project\'s settings (status, title, tags, repo, links, bookmarks, galleries) or its overview text. Only the fields given change; ' +
         'lists given replace the old list. Default: this session\'s project.',
       inputSchema: {
         project: z.string().optional().describe('Project slug or title; omit for this session\'s project'),
@@ -376,6 +376,10 @@ export function registerWriteTools(server: McpServer) {
         repo_remote: z.string().optional(),
         links: z.array(z.object({ title: z.string(), url: z.string() })).optional(),
         bookmarks: z.array(z.object({ title: z.string(), path: z.string() })).optional(),
+        galleries: z
+          .array(z.object({ title: z.string(), path: z.string() }))
+          .optional()
+          .describe('Folders on the PC whose pictures and videos show as the project\'s Gallery in Waypoint'),
         overview: z.string().optional().describe('Replaces the overview (project.md body under its title)')
       },
       annotations: WRITE
@@ -452,6 +456,7 @@ interface ProjectChanges {
   repo_remote?: string
   links?: { title: string; url: string }[]
   bookmarks?: { title: string; path: string }[]
+  galleries?: { title: string; path: string }[]
   overview?: string
 }
 
@@ -467,9 +472,10 @@ async function applyProjectChanges(vault: Vault, slug: string, a: ProjectChanges
     repo: { path: a.repo_path ?? p.repo.path, remote: a.repo_remote ?? p.repo.remote },
     links: a.links ?? p.links,
     bookmarks: a.bookmarks ?? p.bookmarks,
+    galleries: a.galleries ?? p.galleries,
     colors: p.colors
   }
-  const changed: string[] = (['title', 'status', 'tags', 'links', 'bookmarks'] as const).filter((k) => a[k] !== undefined && JSON.stringify(a[k]) !== JSON.stringify(p[k]))
+  const changed: string[] = (['title', 'status', 'tags', 'links', 'bookmarks', 'galleries'] as const).filter((k) => a[k] !== undefined && JSON.stringify(a[k]) !== JSON.stringify(p[k]))
   if (a.repo_path !== undefined && a.repo_path !== p.repo.path) changed.push('repo path')
   if (a.repo_remote !== undefined && a.repo_remote !== p.repo.remote) changed.push('repo remote')
   await saveProject(vault, slug, s)

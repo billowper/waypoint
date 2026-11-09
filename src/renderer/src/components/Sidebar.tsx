@@ -23,7 +23,7 @@ function projectChildren(tree: TreeNode[], slug: string): TreeNode[] {
 
 /** The project the current tab belongs to, if any */
 function focusedProject(view: ReturnType<typeof useStore.getState>['view']): string | null {
-  if (view.kind === 'project' || view.kind === 'board') return view.slug
+  if (view.kind === 'project' || view.kind === 'board' || view.kind === 'gallery') return view.slug
   if ((view.kind === 'file' || view.kind === 'canvas' || view.kind === 'history') && view.path.startsWith('projects/')) {
     return view.path.split('/')[1] ?? null
   }
@@ -48,6 +48,8 @@ export default function Sidebar() {
     move,
     projects,
     openProject,
+    openGallery,
+    openInNewWindow,
     createProject,
     openSettings,
     reorderProjects
@@ -240,6 +242,31 @@ Drag to reorder`}
                 {open && (
                   <div className="nav-tree">
                     <FileTree nodes={projectChildren(tree, p.slug)} dir={`projects/${p.slug}`} pinned={PROJECT_ORDER} depth={1} />
+                    {/* Shown once the project lists a gallery folder (project page → Gallery) */}
+                    {p.galleries.length > 0 && (
+                      <ul className="tree">
+                        <li>
+                          <button
+                            className={`tree-row dir task-board ${view.kind === 'gallery' && view.slug === p.slug ? 'active' : ''}`}
+                            style={{ paddingLeft: 24 }}
+                            title={`Pictures and videos from\n${p.galleries.map((g) => g.path).join('\n')}`}
+                            onClick={(e) => openGallery(p.slug, { newTab: e.ctrlKey })}
+                            onContextMenu={(e) =>
+                              showMenu(e, [
+                                { label: 'Open gallery', run: () => openGallery(p.slug) },
+                                { label: 'Open gallery in new tab', run: () => openGallery(p.slug, { newTab: true }) },
+                                { label: 'Open gallery in new window', run: () => openInNewWindow({ kind: 'gallery', slug: p.slug }) },
+                                'separator',
+                                { label: 'Choose folders…', run: () => openProject(p.slug) }
+                              ])
+                            }
+                          >
+                            <span className="chev spacer tree-icon">🖼</span>
+                            gallery
+                          </button>
+                        </li>
+                      </ul>
+                    )}
                   </div>
                 )}
               </div>

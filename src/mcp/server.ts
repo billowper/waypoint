@@ -105,7 +105,7 @@ server.registerTool(
   {
     title: 'Get project',
     description:
-      'A project\'s settings (status, tags, repo, links, bookmarks), overview, docs, boards and task counts. Defaults to this session\'s project.',
+      'A project\'s settings (status, tags, repo, links, bookmarks, gallery folders), overview, docs, boards and task counts. Defaults to this session\'s project.',
     inputSchema: { project: z.string().optional().describe('Project slug or title; omit for this session\'s project') },
     annotations: READ_ONLY
   },
@@ -132,6 +132,7 @@ server.registerTool(
       p.repo.remote ? `remote: ${p.repo.remote}` : '',
       p.links.length ? `links:\n${p.links.map((l) => `- ${l.title}: ${l.url}`).join('\n')}` : '',
       p.bookmarks.length ? `bookmarks:\n${p.bookmarks.map((b) => `- ${b.title}: ${b.path}`).join('\n')}` : '',
+      p.galleries.length ? `gallery folders:\n${p.galleries.map((g) => `- ${g.title}: ${g.path}`).join('\n')}` : '',
       `\nOverview (${p.dir}/project.md):\n${p.overview || '(empty)'}`,
       `\nDocs and notes:\n${docs.map((d) => `- ${d}${shows.has(d) ? ` (linked doc, shows ${shows.get(d)} from the repo)` : ''}`).join('\n') || '(none)'}`,
       boards.length ? `\nBoards:\n${boards.map((b) => `- ${b}`).join('\n')}` : ''

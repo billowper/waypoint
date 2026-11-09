@@ -47,7 +47,10 @@ function settingsFrom(data: Record<string, unknown>, fallbackTitle: string): Pro
     links: objList(data.links).map((l) => ({ title: str(l.title), url: str(l.url) })).filter((l) => l.url),
     bookmarks: objList(data.bookmarks)
       .map((b) => ({ title: str(b.title), path: str(b.path) }))
-      .filter((b) => b.path)
+      .filter((b) => b.path),
+    galleries: objList(data.galleries)
+      .map((g) => ({ title: str(g.title), path: str(g.path) }))
+      .filter((g) => g.path)
   }
 }
 
@@ -61,6 +64,7 @@ function dataFrom(s: ProjectSettings): Record<string, unknown> {
   }
   if (s.links.length) data.links = s.links.map((l) => ({ title: l.title || l.url, url: l.url }))
   if (s.bookmarks.length) data.bookmarks = s.bookmarks.map((b) => ({ title: b.title || b.path, path: b.path }))
+  if (s.galleries.length) data.galleries = s.galleries.map((g) => ({ title: g.title || g.path, path: g.path }))
   if (s.colors) data.colors = { accent: s.colors.accent }
   return data
 }
@@ -144,6 +148,7 @@ export async function createProject(vault: Vault, name: string): Promise<string>
     repo: { path: '', remote: '' },
     links: [],
     bookmarks: [],
+    galleries: [],
     colors: null
   }
   const body = `# ${title}\n\nWhat this project is for, and what "done" looks like.\n`
@@ -159,7 +164,7 @@ export async function saveProject(vault: Vault, slug: string, settings: ProjectS
   const { data, body } = splitFrontmatter(text ?? '')
   // Keep any extra keys Bill (or another tool) added by hand
   const merged = { ...data, ...dataFrom(settings) }
-  for (const k of ['tags', 'repo', 'links', 'bookmarks', 'colors']) if (!(k in dataFrom(settings))) delete merged[k]
+  for (const k of ['tags', 'repo', 'links', 'bookmarks', 'galleries', 'colors']) if (!(k in dataFrom(settings))) delete merged[k]
   await vault.write(rel, joinFrontmatter(merged, text === null ? `# ${settings.title}\n\n` : body))
 }
 
@@ -179,12 +184,13 @@ export async function createBoard(vault: Vault, dir: string, name: string): Prom
   }
 }
 
-/** Paths a project lists (repo folder, bookmarks): the only outside-the-vault paths the app opens. */
+/** Paths a project lists (repo folder, bookmarks, gallery folders): the only outside-the-vault paths the app opens. */
 export async function knownExternalPaths(vault: Vault): Promise<Set<string>> {
   const out = new Set<string>()
   for (const p of await listProjects(vault)) {
     if (p.repo.path) out.add(p.repo.path.toLowerCase())
     for (const b of p.bookmarks) out.add(b.path.toLowerCase())
+    for (const g of p.galleries) out.add(g.path.toLowerCase())
   }
   return out
 }

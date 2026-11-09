@@ -53,6 +53,8 @@ export interface ProjectSettings {
   repo: { path: string; remote: string }
   links: { title: string; url: string }[]
   bookmarks: { title: string; path: string }[]
+  /** Folders on this PC whose pictures and videos make up the project's gallery */
+  galleries: { title: string; path: string }[]
   /** The project's own accent colour; null = use the app's */
   colors: { accent: string } | null
 }
@@ -88,6 +90,31 @@ export interface LinkedDoc {
   problem?: string
   /** Text under the doc's own frontmatter, shown as a note above the file */
   note: string
+}
+
+/** What a gallery shows (what Chromium can draw and play) */
+export const GALLERY_IMAGE_EXT = ['png', 'jpg', 'jpeg', 'gif', 'webp', 'bmp', 'avif', 'svg']
+export const GALLERY_VIDEO_EXT = ['mp4', 'webm', 'mov', 'm4v', 'mkv', 'ogv']
+
+export interface GalleryItem {
+  /** Full path on this PC */
+  path: string
+  name: string
+  kind: 'image' | 'video'
+  /** Which of the project's gallery folders it's in (index into Gallery.folders) */
+  folder: number
+  /** Sub-folder inside that folder, forward slashes ('' = directly in it) */
+  sub: string
+  size: number
+  /** When the file last changed (ms) */
+  modified: number
+}
+
+export interface Gallery {
+  folders: { title: string; path: string; missing: boolean }[]
+  items: GalleryItem[]
+  /** There were more files than the gallery shows */
+  truncated: boolean
 }
 
 export const TASK_STATUSES = ['backlog', 'todo', 'doing', 'done'] as const
@@ -180,6 +207,7 @@ export type ViewRef =
   | { kind: 'history'; path: string }
   | { kind: 'project'; slug: string }
   | { kind: 'board'; slug: string }
+  | { kind: 'gallery'; slug: string }
 
 /** Shown as a banner when Bill clicks a nudge, so he can mute or snooze it */
 export interface NudgeInfo {
@@ -244,6 +272,16 @@ export interface Api {
   revealPath(path: string): Promise<void>
   openInCode(path: string): Promise<void>
   pickPath(kind: 'file' | 'folder'): Promise<string | null>
+  /** The pictures and videos in a project's gallery folders (see src/main/gallery.ts) */
+  gallery(slug: string): Promise<Gallery>
+  /** Open a gallery file in its default app, or show it in Explorer */
+  galleryAct(path: string, action: 'open' | 'reveal'): Promise<void>
+  /** Copy a picture to the clipboard as an image; false when the page has to convert it first (see galleryCopyPng) */
+  galleryCopy(path: string): Promise<boolean>
+  galleryRead(path: string): Promise<Uint8Array>
+  galleryCopyPng(png: Uint8Array): Promise<void>
+  /** Start dragging a gallery file out of the window */
+  galleryDrag(path: string): void
   /** What a doc links to; null for an ordinary doc. Also starts watching the file (see onLinkedChanged) */
   linkedDoc(rel: string): Promise<LinkedDoc | null>
   /** Open the linked file (default app or VS Code), show it in Explorer, or follow a relative link written in it */

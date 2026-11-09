@@ -12,6 +12,8 @@ export type View =
   | { kind: 'file'; path: string; docId: number }
   | { kind: 'project'; slug: string }
   | { kind: 'board'; slug: string }
+  /** The pictures and videos in a project's gallery folders */
+  | { kind: 'gallery'; slug: string }
   /** Git history of one note, or of the whole vault when path is '' */
   | { kind: 'history'; path: string }
   | { kind: 'settings' }
@@ -116,6 +118,7 @@ interface State {
   openProject(slug: string, opts?: { newTab?: boolean }): void
   createProject(): Promise<void>
   openBoard(slug: string, opts?: { newTab?: boolean }): void
+  openGallery(slug: string, opts?: { newTab?: boolean }): void
   createTask(project: string, fields: Partial<TaskFields>): Promise<string | null>
   updateTask(path: string, patch: Partial<TaskFields>): Promise<void>
   /** Re-check which projects are set up for Claude Code */
@@ -242,7 +245,7 @@ const NAV_LIMIT = 100
 const navKey = (r: ViewRef) => JSON.stringify(r)
 /** Where a remembered place is now, after a rename or move */
 function movedRef(r: ViewRef, from: string, to: string): ViewRef {
-  if (r.kind === 'project' || r.kind === 'board') {
+  if (r.kind === 'project' || r.kind === 'board' || r.kind === 'gallery') {
     const moved = movedPath(`projects/${r.slug}`, from, to)
     if (!moved) return r
     return /^projects\/[^/]+$/.test(moved) ? { kind: r.kind, slug: moved.slice('projects/'.length) } : { kind: 'home' }
@@ -322,7 +325,7 @@ function saveTabs(vault: string | undefined, tabs: Tab[], activeTab: number) {
     const paths = tabs.map((t) =>
       t.view.kind === 'file'
         ? t.view.path
-        : t.view.kind === 'project' || t.view.kind === 'board'
+        : t.view.kind === 'project' || t.view.kind === 'board' || t.view.kind === 'gallery'
           ? `${t.view.kind}:${t.view.slug}`
           : t.view.kind === 'settings'
             ? 'settings'
@@ -345,9 +348,9 @@ function loadTabs(vault: string, notes: string[], projects: Project[]): { tabs: 
     const tabs = saved.paths.map((p): Tab => {
       if (p === 'settings') return { id: ++nextId, view: { kind: 'settings' } }
       if (p?.startsWith('canvas:')) return { id: ++nextId, view: { kind: 'canvas', path: p.slice(7) } }
-      const [, kind, slug] = /^(project|board):(.+)$/.exec(p ?? '') ?? []
+      const [, kind, slug] = /^(project|board|gallery):(.+)$/.exec(p ?? '') ?? []
       if (slug && projects.some((x) => x.slug === slug)) {
-        return { id: ++nextId, view: { kind: kind as 'project' | 'board', slug } }
+        return { id: ++nextId, view: { kind: kind as 'project' | 'board' | 'gallery', slug } }
       }
       return p && notes.includes(p) ? { id: ++nextId, view: { kind: 'file', path: p, docId: ++nextId } } : homeTab()
     })
@@ -386,7 +389,7 @@ export const useStore = create<State>((set, get) => {
     const expanded: Record<string, boolean> = {}
     for (const [k, v] of Object.entries(s.expanded)) expanded[movedPath(k, from, to) ?? k] = v
     const tabs = s.tabs.map((t): Tab => {
-      if (t.view.kind === 'project' || t.view.kind === 'board') {
+      if (t.view.kind === 'project' || t.view.kind === 'board' || t.view.kind === 'gallery') {
         const moved = movedPath(`projects/${t.view.slug}`, from, to)
         if (!moved) return t
         // Still a project folder → follow its new name; moved somewhere else → it's no longer a project
@@ -587,6 +590,10 @@ export const useStore = create<State>((set, get) => {
 
     openBoard(slug, opts = {}) {
       openView({ kind: 'board', slug }, opts.newTab)
+    },
+
+    openGallery(slug, opts = {}) {
+      openView({ kind: 'gallery', slug }, opts.newTab)
     },
 
     async createTask(project, fields) {
@@ -1046,7 +1053,7 @@ ${(e as Error).message.replace(/^Error invoking remote method '[^']+': (Error: )
           ? s.notes.includes(r.path)
           : r.kind === 'canvas'
             ? s.boards.includes(r.path)
-            : r.kind === 'project' || r.kind === 'board'
+            : r.kind === 'project' || r.kind === 'board' || r.kind === 'gallery'
               ? s.projects.some((p) => p.slug === r.slug)
               : true
       const list = (step < 0 ? s.navBack : s.navForward).filter(exists)
@@ -1061,6 +1068,7 @@ ${(e as Error).message.replace(/^Error invoking remote method '[^']+': (Error: )
         else if (target.kind === 'canvas') await s.openCanvas(target.path)
         else if (target.kind === 'project') s.openProject(target.slug)
         else if (target.kind === 'board') s.openBoard(target.slug)
+        else if (target.kind === 'gallery') s.openGallery(target.slug)
         else if (target.kind === 'history') s.openHistory(target.path)
         else if (target.kind === 'settings') s.openSettings()
         else s.goHome()

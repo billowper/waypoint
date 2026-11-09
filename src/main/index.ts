@@ -56,6 +56,8 @@ import type { AppCommand, DesktopInfo } from '@shared/types'
 import type { ChangeEvent, VaultInfo } from '@shared/types'
 import { IDEAS_DIR, movedPath } from '@shared/names'
 import { updateLinks } from './relink'
+import { isInsideFolder, listGallery, mediaKind } from './gallery'
+import { copyImageData, copyImageFile, dragFile, serveGalleryMedia } from './galleryMedia'
 import { serveBridge, type BridgeRequest } from './bridge'
 import { hashText, markUndone, readChanges, snapshotPath } from './claudeLog'
 import type { Server } from 'net'
@@ -158,6 +160,10 @@ const linkedWatches = new Map<string, () => void>()
 /** Folders pictures in linked files may be read from (see serveAttachments) */
 const linkedRoots = new Set<string>()
 
+/** Gallery folders shown so far: the only places wp-media:// and the gallery actions reach (see galleryMedia.ts) */
+const galleryRoots = new Set<string>()
+const inGallery = (abs: string) => !!mediaKind(abs) && [...galleryRoots].some((root) => isInsideFolder(root, abs))
+
 function watchLinked(doc: LinkedDoc) {
   if (doc.root) linkedRoots.add(doc.root)
   const file = doc.file
@@ -173,6 +179,7 @@ function unwatchLinked() {
   for (const stop of linkedWatches.values()) stop()
   linkedWatches.clear()
   linkedRoots.clear()
+  galleryRoots.clear()
 }
 
 async function setVault(path: string | undefined) {
@@ -657,6 +664,28 @@ function registerIpc() {
     return r.canceled ? null : (r.filePaths[0] ?? null)
   })
 
+  // Galleries: the folders come from the project file, never from the page; files are checked against them
+  ipcMain.handle('gallery:list', async (_e, slug: string) => {
+    const gallery = await listGallery((await readProject(requireVault(), slug)).galleries)
+    for (const f of gallery.folders) if (!f.missing) galleryRoots.add(f.path)
+    return gallery
+  })
+  const galleryFile = (path: string) => {
+    if (!inGallery(path)) throw new Error("That file isn't in one of the project's gallery folders")
+    return path
+  }
+  ipcMain.handle('gallery:act', async (_e, path: string, action: 'open' | 'reveal') => {
+    if (action === 'reveal') return shell.showItemInFolder(galleryFile(path))
+    const err = await shell.openPath(galleryFile(path))
+    if (err) throw new Error(err)
+  })
+  ipcMain.handle('gallery:copy', (_e, path: string) => copyImageFile(galleryFile(path)))
+  ipcMain.handle('gallery:read', async (_e, path: string) => new Uint8Array(await readFile(galleryFile(path))))
+  ipcMain.handle('gallery:copyPng', (_e, png: Uint8Array) => copyImageData(png))
+  ipcMain.on('gallery:drag', (e, path: string) => {
+    if (inGallery(path)) void dragFile(e.sender, path)
+  })
+
   // Optional Claude Code integration: repo folders come from the project file, never from the page
   const repoOf = async (slug: string) => {
     const p = await readProject(requireVault(), slug)
@@ -976,6 +1005,7 @@ if (!gotLock) {
     registerIpc()
     serveIcons(() => vault)
     serveAttachments(() => vault, (abs) => [...linkedRoots].some((root) => isInside(root, abs)))
+    serveGalleryMedia(inGallery)
     initWindows({
       main: () => win,
       create: (opts, hash) => makeAppWindow(opts, hash),

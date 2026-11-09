@@ -18,9 +18,9 @@ export function tabTitle(t: Tab, projects: Project[]): string {
   const v = t.view
   if (v.kind === 'file') return baseName(v.path)
   if (v.kind === 'canvas') return baseName(v.path).replace(/\.excalidraw$/i, '')
-  if (v.kind === 'project' || v.kind === 'board') {
+  if (v.kind === 'project' || v.kind === 'board' || v.kind === 'gallery') {
     const title = projects.find((p) => p.slug === v.slug)?.title ?? v.slug
-    return v.kind === 'board' ? `${title} · tasks` : title
+    return v.kind === 'board' ? `${title} · tasks` : v.kind === 'gallery' ? `${title} · gallery` : title
   }
   if (v.kind === 'settings') return 'Settings'
   if (v.kind === 'history') return `History · ${v.path ? baseName(v.path) : 'vault'}`
@@ -109,6 +109,7 @@ export function TabBar() {
               {t.view.kind === 'home' && <span className="tab-icon">⌂</span>}
               {t.view.kind === 'project' && <Icon path={`projects/${t.view.slug}`} fallback={<span className="tab-icon">◇</span>} />}
               {t.view.kind === 'board' && <Icon path={`projects/${t.view.slug}`} fallback={<span className="tab-icon">▦</span>} />}
+              {t.view.kind === 'gallery' && <Icon path={`projects/${t.view.slug}`} fallback={<span className="tab-icon">🖼</span>} />}
               {t.view.kind === 'canvas' && <Icon path={t.view.path} fallback={<span className="tab-icon">✎</span>} />}
               {t.view.kind === 'file' && <Icon path={t.view.path} fallback={noteDefault(t.view.path, /^projects\/[^/]+\/tasks\//.test(t.view.path))} />}
               {tabTitle(t, projects)}

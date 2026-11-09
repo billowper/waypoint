@@ -19,6 +19,7 @@ const settingsOf = (p: Project): ProjectSettings => ({
   repo: { ...p.repo },
   links: p.links.map((l) => ({ ...l })),
   bookmarks: p.bookmarks.map((b) => ({ ...b })),
+  galleries: p.galleries.map((g) => ({ ...g })),
   colors: p.colors ? { ...p.colors } : null
 })
 
@@ -26,7 +27,7 @@ const fail = (what: string) => (e: unknown) => alert(`${what}\n\n${(e as Error).
 
 export default function ProjectPage({ slug }: { slug: string }) {
   const prefs = useStore((st) => st.prefs)
-  const { projects, notes, tasks, boards, openFile, newNote, linkFile, refresh, openBoard, createTask, openCanvas, createBoard } =
+  const { projects, notes, tasks, boards, openFile, newNote, linkFile, refresh, openBoard, openGallery, createTask, openCanvas, createBoard } =
     useStore()
   const project = projects.find((p) => p.slug === slug)
   const projectTasks = tasks.filter((t) => t.project === slug)
@@ -317,6 +318,61 @@ export default function ProjectPage({ slug }: { slug: string }) {
               Show
             </button>
             <button className="icon-btn" title="Remove" onClick={() => update({ bookmarks: s.bookmarks.filter((_, j) => j !== i) })}>
+              ×
+            </button>
+          </div>
+        ))}
+      </section>
+
+      <section className="card">
+        <div className="card-head">
+          <h2>Gallery</h2>
+          <button
+            className="btn small"
+            onClick={async () => {
+              const p = await window.api.pickPath('folder')
+              if (p && !s.galleries.some((g) => g.path.toLowerCase() === p.toLowerCase())) {
+                update({ galleries: [...s.galleries, { title: p.split(/[\\/]/).pop() || p, path: p }] })
+              }
+            }}
+          >
+            Add folder…
+          </button>
+          {s.galleries.length > 0 && (
+            <button
+              className="btn small primary"
+              onClick={async (e) => {
+                const newTab = e.ctrlKey
+                await save()
+                openGallery(slug, { newTab })
+              }}
+            >
+              Open gallery
+            </button>
+          )}
+        </div>
+        {s.galleries.length === 0 && (
+          <p className="empty">Folders of pictures and videos on this PC (screenshots, renders, references…) to browse as a gallery.</p>
+        )}
+        {s.galleries.map((g, i) => (
+          <div className="field-row" key={i}>
+            <input
+              className="link-title"
+              value={g.title}
+              placeholder="Title"
+              onChange={(e) => update({ galleries: s.galleries.map((x, j) => (j === i ? { ...x, title: e.target.value } : x)) })}
+            />
+            <span className="path" title={g.path}>
+              {g.path}
+            </span>
+            <button className="btn small" onClick={thenSaved(() => window.api.openPath(g.path), "Couldn't open the folder.")}>
+              Open folder
+            </button>
+            <button
+              className="icon-btn"
+              title="Remove from the gallery (the folder itself is left alone)"
+              onClick={() => update({ galleries: s.galleries.filter((_, j) => j !== i) })}
+            >
               ×
             </button>
           </div>

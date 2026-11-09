@@ -31,6 +31,7 @@ function openItems(ref: ViewRef): MenuItem[] {
     if (ref.kind === 'canvas') return s.openCanvas(ref.path, { newTab })
     if (ref.kind === 'project') return s.openProject(ref.slug, { newTab })
     if (ref.kind === 'board') return s.openBoard(ref.slug, { newTab })
+    if (ref.kind === 'gallery') return s.openGallery(ref.slug, { newTab })
     if (ref.kind === 'history') return s.openHistory(ref.path, { newTab })
     if (ref.kind === 'settings') return s.openSettings()
     return s.goHome()
@@ -181,6 +182,7 @@ export function projectMenu(slug: string): MenuItem[] {
     iconItem(dir),
     { label: 'Open task board', run: () => s.openBoard(slug) },
     { label: 'Open task board in new window', run: () => s.openInNewWindow({ kind: 'board', slug }) },
+    ...(s.projects.find((p) => p.slug === slug)?.galleries.length ? [{ label: 'Open gallery', run: () => s.openGallery(slug) }] : []),
     { label: 'New task', run: async () => {
         const p = await s.createTask(slug, { title: 'New task' })
         if (p) await s.openFile(p)
