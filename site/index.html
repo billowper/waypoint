@@ -4,69 +4,63 @@
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
 <title>Waypoint</title>
-<meta name="description" content="A Windows 11 desktop app for notes, nested pages, tasks and canvas boards, stored as plain Markdown in a folder you own.">
+<meta name="description" content="Notes, tasks, boards and galleries for your projects, stored as plain Markdown in a folder you own. Claude Code can work in it too. For Windows 11.">
 <meta property="og:title" content="Waypoint">
-<meta property="og:description" content="Notes, projects and tasks in one folder you own. A desktop app for Windows 11.">
+<meta property="og:description" content="Your projects in one folder you own: notes, tasks, boards and galleries as plain Markdown, with a connector for Claude Code.">
 <link rel="icon" type="image/png" href="icon.png">
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
-<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Bricolage+Grotesque:opsz,wght@12..96,500;12..96,700&family=IBM+Plex+Mono:wght@400;500&display=swap">
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Bricolage+Grotesque:opsz,wght@12..96,500;12..96,700;12..96,800&family=IBM+Plex+Mono:wght@400;500&display=swap">
 <style>
-/* Layout: a route down the page. Each stop is a feature, labelled with the path where that feature keeps its files.
-   Colours and interface fonts are the app's own (src/renderer/src/styles.css): graphite and amber, or warm paper. */
+/* Bright and colourful: each feature has its own pair of colours (--a, --b), used for its tag, bullets and the
+   gradient tile its screenshot sits on. The page follows the viewer's light or dark setting, and so do the screenshots. */
 :root {
-  --bg: #17181b;
-  --band: #1c1d21;
-  --panel: #212227;
-  --line: #34353c;
-  --fg: #d6d3cc;
-  --strong: #f1eee7;
-  --dim: #9a978f;
-  --accent: #e6aa50;
-  --accent-ink: #1a1408;
-  --shadow: 0 24px 60px rgba(0, 0, 0, 0.45);
-  --show-dark: block;
-  --show-light: none;
+  --bg: #fffdf9;
+  --panel: #ffffff;
+  --soft: #f7f2e9;
+  --line: #e9e1d3;
+  --fg: #3d3a45;
+  --strong: #15131c;
+  --dim: #6f6b78;
+  --shadow: 0 18px 50px rgba(40, 25, 80, 0.18);
+  --headline: linear-gradient(95deg, #e2560b, #c026d3 55%, #4f46e5);
+  --glow: 0.32;
+  --show-dark: none;
+  --show-light: block;
+
+  --amber: #ffb224;
+  --coral: #ff5d73;
+  --pink: #f43f9d;
+  --violet: #7c5cff;
+  --blue: #2f8fff;
+  --teal: #12b5a5;
+  --green: #3fbf6f;
+
   --display: 'Bricolage Grotesque', 'Segoe UI Variable Display', 'Segoe UI', system-ui, sans-serif;
   --sans: 'Segoe UI Variable Text', 'Segoe UI', system-ui, -apple-system, sans-serif;
   --mono: 'Cascadia Code', 'Cascadia Mono', 'IBM Plex Mono', Consolas, monospace;
-  color-scheme: dark;
-}
-@media (prefers-color-scheme: light) {
-  :root:not([data-theme="dark"]) {
-    --bg: #f8f7f4;
-    --band: #f0eee9;
-    --panel: #ffffff;
-    --line: #d8d4ca;
-    --fg: #34322d;
-    --strong: #17160f;
-    --dim: #6c6961;
-    --accent: #a8690a;
-    --accent-ink: #ffffff;
-    --shadow: 0 24px 60px rgba(70, 55, 25, 0.16);
-    --show-dark: none;
-    --show-light: block;
-    color-scheme: light;
-  }
-}
-:root[data-theme="light"] {
-  --bg: #f8f7f4;
-  --band: #f0eee9;
-  --panel: #ffffff;
-  --line: #d8d4ca;
-  --fg: #34322d;
-  --strong: #17160f;
-  --dim: #6c6961;
-  --accent: #a8690a;
-  --accent-ink: #ffffff;
-  --shadow: 0 24px 60px rgba(70, 55, 25, 0.16);
-  --show-dark: none;
-  --show-light: block;
   color-scheme: light;
+}
+@media (prefers-color-scheme: dark) {
+  :root {
+    --bg: #12121b;
+    --panel: #1c1c2a;
+    --soft: #181824;
+    --line: #2f2f45;
+    --fg: #cfcde0;
+    --strong: #ffffff;
+    --dim: #9a97b0;
+    --shadow: 0 18px 50px rgba(0, 0, 0, 0.5);
+    --headline: linear-gradient(95deg, #ffb347, #ff6b9d 55%, #9aa5ff);
+    --glow: 0.22;
+    --show-dark: block;
+    --show-light: none;
+    color-scheme: dark;
+  }
 }
 
 * { box-sizing: border-box; }
-html { scroll-behavior: smooth; }
+html { scroll-behavior: smooth; overflow-x: clip; }
 @media (prefers-reduced-motion: reduce) { html { scroll-behavior: auto; } }
 body {
   margin: 0;
@@ -74,208 +68,230 @@ body {
   color: var(--fg);
   font: 400 1.0625rem/1.6 var(--sans);
   -webkit-font-smoothing: antialiased;
+  overflow-x: clip;
 }
-h1, h2, h3, p, ul, pre, figure { margin: 0; }
-h1, h2 {
-  font-family: var(--display);
-  font-weight: 700;
-  color: var(--strong);
-  text-wrap: balance;
-  letter-spacing: -0.02em;
-}
-h1 { font-size: clamp(2.6rem, 6.4vw, 5.2rem); line-height: 1.02; }
-h2 { font-size: clamp(1.75rem, 3.2vw, 2.6rem); line-height: 1.1; }
+h1, h2, h3, p, ul, ol, pre, figure { margin: 0; }
+h1, h2, h3 { font-family: var(--display); color: var(--strong); text-wrap: balance; letter-spacing: -0.02em; }
+h1 { font-size: clamp(2.6rem, 6.6vw, 5.4rem); line-height: 1; font-weight: 800; }
+h2 { font-size: clamp(1.8rem, 3.4vw, 2.8rem); line-height: 1.08; font-weight: 700; }
+h3 { font-size: 1.2rem; line-height: 1.25; font-weight: 700; letter-spacing: -0.01em; }
 a { color: inherit; }
-a:focus-visible { outline: 2px solid var(--accent); outline-offset: 3px; border-radius: 4px; }
+a:focus-visible { outline: 3px solid var(--violet); outline-offset: 3px; border-radius: 6px; }
 code, pre, kbd { font-family: var(--mono); }
+code { font-size: 0.9em; }
 kbd {
-  font-size: 0.82em;
+  font-size: 0.8em;
   padding: 0.1em 0.45em;
   border: 1px solid var(--line);
   border-bottom-width: 2px;
-  border-radius: 5px;
+  border-radius: 6px;
   background: var(--panel);
   color: var(--strong);
   white-space: nowrap;
 }
+.grad { background: var(--headline); -webkit-background-clip: text; background-clip: text; color: transparent; }
 
 .wrap {
-  max-width: 1300px;
+  max-width: 1240px;
   margin-inline: auto;
   padding-left: max(clamp(16px, 4vw, 48px), env(safe-area-inset-left, 0px));
   padding-right: max(clamp(16px, 4vw, 48px), env(safe-area-inset-right, 0px));
 }
-.diamond {
-  flex: none;
-  display: inline-block;
-  width: 0.62em;
-  height: 0.62em;
-  background: var(--accent);
-  transform: rotate(45deg);
-}
 
 /* Header */
-.top {
-  display: flex;
-  align-items: center;
-  flex-wrap: wrap;
-  gap: 8px 28px;
-  padding-block: 20px;
-}
-.brand {
-  display: inline-flex;
-  align-items: center;
-  gap: 12px;
-  font: 700 1.25rem var(--display);
-  color: var(--strong);
-  text-decoration: none;
-}
-.top nav {
-  display: flex;
-  flex-wrap: wrap;
-  gap: 4px 20px;
-  margin-right: auto;
-  font-size: 0.94rem;
-}
-.top nav a { color: var(--dim); text-decoration: none; }
+.top { display: flex; align-items: center; flex-wrap: wrap; gap: 8px 28px; padding-block: 18px; }
+.brand { display: inline-flex; align-items: center; gap: 12px; font: 700 1.3rem var(--display); color: var(--strong); text-decoration: none; }
+.diamond { flex: none; width: 0.66em; height: 0.66em; border-radius: 2px; background: linear-gradient(135deg, var(--amber), var(--coral)); transform: rotate(45deg); }
+.top nav { display: flex; flex-wrap: wrap; gap: 4px 22px; margin-right: auto; font-size: 0.95rem; }
+.top nav a { color: var(--dim); text-decoration: none; font-weight: 500; }
 .top nav a:hover { color: var(--strong); }
 @media (max-width: 860px) { .top nav { display: none; } .top { justify-content: space-between; column-gap: 12px; } }
-
 .top-actions { display: flex; gap: 8px; }
+
 .btn {
   display: inline-block;
-  padding: 0.65em 1.15em;
-  border: 1px solid var(--line);
-  border-radius: 8px;
+  padding: 0.7em 1.25em;
+  border: 1.5px solid var(--line);
+  border-radius: 999px;
+  background: var(--panel);
   font-weight: 600;
   color: var(--strong);
   text-decoration: none;
+  transition: transform 0.15s, border-color 0.15s;
 }
-.btn:hover { border-color: var(--accent); }
-.btn.primary { background: var(--accent); border-color: var(--accent); color: var(--accent-ink); }
-.btn.primary:hover { filter: brightness(1.08); }
-.btn.small { padding: 0.4em 0.9em; font-size: 0.94rem; }
+.btn:hover { border-color: var(--strong); transform: translateY(-1px); }
+.btn.primary { background: var(--amber); border-color: var(--amber); color: #1a1408; box-shadow: 0 8px 24px rgba(255, 150, 30, 0.35); }
+.btn.primary:hover { border-color: var(--amber); filter: brightness(1.05); }
+.btn.small { padding: 0.42em 1em; font-size: 0.94rem; box-shadow: none; }
+@media (prefers-reduced-motion: reduce) { .btn { transition: none; } .btn:hover { transform: none; } }
 
-/* Hero */
-.hero { display: grid; gap: clamp(28px, 4vw, 48px); padding-block: clamp(32px, 6vw, 72px) clamp(40px, 6vw, 72px); }
-.hero-text { display: grid; gap: 24px; max-width: 54rem; }
-.lead { font-size: clamp(1.1rem, 1.7vw, 1.3rem); max-width: 42rem; }
-.likes { color: var(--dim); max-width: 42rem; }
+/* Hero: soft blobs of colour behind the text and the first screenshot */
+.hero { position: relative; display: grid; gap: clamp(32px, 5vw, 56px); padding-block: clamp(36px, 6vw, 80px) clamp(56px, 8vw, 104px); }
+.hero::before {
+  content: "";
+  position: absolute;
+  inset: -140px calc(50% - 50vw) 10%;
+  z-index: -1;
+  opacity: var(--glow);
+  background:
+    radial-gradient(38% 46% at 16% 22%, var(--amber), transparent 70%),
+    radial-gradient(34% 44% at 60% 8%, var(--pink), transparent 70%),
+    radial-gradient(36% 50% at 86% 44%, var(--violet), transparent 70%),
+    radial-gradient(34% 42% at 34% 78%, var(--teal), transparent 70%);
+  filter: blur(40px);
+  pointer-events: none;
+}
+.hero-text { display: grid; gap: 24px; max-width: 56rem; }
+.lead { font-size: clamp(1.12rem, 1.7vw, 1.32rem); max-width: 40rem; }
 .actions { display: flex; flex-wrap: wrap; align-items: center; gap: 12px 16px; }
-.meta { font: 0.85rem var(--mono); color: var(--dim); }
+.meta { font: 0.84rem var(--mono); color: var(--dim); }
 
 /* Screenshots: the viewer's theme picks the matching one */
-.shot {
-  display: block;
-  border: 1px solid var(--line);
-  border-radius: 10px;
-  overflow: hidden;
-  background: var(--panel);
-  box-shadow: var(--shadow);
-}
-.shot img { width: 100%; height: auto; max-width: 100%; }
-.d { display: var(--show-dark); }
-.l { display: var(--show-light); }
-figure { display: grid; gap: 12px; min-width: 0; }
-figcaption { font-size: 0.9rem; color: var(--dim); }
+.shot { display: block; border-radius: 12px; overflow: hidden; background: var(--panel); box-shadow: var(--shadow); }
+.shot img { display: block; width: 100%; height: auto; }
+.shot img.d { display: var(--show-dark); }
+.shot img.l { display: var(--show-light); }
+.hero .shot { border: 1px solid var(--line); border-radius: 16px; }
+figure { min-width: 0; }
 
-/* The route */
-.route { position: relative; display: grid; gap: clamp(72px, 10vw, 136px); padding-bottom: clamp(72px, 10vw, 136px); }
-.route-note { color: var(--dim); max-width: 44rem; }
-.stop { display: grid; gap: clamp(24px, 3vw, 36px); scroll-margin-top: 24px; min-width: 0; }
-.path {
-  display: flex;
-  align-items: baseline;
-  gap: 12px;
-  font: 500 0.88rem/1.4 var(--mono);
-  color: var(--accent);
-  overflow-wrap: anywhere;
+/* Features: text beside a screenshot on a tile of that feature's colours */
+.features { display: grid; gap: clamp(64px, 9vw, 120px); padding-bottom: clamp(64px, 9vw, 120px); }
+.feature { display: grid; gap: clamp(24px, 4vw, 56px); align-items: center; scroll-margin-top: 24px; }
+.feature > * { min-width: 0; }
+@media (min-width: 980px) {
+  .feature { grid-template-columns: minmax(0, 4fr) minmax(0, 7fr); }
+  .feature.flip .copy { order: 2; }
+  .feature.flip { grid-template-columns: minmax(0, 7fr) minmax(0, 4fr); }
 }
-.path .diamond { transform: rotate(45deg) translateY(-1px); }
-.intro { display: grid; gap: 20px 56px; }
-.intro > * { min-width: 0; }
-.head { display: grid; gap: 14px; align-content: start; }
-.body { display: grid; gap: 16px; align-content: start; max-width: 40rem; }
-.points { list-style: none; padding: 0; display: grid; gap: 10px; }
-.points li { display: grid; grid-template-columns: 0.62em minmax(0, 1fr); gap: 14px; }
-.points li::before {
-  content: "";
-  width: 0.45em;
-  height: 0.45em;
-  margin: 0.58em 0 0 0.08em;
-  background: var(--dim);
-  transform: rotate(45deg);
+.copy { display: grid; gap: 16px; align-content: start; }
+.tag {
+  justify-self: start;
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  padding: 0.25em 0.8em 0.25em 0.65em;
+  border-radius: 999px;
+  background: color-mix(in srgb, var(--a) 18%, transparent);
+  color: var(--strong);
+  font: 500 0.82rem var(--mono);
 }
+.tag::before { content: ""; width: 0.6em; height: 0.6em; border-radius: 2px; background: linear-gradient(135deg, var(--a), var(--b)); transform: rotate(45deg); }
+.points { list-style: none; padding: 0; display: grid; gap: 8px; }
+.points li { display: grid; grid-template-columns: 0.6em minmax(0, 1fr); gap: 12px; }
+.points li::before { content: ""; width: 0.5em; height: 0.5em; margin-top: 0.58em; border-radius: 1px; background: var(--a); transform: rotate(45deg); }
 .points strong { color: var(--strong); font-weight: 600; }
-.pair { display: grid; gap: clamp(24px, 3vw, 36px); align-items: start; }
-.pair > * { min-width: 0; }
+.tile { padding: clamp(12px, 3vw, 40px); border-radius: clamp(16px, 2.4vw, 28px); background: linear-gradient(135deg, var(--a), var(--b)); }
 
-@media (min-width: 900px) {
-  .intro { grid-template-columns: minmax(0, 5fr) minmax(0, 6fr); }
-  .pair { grid-template-columns: repeat(2, minmax(0, 1fr)); }
-  .pair.wide-left { grid-template-columns: minmax(0, 3fr) minmax(0, 2fr); }
+.c-notes { --a: var(--amber); --b: var(--coral); }
+.c-tasks { --a: var(--violet); --b: var(--blue); }
+.c-boards { --a: var(--teal); --b: var(--green); }
+.c-gallery { --a: var(--pink); --b: var(--amber); }
+.c-docs { --a: var(--blue); --b: var(--teal); }
+.c-git { --a: var(--coral); --b: var(--pink); }
+.c-win { --a: var(--violet); --b: var(--pink); }
+.c-look { --a: var(--green); --b: var(--amber); }
+
+/* Claude Code: one full-width band, always dark, so it reads as its own thing */
+.claude {
+  --a: #ffd166;
+  background:
+    radial-gradient(50% 70% at 88% 0%, rgba(255, 93, 115, 0.55), transparent 70%),
+    radial-gradient(45% 60% at 0% 100%, rgba(47, 143, 255, 0.5), transparent 70%),
+    linear-gradient(135deg, #2b1a78, #5a2bc4 55%, #8a2fa6);
+  color: #e9e4ff;
+  padding-block: clamp(64px, 9vw, 120px);
+  scroll-margin-top: 0;
 }
-@media (min-width: 1100px) {
-  /* The route line runs down the left, with a marker at each stop */
-  .route { padding-left: 52px; }
-  .route::before {
-    content: "";
-    position: absolute;
-    left: 7px;
-    top: 0;
-    bottom: 0;
-    width: 2px;
-    background: repeating-linear-gradient(var(--line) 0 6px, transparent 6px 13px);
-  }
-  .path .diamond {
-    position: absolute;
-    left: 2px;
-    width: 12px;
-    height: 12px;
-    margin-top: 0.2em;
-    box-shadow: 0 0 0 5px var(--bg);
-    z-index: 1;
-    transform: rotate(45deg);
-  }
+.claude h2, .claude h3, .claude strong { color: #ffffff; }
+.claude .tag { background: rgba(255, 255, 255, 0.16); color: #ffffff; }
+.claude-head { display: grid; gap: 18px; max-width: 46rem; }
+.claude-head h2 { font-size: clamp(2.1rem, 4.4vw, 3.6rem); }
+.claude-head .lead { color: #e9e4ff; }
+.steps { list-style: none; padding: 0; display: grid; gap: 16px; margin-top: clamp(32px, 5vw, 56px); counter-reset: step; }
+@media (min-width: 860px) { .steps { grid-template-columns: repeat(3, minmax(0, 1fr)); } }
+.steps li {
+  counter-increment: step;
+  display: grid;
+  gap: 8px;
+  align-content: start;
+  padding: 22px;
+  border: 1px solid rgba(255, 255, 255, 0.18);
+  border-radius: 18px;
+  background: rgba(255, 255, 255, 0.08);
 }
-@supports (animation-timeline: scroll()) {
-  @media (min-width: 1100px) and (prefers-reduced-motion: no-preference) {
-    .route::after {
-      content: "";
-      position: absolute;
-      left: 7px;
-      top: 0;
-      bottom: 0;
-      width: 2px;
-      background: var(--accent);
-      transform-origin: top;
-      animation: travel linear both;
-      animation-timeline: scroll(root);
-    }
-    @keyframes travel { from { transform: scaleY(0); } to { transform: scaleY(1); } }
-  }
+.steps li::before {
+  content: counter(step);
+  display: grid;
+  place-items: center;
+  width: 2em;
+  height: 2em;
+  border-radius: 50%;
+  background: #ffd166;
+  color: #2b1a78;
+  font: 700 1rem var(--display);
 }
+.steps code, .claude .points code { padding: 0.08em 0.4em; border-radius: 5px; background: rgba(255, 255, 255, 0.16); color: #ffffff; }
+.session { display: grid; gap: clamp(20px, 3vw, 32px); margin-top: clamp(20px, 3vw, 32px); align-items: start; }
+.session > * { min-width: 0; }
+@media (min-width: 980px) { .session { grid-template-columns: minmax(0, 6fr) minmax(0, 5fr); } }
+.term { border-radius: 16px; background: #14112b; box-shadow: 0 18px 50px rgba(10, 5, 40, 0.5); overflow: hidden; }
+.term-bar { display: flex; align-items: center; gap: 7px; padding: 12px 16px; font: 0.8rem var(--mono); color: #a8a2cc; }
+.term-bar i { width: 10px; height: 10px; border-radius: 50%; background: #ff5d73; }
+.term-bar i:nth-child(2) { background: #ffb224; }
+.term-bar i:nth-child(3) { background: #3fbf6f; margin-right: 8px; }
+.term pre { padding: 4px 18px 20px; overflow-x: auto; font-size: 0.86rem; line-height: 1.75; color: #d9d4f5; }
+.term .u { color: #ffffff; font-weight: 500; }
+.term .t { color: #ffd166; }
+.term .o { color: #8f89b8; }
+.term .g { color: #6ee7a8; }
+.claude .shot { box-shadow: 0 18px 50px rgba(10, 5, 40, 0.5); }
+.claude figcaption { margin-top: 10px; font-size: 0.9rem; color: #cfc8f2; }
+.claude-more { display: grid; gap: 28px 48px; margin-top: clamp(36px, 5vw, 56px); }
+@media (min-width: 860px) { .claude-more { grid-template-columns: repeat(2, minmax(0, 1fr)); } }
+.claude-more > div { display: grid; gap: 6px; align-content: start; }
+.tools { display: flex; flex-wrap: wrap; gap: 8px; margin-top: clamp(32px, 4vw, 48px); padding: 0; list-style: none; }
+.tools li { padding: 0.3em 0.75em; border-radius: 999px; background: rgba(255, 255, 255, 0.12); font: 0.8rem var(--mono); color: #ffffff; }
+.claude .small { margin-top: 18px; color: #cfc8f2; }
 
-/* Files shown as files */
-.file { border: 1px solid var(--line); border-radius: 10px; background: var(--panel); overflow: hidden; min-width: 0; }
-.file-name { padding: 10px 16px; border-bottom: 1px solid var(--line); font: 0.82rem var(--mono); color: var(--dim); overflow-wrap: anywhere; }
-.file pre { padding: 16px; overflow-x: auto; font-size: 0.88rem; line-height: 1.65; color: var(--fg); }
-.file .k { color: var(--accent); }
-.file .c { color: var(--dim); }
+/* The rest, as cards */
+.more { padding-block: clamp(64px, 9vw, 120px); display: grid; gap: clamp(28px, 4vw, 44px); scroll-margin-top: 0; }
+.cards { display: grid; gap: 16px; grid-template-columns: repeat(auto-fit, minmax(min(100%, 280px), 1fr)); }
+.card {
+  display: grid;
+  gap: 10px;
+  align-content: start;
+  padding: 24px;
+  border: 1px solid var(--line);
+  border-top: 4px solid var(--a);
+  border-radius: 18px;
+  background: var(--panel);
+}
+.card p { font-size: 0.98rem; }
+.card .shot { margin-top: 8px; border: 1px solid var(--line); box-shadow: none; border-radius: 10px; }
 
-/* The nudge is one long, thin strip: on a phone it scrolls inside its own frame */
-.strip { overflow-x: auto; border: 1px solid var(--line); border-radius: 10px; background: var(--panel); box-shadow: var(--shadow); }
-.strip img { width: 100%; min-width: 760px; height: auto; }
-.stack { display: grid; gap: clamp(24px, 3vw, 36px); }
-.popup { max-width: 520px; }
+/* Download */
+.download { padding-bottom: clamp(48px, 7vw, 88px); scroll-margin-top: 24px; }
+.sun {
+  display: grid;
+  gap: 32px 56px;
+  align-items: center;
+  padding: clamp(24px, 5vw, 64px);
+  border-radius: clamp(20px, 3vw, 36px);
+  background: linear-gradient(135deg, #ffd166, #ffb224 45%, #ff7a59);
+  color: #2a1c05;
+}
+.sun > * { min-width: 0; }
+@media (min-width: 900px) { .sun { grid-template-columns: minmax(0, 1fr) minmax(0, 1fr); } }
+.sun h2 { color: #1a1205; }
+.sun-text { display: grid; gap: 18px; }
+.sun .btn.primary { background: #1a1205; border-color: #1a1205; color: #ffffff; box-shadow: none; }
+.sun .meta { color: #4a3508; }
+.small { font-size: 0.92rem; }
+.file { border-radius: 16px; background: #1a1205; color: #f6ecd8; overflow: hidden; }
+.file-name { padding: 12px 18px 0; font: 0.8rem var(--mono); color: #c9b88f; }
+.file pre { padding: 12px 18px 18px; overflow-x: auto; font-size: 0.86rem; line-height: 1.7; }
+.file .c { color: #c9b88f; }
 
-/* Closing band */
-.band { background: var(--band); padding-block: clamp(64px, 9vw, 112px); }
-.closing { display: grid; gap: 40px 64px; align-items: start; }
-.closing > * { min-width: 0; }
-@media (min-width: 900px) { .closing { grid-template-columns: minmax(0, 1fr) minmax(0, 1fr); } }
-.closing-text { display: grid; gap: 18px; }
-.small { font-size: 0.92rem; color: var(--dim); }
 footer { padding-block: 28px; font-size: 0.9rem; color: var(--dim); }
 footer .wrap { display: flex; flex-wrap: wrap; justify-content: space-between; gap: 8px 32px; }
 </style>
@@ -284,320 +300,267 @@ footer .wrap { display: flex; flex-wrap: wrap; justify-content: space-between; g
 
 <header class="wrap top">
   <a class="brand" href="#top"><span class="diamond" aria-hidden="true"></span>Waypoint</a>
-  <nav aria-label="Features">
+  <nav aria-label="Sections">
     <a href="#notes">Notes</a>
-    <a href="#projects">Projects</a>
     <a href="#tasks">Tasks</a>
     <a href="#boards">Boards</a>
-    <a href="#history">History</a>
-    <a href="#windows">Windows</a>
+    <a href="#gallery">Gallery</a>
     <a href="#claude">Claude Code</a>
+    <a href="#more">More</a>
   </nav>
   <div class="top-actions">
     <a class="btn small" href="https://github.com/billowper/waypoint">GitHub</a>
-    <a class="btn small" href="#download">Download</a>
+    <a class="btn small primary" href="#download">Download</a>
   </div>
 </header>
 
-<main class="wrap" id="top">
-  <section class="hero">
+<main id="top">
+  <section class="wrap hero">
     <div class="hero-text">
-      <h1>Notes, projects and tasks in one folder you own.</h1>
-      <p class="lead">Waypoint is a desktop app for writing, planning and tracking your work. Everything is plain Markdown on your own disk, so any editor can open it and git can version it.</p>
-      <p class="likes">Local Markdown like Obsidian, nested pages like Notion, boards like Miro and task tracking like Jira, in one app.</p>
+      <h1>Your projects, in <span class="grad">one folder you own.</span></h1>
+      <p class="lead">Notes, tasks, boards and galleries, all plain Markdown on your disk. Git keeps the history, and Claude Code can pick up the work.</p>
       <div class="actions">
         <a class="btn primary" href="#download">Download for Windows</a>
-        <a class="btn" href="https://github.com/billowper/waypoint">View source on GitHub</a>
-        <span class="meta">v0.16.0 · Windows 11 · no account needed · MIT licence</span>
+        <a class="btn" href="#claude">See it with Claude Code</a>
+        <span class="meta">v0.16.0 · Windows 11 · no account · MIT</span>
       </div>
     </div>
     <figure>
       <div class="shot">
-        <img class="d" src="img/note-dark.webp" width="2160" height="1350" alt="Waypoint showing a note called Launch plan, with the sidebar of notes and projects on the left, a contents pane, formatted text with checklists, and a Linked from panel on the right.">
-        <img class="l" src="img/note-light.webp" width="2160" height="1350" alt="Waypoint showing a note called Launch plan, with the sidebar of notes and projects on the left, a contents pane, formatted text with checklists, and a Linked from panel on the right.">
+        <img class="d" src="img/note-dark.webp" width="2160" height="1350" alt="A note called Launch plan open in Waypoint, with nested pages in the sidebar, a contents pane and a Linked from panel.">
+        <img class="l" src="img/note-light.webp" width="2160" height="1350" alt="A note called Launch plan open in Waypoint, with nested pages in the sidebar, a contents pane and a Linked from panel.">
       </div>
     </figure>
   </section>
 
-  <div class="route">
-    <p class="route-note">Each stop below shows one part of the app, labelled with the path where it keeps its files.</p>
-
-    <section class="stop" id="notes">
-      <div class="intro">
-        <div class="head">
-          <p class="path"><span class="diamond" aria-hidden="true"></span><code>notes/</code></p>
-          <h2>Write Markdown and read it formatted</h2>
-        </div>
-        <div class="body">
-          <p>The editor hides the syntax on every line except the one you're editing. Notes save as you type, and edits made in other editors or by git show up live.</p>
-          <ul class="points">
-            <li><span><strong>Wiki links.</strong> Type <kbd>[[</kbd> for autocomplete. Click a dim link to create that note.</span></li>
-            <li><span><strong>Links that keep up.</strong> Rename or move a note and every link to it is rewritten.</span></li>
-            <li><span><strong>Linked from.</strong> A side panel lists every note that points at this one.</span></li>
-            <li><span><strong>Tabs and windows.</strong> Tabs come back when you relaunch, and you can drag one out into its own window.</span></li>
-          </ul>
-        </div>
+  <div class="wrap features">
+    <section class="feature c-notes" id="notes">
+      <div class="copy">
+        <p class="tag">notes/</p>
+        <h2>Reads like a page, saves as Markdown</h2>
+        <p>The marks stay hidden while you write. <kbd>Ctrl+Shift+M</kbd> shows the file as it is on disk.</p>
+        <ul class="points">
+          <li><span><strong>Type <kbd>/</kbd></strong> for headings, to-dos, callouts, code and tables.</span></li>
+          <li><span><strong>Tables</strong> are edited in place, and pasted pictures resize by dragging.</span></li>
+          <li><span><strong><kbd>[[</kbd>Links<kbd>]]</kbd></strong> follow a note when it's renamed or moved.</span></li>
+          <li><span><strong>Pages nest.</strong> Drag one note onto another.</span></li>
+          <li><span><strong><code>![[Note]]</code></strong> shows another note inline.</span></li>
+        </ul>
       </div>
-    </section>
-
-    <section class="stop" id="pages">
-      <div class="intro">
-        <div class="head">
-          <p class="path"><span class="diamond" aria-hidden="true"></span><code>Launch plan.md + Launch plan/</code></p>
-          <h2>Put pages inside pages, and find them fast</h2>
-        </div>
-        <div class="body">
-          <p>Drag one note onto another and it becomes a sub-page. On disk, sub-pages sit in a folder named after the note, and the sidebar draws the pair as one row. Move the parent and its sub-pages go with it.</p>
-          <ul class="points">
-            <li><span><kbd>Ctrl+P</kbd> finds a note by name, or creates it if there's no match.</span></li>
-            <li><span><kbd>Ctrl+Shift+F</kbd> searches the text of every note.</span></li>
-            <li><span><kbd>Ctrl+Shift+O</kbd> opens a contents pane built from the note's headings.</span></li>
-          </ul>
-        </div>
-      </div>
-      <div class="pair wide-left">
-        <figure>
-          <div class="shot">
-            <img class="d" src="img/switcher-dark.webp" width="2160" height="1350" loading="lazy" alt="The quick switcher open over a note, listing three notes that match the word launch, plus an option to create a new note.">
-            <img class="l" src="img/switcher-light.webp" width="2160" height="1350" loading="lazy" alt="The quick switcher open over a note, listing three notes that match the word launch, plus an option to create a new note.">
-          </div>
-          <figcaption>The quick switcher, <kbd>Ctrl+P</kbd>.</figcaption>
-        </figure>
-        <div class="file">
-          <div class="file-name">What the nesting looks like on disk</div>
-<pre>docs/
-  Booking flow.md
-  Brand notes.md
-  Launch plan.md
-  Launch plan/
-    Launch day checklist.md
-    Redirect map.md</pre>
-        </div>
-      </div>
-    </section>
-
-    <section class="stop" id="projects">
-      <div class="intro">
-        <div class="head">
-          <p class="path"><span class="diamond" aria-hidden="true"></span><code>projects/harbour-cycles/project.md</code></p>
-          <h2>Give each project a home</h2>
-        </div>
-        <div class="body">
-          <p>A project keeps its docs, tasks and boards together. You edit its settings through a form, and they're saved in the frontmatter of one Markdown file.</p>
-          <ul class="points">
-            <li><span><strong>Status and tags.</strong> Idea, active, paused or done, with your own tags and task prefix.</span></li>
-            <li><span><strong>Code repository.</strong> Open the project's repo in Explorer or VS Code, or its remote in the browser.</span></li>
-            <li><span><strong>Links and bookmarks.</strong> Keep staging sites, docs and local folders one click away.</span></li>
-            <li><span><strong>Home.</strong> Your open tasks across every project, active projects and recent notes, on one page.</span></li>
-          </ul>
-        </div>
-      </div>
-      <div class="pair">
-        <figure>
-          <div class="shot">
-            <img class="d" src="img/project-dark.webp" width="2160" height="1350" loading="lazy" alt="A project page with status pills, tags, an overview, a task summary and code repository settings.">
-            <img class="l" src="img/project-light.webp" width="2160" height="1350" loading="lazy" alt="A project page with status pills, tags, an overview, a task summary and code repository settings.">
-          </div>
-          <figcaption>A project page.</figcaption>
-        </figure>
-        <figure>
-          <div class="shot">
-            <img class="d" src="img/home-dark.webp" width="2160" height="1350" loading="lazy" alt="The Home page with counts of notes, projects and tasks due, then a My work list ordered by due date, with overdue dates in red.">
-            <img class="l" src="img/home-light.webp" width="2160" height="1350" loading="lazy" alt="The Home page with counts of notes, projects and tasks due, then a My work list ordered by due date, with overdue dates in red.">
-          </div>
-          <figcaption>Home, with overdue work at the top of My work.</figcaption>
-        </figure>
-      </div>
-    </section>
-
-    <section class="stop" id="tasks">
-      <div class="intro">
-        <div class="head">
-          <p class="path"><span class="diamond" aria-hidden="true"></span><code>projects/harbour-cycles/tasks/HC-005.md</code></p>
-          <h2>Track tasks on a board and keep them as files</h2>
-        </div>
-        <div class="body">
-          <p>Drag cards from Backlog to To do, Doing and Done. Each task is one Markdown file, with its fields in frontmatter and your notes underneath.</p>
-          <ul class="points">
-            <li><span>IDs are prefixed per project, like HC-005.</span></li>
-            <li><span>Tasks have priorities, due dates and labels.</span></li>
-            <li><span>Switch between the board and a sortable list, and filter either one.</span></li>
-          </ul>
-        </div>
-      </div>
-      <div class="pair wide-left">
-        <figure>
-          <div class="shot">
-            <img class="d" src="img/tasks-dark.webp" width="2160" height="1350" loading="lazy" alt="A kanban board with Backlog, To do, Doing and Done columns. Cards show an ID, priority, due date and labels.">
-            <img class="l" src="img/tasks-light.webp" width="2160" height="1350" loading="lazy" alt="A kanban board with Backlog, To do, Doing and Done columns. Cards show an ID, priority, due date and labels.">
-          </div>
-        </figure>
-        <div class="file">
-          <div class="file-name">HC-005.md, the card in Doing</div>
-<pre><span class="c">---</span>
-<span class="k">id:</span> HC-005
-<span class="k">title:</span> Build the booking form
-<span class="k">status:</span> doing
-<span class="k">priority:</span> urgent
-<span class="k">due:</span> 2026-11-02
-<span class="k">labels:</span> [bookings]
-<span class="k">created:</span> 2026-10-19
-<span class="c">---</span>
-Dates, bike, deposit. Must work
-one-handed on a phone.</pre>
-        </div>
-      </div>
-    </section>
-
-    <section class="stop" id="boards">
-      <div class="intro">
-        <div class="head">
-          <p class="path"><span class="diamond" aria-hidden="true"></span><code>projects/harbour-cycles/boards/Launch map.excalidraw</code></p>
-          <h2>Think it through on a canvas</h2>
-        </div>
-        <div class="body">
-          <p>Each project can hold Excalidraw boards, saved as you draw. Add a note or task as a card, and its link icon opens the real thing.</p>
-        </div>
-      </div>
-      <figure>
+      <figure class="tile">
         <div class="shot">
-          <img class="d" src="img/canvas-dark.webp" width="2160" height="1350" loading="lazy" alt="A hand-drawn style canvas board mapping notes and tasks through to a go-live date, with arrows between cards and a handwritten question.">
-          <img class="l" src="img/canvas-light.webp" width="2160" height="1350" loading="lazy" alt="A hand-drawn style canvas board mapping notes and tasks through to a go-live date, with arrows between cards and a handwritten question.">
+          <img class="d" src="img/switcher-dark.webp" width="2160" height="1350" loading="lazy" alt="The quick switcher open over a note, listing notes that match the word launch, with an option to create a new one.">
+          <img class="l" src="img/switcher-light.webp" width="2160" height="1350" loading="lazy" alt="The quick switcher open over a note, listing notes that match the word launch, with an option to create a new one.">
         </div>
       </figure>
     </section>
 
-    <section class="stop" id="history">
-      <div class="intro">
-        <div class="head">
-          <p class="path"><span class="diamond" aria-hidden="true"></span><code>.git/</code></p>
-          <h2>See every change to every note</h2>
-        </div>
-        <div class="body">
-          <p>Turn on versioning from the sidebar, then commit, pull and push without leaving the app. Waypoint uses the git you already have installed, so your credentials just work.</p>
-          <ul class="points">
-            <li><span>Open the history and diffs of one note, or of the whole vault.</span></li>
-            <li><span>Auto-commit on a timer if you want it. It's off by default.</span></li>
-            <li><span>Daily zip backups to a folder you choose, also optional.</span></li>
-          </ul>
-        </div>
+    <section class="feature flip c-tasks" id="tasks">
+      <div class="copy">
+        <p class="tag">tasks/HC-005.md</p>
+        <h2>A board where every card is a file</h2>
+        <p>Each task is one Markdown file, so it's in git and Claude can read it.</p>
+        <ul class="points">
+          <li><span><strong>Board or list</strong>, sorted by priority, due date, ID or title.</span></li>
+          <li><span><strong>Filters</strong> for status, priority, due date and labels, remembered per project.</span></li>
+          <li><span><strong>Home</strong> gathers what's due across every project.</span></li>
+        </ul>
       </div>
-      <figure>
+      <figure class="tile">
         <div class="shot">
-          <img class="d" src="img/history-dark.webp" width="2160" height="1350" loading="lazy" alt="The history of a note: a list of commits beside a diff of the selected commit, with the git commit panel in the sidebar.">
-          <img class="l" src="img/history-light.webp" width="2160" height="1350" loading="lazy" alt="The history of a note: a list of commits beside a diff of the selected commit, with the git commit panel in the sidebar.">
+          <img class="d" src="img/tasks-dark.webp" width="2160" height="1350" loading="lazy" alt="A kanban board with Backlog, To do, Doing and Done columns and a row of filters for status, priority, due date and labels.">
+          <img class="l" src="img/tasks-light.webp" width="2160" height="1350" loading="lazy" alt="A kanban board with Backlog, To do, Doing and Done columns and a row of filters for status, priority, due date and labels.">
         </div>
       </figure>
     </section>
 
-    <section class="stop" id="windows">
-      <div class="intro">
-        <div class="head">
-          <p class="path"><span class="diamond" aria-hidden="true"></span><code>ideas/</code></p>
-          <h2>Catch ideas from anywhere in Windows, and get prodded about the rest</h2>
-        </div>
-        <div class="body">
-          <p>Press <kbd>Ctrl+Alt+W</kbd> in any app and a small box opens. Type a thought, press Enter, and it's a new note under Ideas.</p>
-          <ul class="points">
-            <li><span><strong>Jump list.</strong> Right-click the taskbar icon for recent notes, New note and Quick capture.</span></li>
-            <li><span><strong>Tray.</strong> Closing the window keeps Waypoint running, so the hotkeys and nudges still work. It can start with Windows too.</span></li>
-            <li><span><strong>Search from anywhere.</strong> <kbd>Ctrl+Alt+F</kbd> opens a search box over whatever you're doing.</span></li>
-            <li><span><strong>Nudges.</strong> Overdue tasks, tasks due soon and projects gone quiet get a banner in the app or a Windows notification. You set the hours and how often, and you can snooze them.</span></li>
-          </ul>
-        </div>
+    <section class="feature c-boards" id="boards">
+      <div class="copy">
+        <p class="tag">boards/Launch map.excalidraw</p>
+        <h2>A canvas wired to the real thing</h2>
+        <p>Excalidraw boards in every project. Drop a note or task on as a card, and the card opens it.</p>
       </div>
-      <div class="stack">
-        <figure class="popup">
-          <div class="shot">
-            <img class="d" src="img/capture-dark.webp" width="1040" height="380" loading="lazy" alt="The quick capture box with a short idea typed in.">
-            <img class="l" src="img/capture-light.webp" width="1040" height="380" loading="lazy" alt="The quick capture box with a short idea typed in.">
-          </div>
-          <figcaption>Quick capture. Enter adds it, Esc cancels.</figcaption>
-        </figure>
-        <figure>
-          <div class="strip">
-            <img class="d" src="img/nudge-dark.webp" width="1764" height="63" loading="lazy" alt="A nudge banner: HC-005 is overdue, Build the booking form. Five minutes on it now? With Open, Don't nag about this and Snooze 1 h buttons.">
-            <img class="l" src="img/nudge-light.webp" width="1764" height="63" loading="lazy" alt="A nudge banner: HC-005 is overdue, Build the booking form. Five minutes on it now? With Open, Don't nag about this and Snooze 1 h buttons.">
-          </div>
-          <figcaption>A nudge. "Don't nag about this" silences it for that task.</figcaption>
-        </figure>
-      </div>
-    </section>
-
-    <section class="stop" id="claude">
-      <div class="intro">
-        <div class="head">
-          <p class="path"><span class="diamond" aria-hidden="true"></span><code>.app/claude-log.jsonl</code></p>
-          <h2>Connect Claude Code if you use it</h2>
-        </div>
-        <div class="body">
-          <p>This part is optional. Waypoint never calls Claude itself, and every feature works without it.</p>
-          <p>If you use Claude Code, the installer already includes an MCP connector that runs on your PC, so there's nothing extra to install. Set a project's repo folder and press Connect to Claude Code. Sessions in that repo can then see the project, in the terminal or the desktop app's Code tab.</p>
-          <ul class="points">
-            <li><span><strong>What Claude can do.</strong> Search and read your notes, create and update tasks, edit docs, and rename or move files with links kept up to date.</span></li>
-            <li><span><strong>Send to Claude.</strong> Start a session on a task from its card or the open task.</span></li>
-            <li><span><strong>Project memory.</strong> Claude keeps its notes and dated session logs as ordinary notes you can read.</span></li>
-            <li><span><strong>Changed by Claude.</strong> Every change is listed in a feed, and you can undo it from there.</span></li>
-            <li><span><strong>No deleting.</strong> The connector has no way to delete anything.</span></li>
-          </ul>
-        </div>
-      </div>
-      <figure>
+      <figure class="tile">
         <div class="shot">
-          <img class="d" src="img/claude-dark.webp" width="1182" height="732" loading="lazy" alt="The Claude Code card on a project page, with connect buttons and links to Claude's notes, above a Changed by Claude feed of recent edits with Undo buttons.">
-          <img class="l" src="img/claude-light.webp" width="1182" height="732" loading="lazy" alt="The Claude Code card on a project page, with connect buttons and links to Claude's notes, above a Changed by Claude feed of recent edits with Undo buttons.">
+          <img class="d" src="img/canvas-dark.webp" width="2160" height="1350" loading="lazy" alt="A hand-drawn style canvas mapping notes and tasks through to a go-live date, with arrows between cards.">
+          <img class="l" src="img/canvas-light.webp" width="2160" height="1350" loading="lazy" alt="A hand-drawn style canvas mapping notes and tasks through to a go-live date, with arrows between cards.">
         </div>
       </figure>
     </section>
 
-    <section class="stop" id="look">
-      <div class="pair">
-        <div class="head">
-          <p class="path"><span class="diamond" aria-hidden="true"></span><code>config.json</code></p>
-          <h2>Make it look how you like</h2>
-          <div class="body">
-            <p>Choose dark, light or follow Windows. Pick one accent colour and Waypoint works out the rest of the palette. Any project can have its own colour, so you can tell at a glance where you are.</p>
-            <p>You can also change the fonts, note text size and interface scale, and give any note or project an emoji or picture as its icon.</p>
-          </div>
-        </div>
-        <figure>
-          <div class="shot">
-            <img class="d" src="img/settings-dark.webp" width="1182" height="805" loading="lazy" alt="Settings for theme, accent colour, interface scale, fonts and note text size.">
-            <img class="l" src="img/settings-light.webp" width="1182" height="805" loading="lazy" alt="Settings for theme, accent colour, interface scale, fonts and note text size.">
-          </div>
-        </figure>
+    <section class="feature flip c-gallery" id="gallery">
+      <div class="copy">
+        <p class="tag">galleries:</p>
+        <h2>Pictures and videos beside the work</h2>
+        <p>Point a project at folders on your PC and browse them as one grid. Nothing is copied or changed.</p>
+        <ul class="points">
+          <li><span><strong>Viewer</strong> with zoom, pan, full screen and video.</span></li>
+          <li><span><strong>Copy as image</strong>, straight into a chat or a doc.</span></li>
+        </ul>
       </div>
+      <figure class="tile">
+        <div class="shot">
+          <img class="d" src="img/gallery-dark.webp" width="2160" height="1350" loading="lazy" alt="A project's gallery: a grid of thumbnails from two folders, with a name filter, sorting and a size slider.">
+          <img class="l" src="img/gallery-light.webp" width="2160" height="1350" loading="lazy" alt="A project's gallery: a grid of thumbnails from two folders, with a name filter, sorting and a size slider.">
+        </div>
+      </figure>
     </section>
   </div>
-</main>
 
-<section class="band" id="download">
-  <div class="wrap closing">
-    <div class="closing-text">
-      <h2>Your vault is just a folder</h2>
-      <p>Open it in any text editor, sync it with any git client, and back it up however you like. If you ever stop using Waypoint, your notes are still Markdown files.</p>
-      <div class="actions">
-        <a class="btn primary" href="https://github.com/billowper/waypoint/releases/latest">Download for Windows</a>
-        <span class="meta">v0.16.0 · Windows 11</span>
+  <section class="claude" id="claude">
+    <div class="wrap">
+      <div class="claude-head">
+        <p class="tag">MCP connector · optional</p>
+        <h2>Hand a task to Claude Code. Watch the board move.</h2>
+        <p class="lead">Waypoint ships with a local MCP connector. Link a project to its repo and every Claude Code session there starts with your tasks, your docs and its own notes from last time.</p>
       </div>
-      <p class="small">The installer isn't code-signed yet, so SmartScreen warns you the first time. Choose More info, then Run anyway.</p>
+
+      <ol class="steps">
+        <li>
+          <h3>Assign it</h3>
+          <p>Give a task the <code>claude</code> label, or send one to a new session from its card.</p>
+        </li>
+        <li>
+          <h3>Claude does the work</h3>
+          <p>It moves the task to Doing, reads the docs it needs, writes the code, then marks it Done with a progress note.</p>
+        </li>
+        <li>
+          <h3>You check it</h3>
+          <p>Every change to the vault shows in a feed with Undo. The connector has no way to delete anything.</p>
+        </li>
+      </ol>
+
+      <div class="session">
+        <div class="term">
+          <div class="term-bar" aria-hidden="true"><i></i><i></i><i></i>claude · harbour-cycles</div>
+<pre><span class="u">&gt; work through your tasks</span>
+
+<span class="t">waypoint_overview</span>
+<span class="o">  Harbour Cycles · 2 assigned to you
+  Last session: booking form validation</span>
+<span class="t">waypoint_update_task</span>  HC-007 → doing
+<span class="t">waypoint_read_note</span>    docs/Booking flow.md
+<span class="o">  … writes and tests the code …</span>
+<span class="t">waypoint_update_task</span>  HC-007 → done <span class="g">+ progress note</span>
+<span class="t">waypoint_create_task</span>  HC-013 Refunds need a receipt
+<span class="t">waypoint_log_session</span>  Card payments tested end to end</pre>
+        </div>
+        <figure>
+          <div class="shot">
+            <img src="img/claude-dark.webp" width="1182" height="732" loading="lazy" alt="The Claude Code card on a project page, with links to Claude's notes, above a Changed by Claude feed of recent edits with Undo buttons.">
+          </div>
+          <figcaption>What a session changed, with Undo.</figcaption>
+        </figure>
+      </div>
+
+      <div class="claude-more">
+        <div>
+          <h3>It remembers the project</h3>
+          <p>Claude keeps a memory and a dated log of each session as ordinary notes in the project. The next session reads them first, and so can you.</p>
+        </div>
+        <div>
+          <h3>It keeps your docs honest</h3>
+          <p>Decisions and how-tos go into the project's docs as it works, and bugs it finds but doesn't fix become tasks.</p>
+        </div>
+        <div>
+          <h3>It sees the whole vault</h3>
+          <p>Search across notes, read any project, file an idea, rename or move pages with every link kept intact.</p>
+        </div>
+        <div>
+          <h3>It stays on your PC</h3>
+          <p>The connector runs locally and comes with the installer. Waypoint never calls Claude itself, and everything else works without it.</p>
+        </div>
+      </div>
+
+      <ul class="tools" aria-label="Some of the connector's tools">
+        <li>waypoint_overview</li>
+        <li>waypoint_search</li>
+        <li>waypoint_list_tasks</li>
+        <li>waypoint_create_task</li>
+        <li>waypoint_update_task</li>
+        <li>waypoint_read_note</li>
+        <li>waypoint_edit_note</li>
+        <li>waypoint_create_note</li>
+        <li>waypoint_add_idea</li>
+        <li>waypoint_remember</li>
+        <li>waypoint_log_session</li>
+        <li>waypoint_move</li>
+      </ul>
+      <p class="small">Works in the terminal and in the Claude desktop app's Code tab.</p>
     </div>
-    <div class="file">
-      <div class="file-name">A vault on disk</div>
+  </section>
+
+  <section class="wrap more" id="more">
+    <h2>And the rest</h2>
+    <div class="cards">
+      <article class="card c-docs">
+        <h3>Linked docs</h3>
+        <p>Show a Markdown file from the project's repo as a doc, read-only and always current. The README lives in one place.</p>
+      </article>
+      <article class="card c-git">
+        <h3>Git built in</h3>
+        <p>History and diffs for any note. Optional auto-commit, and auto-push to a remote as a backup.</p>
+      </article>
+      <article class="card c-win">
+        <h3>Quick capture</h3>
+        <p><kbd>Ctrl+Alt+W</kbd> in any app files a thought under Ideas. <kbd>Ctrl+Alt+F</kbd> searches from anywhere.</p>
+        <div class="shot">
+          <img class="d" src="img/capture-dark.webp" width="1040" height="380" loading="lazy" alt="The quick capture box with a short idea typed in.">
+          <img class="l" src="img/capture-light.webp" width="1040" height="380" loading="lazy" alt="The quick capture box with a short idea typed in.">
+        </div>
+      </article>
+      <article class="card c-notes">
+        <h3>Nudges</h3>
+        <p>Overdue tasks and projects gone quiet get a banner or a Windows notification, in the hours you choose.</p>
+      </article>
+      <article class="card c-tasks">
+        <h3>Projects</h3>
+        <p>Docs, tasks, boards and gallery together, with the repo, links and bookmarks one click away.</p>
+      </article>
+      <article class="card c-boards">
+        <h3>Find anything</h3>
+        <p><kbd>Ctrl+P</kbd> jumps to a note or creates it. Full-text search, tabs, and windows you can drag tabs into.</p>
+      </article>
+      <article class="card c-look">
+        <h3>Your colours</h3>
+        <p>Light or dark, one accent colour for the app and another per project, your fonts and scale.</p>
+      </article>
+      <article class="card c-gallery">
+        <h3>Backups</h3>
+        <p>Optional daily zip snapshots to a folder you choose.</p>
+      </article>
+    </div>
+  </section>
+
+  <section class="wrap download" id="download">
+    <div class="sun">
+      <div class="sun-text">
+        <h2>It's just a folder</h2>
+        <p>Open it in any editor, sync it with any git client. Stop using Waypoint and your notes are still Markdown files.</p>
+        <div class="actions">
+          <a class="btn primary" href="https://github.com/billowper/waypoint/releases/latest">Download for Windows</a>
+          <span class="meta">v0.16.0 · Windows 11</span>
+        </div>
+        <p class="small">The installer isn't code-signed yet, so SmartScreen warns you the first time. Choose More info, then Run anyway.</p>
+      </div>
+      <div class="file">
+        <div class="file-name">A vault on disk</div>
 <pre>Workshop/
-  ideas/                <span class="c">quick captures, one note each</span>
-  notes/                <span class="c">nest as deep as you like</span>
+  ideas/              <span class="c">quick captures</span>
+  notes/              <span class="c">nest as deep as you like</span>
   projects/
     harbour-cycles/
-      project.md        <span class="c">settings and overview</span>
-      docs/             <span class="c">nested pages</span>
-      tasks/            <span class="c">HC-001.md and so on</span>
-      boards/           <span class="c">.excalidraw canvases</span>
-  .app/                 <span class="c">icons, ordering, change log</span>
-  .git/                 <span class="c">if you turn on versioning</span></pre>
+      project.md      <span class="c">settings and overview</span>
+      docs/           <span class="c">nested pages</span>
+      tasks/          <span class="c">HC-001.md and so on</span>
+      boards/         <span class="c">.excalidraw canvases</span>
+      claude/         <span class="c">memory and session logs</span>
+  attachments/        <span class="c">pasted pictures</span>
+  .git/               <span class="c">if you turn on versioning</span></pre>
+      </div>
     </div>
-  </div>
-</section>
+  </section>
+</main>
 
 <footer>
   <div class="wrap">
