@@ -2,6 +2,7 @@ import { useCallback, useEffect, useRef, useState } from 'react'
 import { Annotation, EditorState } from '@codemirror/state'
 import { EditorView, keymap } from '@codemirror/view'
 import { searchKeymap, highlightSelectionMatches } from '@codemirror/search'
+import { findBar } from './find'
 import { markdown, markdownLanguage } from '@codemirror/lang-markdown'
 import { languages } from '@codemirror/language-data'
 import { syntaxHighlighting } from '@codemirror/language'
@@ -114,6 +115,7 @@ function LinkedView({ doc, path, docId, active }: { doc: LinkedDoc; path: string
           EditorState.changeFilter.of((tr) => tr.annotation(fromDisk) === true),
           EditorView.contentAttributes.of({ tabindex: '0' }), // so Ctrl+F and Ctrl+A work in here
           highlightSelectionMatches(),
+          findBar,
           EditorView.lineWrapping,
           markdown({ base: markdownLanguage, codeLanguages: languages, extensions: [frontmatterSyntax] }),
           syntaxHighlighting(mdHighlight),

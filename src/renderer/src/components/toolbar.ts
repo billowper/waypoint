@@ -4,9 +4,11 @@ import { EditorView, showTooltip, type Tooltip } from '@codemirror/view'
 import { LINE_KINDS, turnInto, turnIntoCode } from './blocks'
 import { bold, code, formatAt, italic, linkCommand, strike } from './format'
 import { editorHost } from './host'
+import { findFocused } from './find'
 
 // The bar over selected text: bold, italic, strikethrough, code, link, and "Turn into" for the
-// lines the selection covers. Shown once the mouse is let go, and only while the editor has focus.
+// lines the selection covers. Shown once the mouse is let go, and only while the editor has focus
+// (the find bar is inside the editor, so typing in it counts as focus: left out by hand).
 
 const setFocus = StateEffect.define<boolean>()
 const setDragging = StateEffect.define<boolean>()
@@ -68,6 +70,7 @@ function tooltipFor(state: EditorState): Tooltip | null {
   const { focused, dragging } = state.field(status)
   const sel = state.selection
   if (!focused || dragging || sel.ranges.length > 1 || sel.main.empty) return null
+  if (state.field(findFocused, false)) return null // stepping through matches, not formatting them
   if (inCode(state, sel.main.from) || inCode(state, sel.main.to)) return null
   return { pos: sel.main.from, end: sel.main.to, above: true, create: (view) => ({ dom: bar(view) }) }
 }
@@ -75,7 +78,11 @@ function tooltipFor(state: EditorState): Tooltip | null {
 const tooltip = StateField.define<Tooltip | null>({
   create: tooltipFor,
   update(value, tr) {
-    const changed = tr.docChanged || tr.selection || tr.effects.some((e) => e.is(setFocus) || e.is(setDragging))
+    const changed =
+      tr.docChanged ||
+      tr.selection ||
+      tr.effects.some((e) => e.is(setFocus) || e.is(setDragging)) ||
+      tr.startState.field(findFocused, false) !== tr.state.field(findFocused, false)
     return changed ? tooltipFor(tr.state) : value
   },
   provide: (f) => showTooltip.from(f)

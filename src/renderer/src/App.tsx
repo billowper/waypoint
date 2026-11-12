@@ -8,6 +8,7 @@ import Sidebar from './components/Sidebar'
 import { PathBar, TabBar } from './components/TopBar'
 import Home from './components/Home'
 import DocTab from './components/LinkedDoc'
+import { openFind } from './components/find'
 import Welcome from './components/Welcome'
 import Prompt from './components/Prompt'
 import ContextMenu from './components/ContextMenu'
@@ -181,6 +182,9 @@ export default function App() {
         const p = s.prefs
         const next = k === '0' ? 1 : Math.round((p.uiScale + (k === '-' ? -0.1 : 0.1)) * 100) / 100
         run(() => s.savePrefs({ ...p, uiScale: Math.min(1.5, Math.max(0.75, next)) }))
+      } else if (k === 'f') {
+        // The editor takes Ctrl+F itself when the cursor is in it; this is for when it's elsewhere (the tree, say)
+        if (!e.defaultPrevented && openFind()) e.preventDefault()
       } else if (k === ',') run(s.openSettings)
       else if (k === 'n') run(() => s.newNote())
       else if (k === 'p' || k === 'o') run(() => s.openPicker({ kind: 'notes' }))

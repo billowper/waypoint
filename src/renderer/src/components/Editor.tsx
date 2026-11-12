@@ -23,6 +23,7 @@ import { blockHandles } from './handles'
 import { tableContextMenu } from './tableOps'
 import { wikiComplete } from './wikiComplete'
 import { frontmatterSyntax } from './frontmatterSyntax'
+import { findBar } from './find'
 import Toc, { readHeadings, type Heading } from './Toc'
 
 const SAVE_DELAY = 400
@@ -356,6 +357,7 @@ export default function Editor({ tabId, docId, path, active }: Props) {
             indentOnInput(),
             bracketMatching(),
             highlightSelectionMatches(),
+            findBar,
             EditorView.lineWrapping,
             markdown({ base: markdownLanguage, codeLanguages: languages, extensions: [frontmatterSyntax] }),
             syntaxHighlighting(mdHighlight),
