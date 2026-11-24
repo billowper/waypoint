@@ -140,9 +140,14 @@ function loadMode(slug: string): 'board' | 'list' {
 }
 
 export default function Board({ slug }: { slug: string }) {
-  const { tasks, projects, openFile, openProject, createTask, updateTask } = useStore()
+  const { tasks, projects, openFile, openProject, createTask, updateTask, archiveTasks } = useStore()
   const project = projects.find((p) => p.slug === slug)
-  const mine = tasks.filter((t) => t.project === slug)
+  // The Archived chip swaps the board over to archived tasks (not remembered, like the Claude chip)
+  const [showArchived, setShowArchived] = useState(false)
+  const ofProject = tasks.filter((t) => t.project === slug)
+  const archivedCount = ofProject.filter((t) => t.archived).length
+  const viewingArchived = showArchived && archivedCount > 0
+  const mine = ofProject.filter((t) => !!t.archived === viewingArchived)
   const [mode, setMode] = useState<'board' | 'list'>(() => loadMode(slug))
   const [filter, setFilter] = useState('')
   const [dropOn, setDropOn] = useState<TaskStatus | null>(null)
@@ -190,6 +195,7 @@ export default function Board({ slug }: { slug: string }) {
   const clearAll = () => {
     setFilter('')
     setOnlyClaude(false)
+    setShowArchived(false)
     saveFilters({ ...saved, filters: NO_FILTERS })
   }
   /** In board mode a status filter picks the columns */
@@ -296,6 +302,16 @@ export default function Board({ slug }: { slug: string }) {
             onClick={() => setOnlyClaude(!onlyClaude)}
           >
             Claude <span className="count">{forClaude.filter((t) => t.status !== 'done').length}</span>
+          </button>
+        )}
+        {archivedCount > 0 && (
+          <button
+            className={`filter-chip ${viewingArchived ? 'on' : ''}`}
+            aria-pressed={viewingArchived}
+            title={viewingArchived ? 'Showing archived tasks. Click to go back to the board' : 'Show archived tasks'}
+            onClick={() => setShowArchived(!viewingArchived)}
+          >
+            Archived <span className="count">{archivedCount}</span>
           </button>
         )}
         <label className="board-sort">
@@ -412,11 +428,20 @@ export default function Board({ slug }: { slug: string }) {
               >
                 <h2>
                   {TASK_STATUS_LABEL[status]} <span className="count">{cards.length}</span>
+                  {status === 'done' && !viewingArchived && cards.length > 0 && (
+                    <button
+                      className="col-action"
+                      title={`Archive the ${cards.length} task${cards.length > 1 ? 's' : ''} shown in Done`}
+                      onClick={() => archiveTasks(cards.map((t) => t.path), true)}
+                    >
+                      Archive all
+                    </button>
+                  )}
                 </h2>
                 {cards.map((t) => (
                   <article
                     key={t.path}
-                    className={`task-card priority-${t.priority} ${drag?.task.path === t.path ? 'dragging' : ''}`}
+                    className={`task-card priority-${t.priority} ${t.archived ? 'archived' : ''} ${drag?.task.path === t.path ? 'dragging' : ''}`}
                     onPointerDown={onCardPointerDown(t)}
                     onContextMenu={(e) => showMenu(e, taskMenu(t))}
                     onClick={(e) => {
@@ -428,7 +453,7 @@ export default function Board({ slug }: { slug: string }) {
                     <CardBody t={t} />
                   </article>
                 ))}
-                {adding === status ? (
+                {viewingArchived ? null : adding === status ? (
                   <input
                     className="quick-add"
                     autoFocus
@@ -517,7 +542,9 @@ export default function Board({ slug }: { slug: string }) {
               ))}
             </tbody>
           </table>
-          {sorted.length === 0 && <p className="empty">No tasks{narrowed ? ' match the filter' : ' yet'}.</p>}
+          {sorted.length === 0 && (
+            <p className="empty">No {viewingArchived ? 'archived ' : ''}tasks{narrowed ? ' match the filter' : viewingArchived ? '' : ' yet'}.</p>
+          )}
         </>
       )}
       {drag && (

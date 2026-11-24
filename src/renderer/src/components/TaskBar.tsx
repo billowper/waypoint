@@ -7,7 +7,7 @@ import { dueState } from './Board'
 
 /** Task properties for the open task note, edited without touching its YAML */
 export default function TaskBar({ path }: { path: string }) {
-  const { tasks, updateTask, openBoard, prefs } = useStore()
+  const { tasks, updateTask, archiveTasks, openBoard, prefs } = useStore()
   const task = tasks.find((t) => t.path === path)
   const [title, setTitle] = useState(task?.title ?? '')
   const [labels, setLabels] = useState(task?.labels.join(', ') ?? '')
@@ -91,6 +91,14 @@ export default function TaskBar({ path }: { path: string }) {
           Send to Claude
         </button>
       )}
+      <button
+        className={`filter-chip ${task.archived ? 'on' : ''}`}
+        aria-pressed={!!task.archived}
+        title={task.archived ? 'Archived: hidden from the board, Home and the project page. Click to bring it back' : 'Archive: hide it from the board, Home and the project page'}
+        onClick={() => archiveTasks([path], !task.archived)}
+      >
+        {task.archived ? 'Archived' : 'Archive'}
+      </button>
     </div>
   )
 }

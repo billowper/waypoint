@@ -61,13 +61,13 @@ server.registerTool(
     const lines = [`Vault: ${vault.root}`, '']
     if (current) {
       const open = tasks
-        .filter((t) => t.project === current!.slug && t.status !== 'done' && t.status !== 'backlog')
+        .filter((t) => t.project === current!.slug && t.status !== 'done' && t.status !== 'backlog' && !t.archived)
         .sort((a, b) => (a.due || '9999').localeCompare(b.due || '9999'))
       lines.push(`This session's project: ${projectSummary(current, tasks)}`)
       if (current.overview) lines.push('', 'Overview:', current.overview.slice(0, 1200))
       lines.push('', open.length ? 'Open tasks (To do / Doing):' : 'No open tasks.', ...open.map(taskLine))
       // Tasks the user assigned to Claude (the "claude" label), whatever column they're in
-      const yours = tasks.filter((t) => t.project === current!.slug && t.status !== 'done' && isForClaude(t))
+      const yours = tasks.filter((t) => t.project === current!.slug && t.status !== 'done' && !t.archived && isForClaude(t))
       if (yours.length) lines.push('', `Assigned to you (label "${CLAUDE_LABEL}"):`, ...yours.map(taskLine))
       // Claude's own notes for the project (M4): memory in full while it's short, plus the last session
       const memory = (await readMemory(vault, current)).trim()
@@ -147,22 +147,24 @@ server.registerTool(
   {
     title: 'List tasks',
     description:
-      'Tasks for a project (default: this session\'s) or every project. Done tasks are left out unless asked for. Sorted by due date.',
+      'Tasks for a project (default: this session\'s) or every project. Done and archived tasks are left out unless asked for. Sorted by due date.',
     inputSchema: {
       project: z.string().optional().describe('Project slug or title; omit for this session\'s project; "*" for all projects'),
       status: z.array(z.enum(TASK_STATUSES)).optional().describe('Only these statuses'),
       label: z.string().optional().describe('Only tasks with this label, e.g. "claude" for the ones assigned to you'),
       include_done: z.boolean().optional().describe('Include Done tasks (default false)'),
+      include_archived: z.boolean().optional().describe('Include archived tasks (default false)'),
       due_within_days: z.number().int().optional().describe('Only tasks due within this many days (overdue included)')
     },
     annotations: READ_ONLY
   },
   safely(
-    async (a: { project?: string; status?: TaskStatus[]; label?: string; include_done?: boolean; due_within_days?: number }) => {
+    async (a: { project?: string; status?: TaskStatus[]; label?: string; include_done?: boolean; include_archived?: boolean; due_within_days?: number }) => {
       const vault = openVault()
       const all = a.project === '*'
       const slug = all ? undefined : (await pickProject(server, vault, a.project)).slug
       let tasks = await listTasks(vault, slug)
+      if (!a.include_archived) tasks = tasks.filter((t) => !t.archived)
       if (a.status?.length) tasks = tasks.filter((t) => a.status!.includes(t.status))
       else if (!a.include_done) tasks = tasks.filter((t) => t.status !== 'done')
       const label = a.label?.trim().toLowerCase()

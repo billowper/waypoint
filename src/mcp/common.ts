@@ -94,14 +94,17 @@ export function taskLine(t: Task): string {
   if (t.priority !== 'medium') bits.push(`priority ${t.priority}`)
   if (t.due) bits.push(t.due < today() && t.status !== 'done' ? `OVERDUE (due ${t.due})` : `due ${t.due}`)
   if (t.labels.length) bits.push(`labels: ${t.labels.join(', ')}`)
+  if (t.archived) bits.push('ARCHIVED')
   return `- ${bits.join(' · ')}  (${t.path})`
 }
 
 export function projectSummary(p: Project, tasks: Task[]): string {
-  const mine = tasks.filter((t) => t.project === p.slug)
+  const all = tasks.filter((t) => t.project === p.slug)
+  const mine = all.filter((t) => !t.archived)
+  const archived = all.length - mine.length
   const counts = TASK_STATUSES.map((s) => `${TASK_STATUS_LABEL[s]} ${mine.filter((t) => t.status === s).length}`).join(', ')
   const overdue = mine.filter((t) => t.status !== 'done' && t.due && t.due < today()).length
-  return `${p.title} (slug: ${p.slug}, status: ${p.status})${p.tags.length ? ` tags: ${p.tags.join(', ')}` : ''}\n  tasks: ${counts}${overdue ? `, ${overdue} overdue` : ''}${p.repo.path ? `\n  repo: ${p.repo.path}` : ''}`
+  return `${p.title} (slug: ${p.slug}, status: ${p.status})${p.tags.length ? ` tags: ${p.tags.join(', ')}` : ''}\n  tasks: ${counts}${overdue ? `, ${overdue} overdue` : ''}${archived ? `, ${archived} archived` : ''}${p.repo.path ? `\n  repo: ${p.repo.path}` : ''}`
 }
 
 export const text = (t: string) => ({ content: [{ type: 'text' as const, text: t }] })

@@ -138,7 +138,8 @@ export function registerWriteTools(server: McpServer) {
       title: 'Update task',
       description:
         'Change a task: move it between statuses (backlog, todo, doing, done), retitle, reprioritise, set due date or labels, ' +
-        'replace its description, or add a dated progress note. Only the fields given change.',
+        'replace its description, add a dated progress note, or archive it (hides it from the board; it keeps its status). ' +
+        'Only the fields given change.',
       inputSchema: {
         task: z.string().describe('Task ID (e.g. WR-003) or path'),
         status: z.enum(TASK_STATUSES).optional(),
@@ -147,17 +148,19 @@ export function registerWriteTools(server: McpServer) {
         due: dueSchema.optional(),
         labels: z.array(z.string()).optional().describe('Replaces the labels'),
         description: z.string().optional().describe('Replaces the whole description (markdown body)'),
-        add_note: z.string().optional().describe('Appended to the description as a dated progress note')
+        add_note: z.string().optional().describe('Appended to the description as a dated progress note'),
+        archived: z.boolean().optional().describe('true archives the task, false brings it back')
       },
       annotations: WRITE
     },
-    safely(async (a: { task: string; status?: TaskStatus; title?: string; priority?: Priority; due?: string; labels?: string[]; description?: string; add_note?: string }) => {
+    safely(async (a: { task: string; status?: TaskStatus; title?: string; priority?: Priority; due?: string; labels?: string[]; description?: string; add_note?: string; archived?: boolean }) => {
       const vault = openVault()
       await flushApp(vault)
       const before = await findTask(vault, a.task)
       const old = await textBefore(vault, before.path)
       const patch: Partial<TaskFields> = {}
       for (const k of ['status', 'title', 'priority', 'due', 'labels'] as const) if (a[k] !== undefined) (patch as any)[k] = a[k]
+      if (a.archived !== undefined) patch.archived = a.archived ? today() : ''
       await updateTask(vault, before.path, patch)
       if (a.description !== undefined || a.add_note?.trim()) {
         const { data, body } = splitFrontmatter(await vault.read(before.path))
@@ -169,6 +172,7 @@ export function registerWriteTools(server: McpServer) {
       const what = [
         before.status !== after.status ? `${before.status} → ${after.status}` : '',
         ...(['title', 'priority', 'due'] as const).filter((k) => before[k] !== after[k]).map((k) => `${k}: ${after[k] || '(none)'}`),
+        !!before.archived !== !!after.archived ? (after.archived ? 'archived' : 'unarchived') : '',
         a.labels ? 'labels' : '',
         a.description !== undefined ? 'description' : '',
         a.add_note ? 'progress note' : ''

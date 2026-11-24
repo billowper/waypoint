@@ -30,7 +30,7 @@ export default function ProjectPage({ slug }: { slug: string }) {
   const { projects, notes, tasks, boards, openFile, newNote, linkFile, refresh, openBoard, openGallery, createTask, openCanvas, createBoard } =
     useStore()
   const project = projects.find((p) => p.slug === slug)
-  const projectTasks = tasks.filter((t) => t.project === slug)
+  const projectTasks = tasks.filter((t) => t.project === slug && !t.archived)
   const projectBoards = boards.filter((b) => b.startsWith(`projects/${slug}/`))
   const [s, setS] = useState<ProjectSettings | null>(project ? settingsOf(project) : null)
   const [tagText, setTagText] = useState(project?.tags.join(', ') ?? '')

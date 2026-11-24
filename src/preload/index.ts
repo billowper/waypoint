@@ -53,6 +53,7 @@ const api: Api = {
   tasks: (project) => ipcRenderer.invoke('tasks:list', project),
   createTask: (project, fields) => ipcRenderer.invoke('tasks:create', project, fields),
   updateTask: (rel, patch) => ipcRenderer.invoke('tasks:update', rel, patch),
+  archiveTasks: (rels, on) => ipcRenderer.invoke('tasks:archive', rels, on),
   vaultSettings: () => ipcRenderer.invoke('settings:get'),
   saveVaultSettings: (settings) => ipcRenderer.invoke('settings:save', settings),
   gitStatus: () => ipcRenderer.invoke('git:status'),

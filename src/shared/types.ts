@@ -149,6 +149,11 @@ export interface TaskFields {
   /** YYYY-MM-DD or '' */
   due: string
   labels: string[]
+  /**
+   * When the task was archived (YYYY-MM-DD), or '' if it isn't. Archived tasks keep their status but are hidden from
+   * the board, Home, the project page and nudges until shown with the board's Archived chip.
+   */
+  archived: string
 }
 
 export interface Task extends TaskFields {
@@ -309,6 +314,8 @@ export interface Api {
   /** Returns the new task's path */
   createTask(project: string, fields: Partial<TaskFields>): Promise<string>
   updateTask(rel: string, patch: Partial<TaskFields>): Promise<Task>
+  /** Archive (on) or un-archive several tasks; returns how many changed */
+  archiveTasks(rels: string[], on: boolean): Promise<number>
   vaultSettings(): Promise<VaultSettings>
   saveVaultSettings(settings: VaultSettings): Promise<void>
   gitStatus(): Promise<GitStatus>

@@ -14,7 +14,7 @@ export default function Home() {
   const active = projects.filter((p) => p.status === 'active')
   // My work: open tasks in projects that aren't finished, overdue first
   const liveProjects = new Set(projects.filter((p) => p.status !== 'done').map((p) => p.slug))
-  const open = tasks.filter((t) => t.status !== 'done' && t.status !== 'backlog' && liveProjects.has(t.project))
+  const open = tasks.filter((t) => t.status !== 'done' && t.status !== 'backlog' && !t.archived && liveProjects.has(t.project))
   const myWork = [...open].sort(
     (a, b) => (a.due || '9999').localeCompare(b.due || '9999') || byUrgency(a, b)
   )

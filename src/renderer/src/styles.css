@@ -1997,6 +1997,26 @@ button.crumb.current:hover {
   color: var(--text-faint);
   margin: 2px 4px 10px;
   font-weight: 600;
+  display: flex;
+  align-items: baseline;
+}
+
+/* "Archive all" on the Done column: quiet until hovered */
+.column h2 .col-action {
+  margin-left: auto;
+  background: none;
+  border: none;
+  padding: 0 2px;
+  font: inherit;
+  letter-spacing: normal;
+  text-transform: none;
+  color: var(--text-dim);
+  cursor: pointer;
+}
+
+.column h2 .col-action:hover {
+  color: var(--text-strong);
+  text-decoration: underline;
 }
 
 .count {
@@ -2016,6 +2036,10 @@ button.crumb.current:hover {
 
 .task-card:hover {
   border-color: var(--active);
+}
+
+.task-card.archived {
+  opacity: 0.7;
 }
 
 .task-card.dragging {

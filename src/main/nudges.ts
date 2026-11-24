@@ -42,7 +42,7 @@ export function inQuietTime(p: Prefs, now = new Date()): boolean {
 export async function candidates(vault: Vault, p: Prefs, now = new Date()): Promise<Nudge[]> {
   const projects = await listProjects(vault)
   const live = new Map(projects.filter((x) => x.status !== 'done').map((x) => [x.slug, x]))
-  const tasks = (await listTasks(vault)).filter((t) => t.status !== 'done' && live.has(t.project))
+  const tasks = (await listTasks(vault)).filter((t) => t.status !== 'done' && !t.archived && live.has(t.project))
   const today = isoDay(now)
   const tomorrow = isoDay(new Date(now.getTime() + 86400000))
   const open = (t: Task, nudge: Omit<Nudge, 'command' | 'key'>): Nudge => ({

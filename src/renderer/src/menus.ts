@@ -90,7 +90,7 @@ function assignItems(t: Task): MenuItem[] {
   return [{ label: assigned ? 'Unassign from Claude' : 'Assign to Claude', run: () => setForClaude(t, !assigned) }]
 }
 
-/** A task anywhere it's listed: open it, send it to Claude Code, move it to another column, or set its priority */
+/** A task anywhere it's listed: open it, send it to Claude Code, move it, set its priority, archive or delete it */
 export function taskMenu(t: Task): MenuItem[] {
   const s = store()
   return [
@@ -107,7 +107,12 @@ export function taskMenu(t: Task): MenuItem[] {
     ...PRIORITIES_DESC.filter((p) => p !== t.priority).map((p) => ({
       label: `Priority: ${PRIORITY_LABEL[p]}`,
       run: () => s.updateTask(t.path, { priority: p })
-    }))
+    })),
+    sep,
+    t.archived
+      ? { label: 'Unarchive', run: () => s.archiveTasks([t.path], false) }
+      : { label: 'Archive', run: () => s.archiveTasks([t.path], true) },
+    { label: 'Delete', danger: true, run: () => s.remove(t.path) }
   ]
 }
 

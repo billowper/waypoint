@@ -21,6 +21,8 @@ function taskFrom(path: string, project: string, text: string): Task {
   const status = str(data.status) as TaskStatus
   const priority = str(data.priority) as Priority
   const due = str(data.due)
+  // `archived: 2026-11-24` normally; `archived: true` (typed by hand) counts too
+  const archived = data.archived === true ? ARCHIVED_UNDATED : data.archived === false ? '' : str(data.archived).trim()
   return {
     path,
     project,
@@ -31,9 +33,13 @@ function taskFrom(path: string, project: string, text: string): Task {
     due: isDate(due) ? due : '',
     labels: strList(data.labels),
     created: str(data.created),
-    completed: str(data.completed)
+    completed: str(data.completed),
+    archived
   }
 }
+
+/** Stands for `archived: true` (no date), so writing the task back keeps it as it was */
+const ARCHIVED_UNDATED = 'yes'
 
 /** Every task in every project (or one project), read from projects/<slug>/tasks/*.md */
 export async function listTasks(vault: Vault, project?: string): Promise<Task[]> {
@@ -60,7 +66,9 @@ function writeFields(data: Record<string, unknown>, t: TaskFields & { id: string
   if (t.labels.length) out.labels = t.labels
   out.created = t.created || today()
   if (t.completed) out.completed = t.completed
-  for (const [k, v] of Object.entries(data)) if (!(k in out) && !['due', 'labels', 'completed'].includes(k)) out[k] = v
+  if (t.archived) out.archived = t.archived === ARCHIVED_UNDATED ? true : t.archived
+  for (const [k, v] of Object.entries(data))
+    if (!(k in out) && !['due', 'labels', 'completed', 'archived'].includes(k)) out[k] = v
   return out
 }
 
@@ -86,6 +94,7 @@ export async function createTask(vault: Vault, slug: string, fields: Partial<Tas
         priority: fields.priority ?? 'medium',
         due: fields.due ?? '',
         labels: fields.labels ?? [],
+        archived: '',
         created: today(),
         completed: status === 'done' ? today() : ''
       }
@@ -106,8 +115,22 @@ export async function updateTask(vault: Vault, rel: string, patch: Partial<TaskF
   const cur = taskFrom(rel, project, text)
   const next = { ...cur, ...patch }
   if (patch.status && patch.status !== cur.status) next.completed = patch.status === 'done' ? today() : ''
+  // Archiving stamps today's date (whatever the caller sent); un-archiving clears it; already archived keeps its date
+  if (patch.archived !== undefined) next.archived = patch.archived ? cur.archived || today() : ''
   await vault.write(rel, joinFrontmatter(writeFields(data, next), body))
   return taskFrom(rel, project, await vault.read(rel))
 }
 
-export const isTaskPath = (rel: string) => /^projects\/[^/]+\/tasks\/.+\.md$/i.test(rel)
+/** Archive (or bring back) several tasks at once, e.g. everything in Done. Returns how many changed */
+export async function archiveTasks(vault: Vault, rels: string[], on: boolean): Promise<number> {
+  let n = 0
+  for (const rel of rels) {
+    const text = isTaskPath(rel) ? await vault.read(rel).catch(() => null) : null
+    if (text === null || !!taskFrom(rel, rel.split('/')[1], text).archived === on) continue
+    await updateTask(vault, rel, { archived: on ? today() : '' })
+    n++
+  }
+  return n
+}
+
+export const isTaskPath =(rel: string) => /^projects\/[^/]+\/tasks\/.+\.md$/i.test(rel)

@@ -125,7 +125,7 @@ export default function FileTree({ nodes, dir, pinned, depth }: Props) {
               >
                 <span className="chev spacer tree-icon">▦</span>
                 {n.name}
-                <span className="tree-count">{tasks.filter((t) => t.project === boardOf && t.status !== 'done').length || ''}</span>
+                <span className="tree-count">{tasks.filter((t) => t.project === boardOf && t.status !== 'done' && !t.archived).length || ''}</span>
               </button>
             </li>
           )

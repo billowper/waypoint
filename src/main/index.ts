@@ -17,7 +17,7 @@ import {
   saveProjectOrder
 } from './projects'
 import { CLI_NOT_FOUND, claudeStatus, connectClaude, disconnectClaude, openInClaudeApp, openInClaudeTerminal, reposSetUp, taskPrompt, writeInstructions } from './claudeCode'
-import { createTask, isTaskPath, listTasks, updateTask } from './tasks'
+import { archiveTasks, createTask, isTaskPath, listTasks, updateTask } from './tasks'
 import { VaultGit } from './git'
 import type { LinkedDoc, ProjectSettings, TaskFields, VaultSettings } from '@shared/types'
 import { createLinked, isInside, isMarkdownFile, linkTarget, nameFor, projectOfPath, readLinked, sourceFor } from './linkedDocs'
@@ -629,6 +629,7 @@ function registerIpc() {
     if (!isTaskPath(rel)) throw new Error('Not a task')
     return updateTask(requireVault(), rel, patch)
   })
+  ipcMain.handle('tasks:archive', (_e, rels: string[], on: boolean) => archiveTasks(requireVault(), rels, on))
   ipcMain.handle('boards:create', (_e, dir: string, name: string) => createBoard(requireVault(), dir, name))
   ipcMain.handle('projects:list', () => listProjects(requireVault()))
   ipcMain.handle('projects:order', (_e, slugs: string[]) => saveProjectOrder(requireVault(), slugs))

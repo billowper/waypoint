@@ -121,6 +121,8 @@ interface State {
   openGallery(slug: string, opts?: { newTab?: boolean }): void
   createTask(project: string, fields: Partial<TaskFields>): Promise<string | null>
   updateTask(path: string, patch: Partial<TaskFields>): Promise<void>
+  /** Archive (on) or bring back tasks; they keep their status */
+  archiveTasks(paths: string[], on: boolean): Promise<void>
   /** Re-check which projects are set up for Claude Code */
   refreshClaude(): Promise<void>
   refreshGit(): Promise<void>
@@ -617,6 +619,22 @@ ${(e as Error).message}`)
         await enqueue(() => window.api.updateTask(path, patch))
       } catch (e) {
         alert(`Couldn't update the task.
+
+${(e as Error).message}`)
+      }
+      await get().refresh()
+    },
+
+    async archiveTasks(paths, on) {
+      if (!paths.length) return
+      // Optimistic like updateTask; main stamps the real date
+      const stamp = new Date().toISOString().slice(0, 10)
+      set((s) => ({ tasks: s.tasks.map((t) => (paths.includes(t.path) ? { ...t, archived: on ? t.archived || stamp : '' } : t)) }))
+      try {
+        await flushEditors()
+        await enqueue(() => window.api.archiveTasks(paths, on))
+      } catch (e) {
+        alert(`Couldn't ${on ? 'archive' : 'restore'} the task${paths.length > 1 ? 's' : ''}.
 
 ${(e as Error).message}`)
       }
