@@ -1,6 +1,7 @@
 import { useEffect, useState } from 'react'
 import { DEFAULT_COLORS, DEFAULT_FONTS, type FontPrefs, type Prefs, type ThemeColors } from '@shared/prefs'
 import { palette } from '@shared/palette'
+import type { PluginTheme } from '@shared/pluginApi'
 
 const dark = () => window.matchMedia('(prefers-color-scheme: dark)')
 
@@ -42,4 +43,28 @@ export function useApplyTheme(pref: Prefs['theme'] | undefined, colors?: ThemeCo
     window.api.setChrome?.(vars['--bg'], vars['--text'])
   }, [theme, c.accent, f.ui, f.editor, f.mono, f.size])
   return theme
+}
+
+/** Which of the app's own CSS variables each --wp-* variable a plugin page gets is taken from (docs/plugins.md) */
+const PLUGIN_VARS: Record<string, string> = {
+  '--wp-bg': '--bg',
+  '--wp-bg-2': '--sidebar',
+  '--wp-panel': '--panel',
+  '--wp-fg': '--text',
+  '--wp-muted': '--text-dim',
+  '--wp-border': '--border',
+  '--wp-accent': '--accent',
+  '--wp-accent-fg': '--accent-ink',
+  '--wp-danger': '--danger',
+  '--wp-font': '--sans',
+  '--wp-mono': '--mono'
+}
+
+/** The colours and fonts the app has right now (project colours included), for a plugin page */
+export function pluginTheme(): PluginTheme {
+  const root = document.documentElement
+  const style = getComputedStyle(root)
+  const vars: Record<string, string> = {}
+  for (const [wp, app] of Object.entries(PLUGIN_VARS)) vars[wp] = style.getPropertyValue(app).trim()
+  return { mode: root.dataset.theme === 'light' ? 'light' : 'dark', vars }
 }

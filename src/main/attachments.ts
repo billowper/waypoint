@@ -13,7 +13,8 @@ import type { Vault } from './vault'
  */
 
 export const ATTACHMENTS = 'attachments'
-const MAX = 25 * 1024 * 1024
+/** Largest picture saveAttachment takes (host.attachments.add checks the size before reading the file) */
+export const MAX = 25 * 1024 * 1024
 export const IMAGE_EXT = ['png', 'jpg', 'jpeg', 'gif', 'webp', 'svg', 'bmp', 'avif']
 
 const isImage = (name: string) => IMAGE_EXT.includes(extname(name).slice(1).toLowerCase())

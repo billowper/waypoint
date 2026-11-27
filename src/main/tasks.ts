@@ -72,7 +72,46 @@ function writeFields(data: Record<string, unknown>, t: TaskFields & { id: string
   return out
 }
 
-export async function createTask(vault: Vault, slug: string, fields: Partial<TaskFields>): Promise<string> {
+/** One task by its vault-relative path */
+export async function readTask(vault: Vault, rel: string): Promise<Task> {
+  return taskFrom(rel, rel.split('/')[1], await vault.read(rel))
+}
+
+/** Every task (or one project's) with its whole front matter as `data`: for plugins, which keep their own keys on tasks */
+export async function listTasksWithData(vault: Vault, project?: string): Promise<(Task & { data: Record<string, unknown> })[]> {
+  const tasks = await listTasks(vault, project)
+  return Promise.all(
+    tasks.map(async (t) => ({ ...t, data: splitFrontmatter(await vault.read(t.path).catch(() => '')).data as Record<string, unknown> }))
+  )
+}
+
+/** Like getTask, plus the whole front matter as `data` */
+export async function getTaskWithData(vault: Vault, id: string): Promise<(Task & { body: string; data: Record<string, unknown> }) | null> {
+  const task = (await listTasks(vault)).find((t) => t.id.toLowerCase() === id.trim().toLowerCase())
+  if (!task) return null
+  const { data, body } = splitFrontmatter(await vault.read(task.path))
+  return { ...task, body, data: data as Record<string, unknown> }
+}
+
+/** A task by its ID (e.g. "THRO-152") across all projects, with the markdown under its frontmatter; null if there is none */
+export async function getTask(vault: Vault, id: string): Promise<(Task & { body: string }) | null> {
+  const task = (await listTasks(vault)).find((t) => t.id.toLowerCase() === id.trim().toLowerCase())
+  if (!task) return null
+  return { ...task, body: splitFrontmatter(await vault.read(task.path)).body }
+}
+
+/** What goes under a new task's frontmatter: a blank line (as always), then the body if there is one */
+const taskBody = (body: string) => (body.trim() ? `\n${body.replace(/^\s*\n/, '').trimEnd()}\n` : '\n')
+
+/** `body` is the markdown below the frontmatter (e.g. from a plugin); a new task has none by default.
+ * `extra`: more front-matter keys (a plugin's own); the task's own keys win, and updates keep them (writeFields). */
+export async function createTask(
+  vault: Vault,
+  slug: string,
+  fields: Partial<TaskFields>,
+  body = '',
+  extra: Record<string, unknown> = {}
+): Promise<string> {
   const project = await readProject(vault, slug)
   const key = project.key || 'TASK'
   const dir = `${PROJECTS_DIR}/${slug}/${TASKS}`
@@ -86,7 +125,7 @@ export async function createTask(vault: Vault, slug: string, fields: Partial<Tas
     const rel = `${dir}/${id}.md`
     const status = fields.status ?? 'todo'
     const data = writeFields(
-      {},
+      extra,
       {
         id,
         title: fields.title?.trim() || 'New task',
@@ -100,7 +139,7 @@ export async function createTask(vault: Vault, slug: string, fields: Partial<Tas
       }
     )
     try {
-      await fs.writeFile(vault.abs(rel), joinFrontmatter(data, '\n'), { flag: 'wx' })
+      await fs.writeFile(vault.abs(rel), joinFrontmatter(data, taskBody(body)), { flag: 'wx' })
       return rel
     } catch (e: any) {
       if (e.code !== 'EEXIST') throw e

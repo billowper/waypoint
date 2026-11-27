@@ -18,10 +18,12 @@ import ProjectPage from './components/ProjectPage'
 import IconPicker from './components/IconPicker'
 import Board from './components/Board'
 import Gallery from './components/Gallery'
+import PluginView from './components/PluginView'
 import TaskBar from './components/TaskBar'
 import History from './components/History'
 import Settings from './components/Settings'
 import NudgeBanner from './components/NudgeBanner'
+import NoticeToast from './components/NoticeToast'
 
 // Excalidraw is large; only load it when a board is opened
 const Canvas = lazy(() => import('./components/Canvas'))
@@ -65,7 +67,7 @@ export default function App() {
   // The OS window title (taskbar, Alt+Tab) follows the active tab
   const title = useStore((s) => {
     const t = s.tabs.find((x) => x.id === s.activeTab)
-    return t ? tabTitle(t, s.projects) : ''
+    return t ? tabTitle(t, s.projects, s.plugins) : ''
   })
   useEffect(() => {
     document.title = title ? `${title} — Waypoint` : 'Waypoint'
@@ -127,6 +129,7 @@ export default function App() {
       else if (c.kind === 'open') s.notes.includes(c.path) && s.openFile(c.path, { newTab: c.newTab, reveal: c.reveal })
       else if (c.kind === 'open-project') s.openProject(c.slug)
       else if (c.kind === 'open-board') s.openBoard(c.slug)
+      else if (c.kind === 'open-plugin') s.openPlugin(c.plugin, c.view, c.state)
       else if (c.kind === 'reveal') s.revealFolder(c.path)
     })
   }, [])
@@ -229,6 +232,7 @@ export default function App() {
           </button>
         )}
         <NudgeBanner />
+        <NoticeToast />
         <PathBar />
         {view.kind === 'file' && <TaskBar path={view.path} />}
         <div className="content">
@@ -248,6 +252,12 @@ export default function App() {
                   ) : null
                 )}
               </Suspense>
+            )}
+            {/* Plugin pages stay loaded like boards, so switching tabs keeps what they show */}
+            {tabs.map((t) =>
+              t.view.kind === 'plugin' ? (
+                <PluginView key={t.id} tabId={t.id} plugin={t.view.plugin} view={t.view.view} state={t.view.state} active={t.id === activeTab} />
+              ) : null
             )}
             {/* Every open note keeps its editor (and undo history); only the active one shows */}
             {tabs.map((t) =>

@@ -61,6 +61,21 @@ import { copyImageData, copyImageFile, dragFile, serveGalleryMedia } from './gal
 import { serveBridge, type BridgeRequest } from './bridge'
 import { hashText, markUndone, readChanges, snapshotPath } from './claudeLog'
 import type { Server } from 'net'
+import {
+  addDevPath,
+  callPlugin,
+  ensureLog,
+  initPlugins,
+  listPlugins,
+  noteVaultChanges,
+  removeDevPath,
+  restartPlugin,
+  setPluginEnabled,
+  startPlugins,
+  stopPlugins
+} from './plugins/manager'
+import { servePlugins } from './plugins/serve'
+import { externalUrlOk } from './plugins/files'
 
 let win: BrowserWindow | null = null
 let vault: Vault | null = null
@@ -183,6 +198,7 @@ function unwatchLinked() {
 }
 
 async function setVault(path: string | undefined) {
+  await stopPlugins() // plugins belong to the vault that was open
   await watcher?.close()
   watcher = null
   unwatchLinked()
@@ -200,6 +216,7 @@ async function setVault(path: string | undefined) {
     await moveCapturesToIdeas(vault).catch((e) => console.error('[ideas]', e)) // tried again next time
   }
   scheduleAutoCommit()
+  await startPlugins().catch((e) => console.error('[plugins]', e)) // the enabled ones; nothing happens with none on
 }
 
 /** Once per vault: quick captures used to live in notes/Captures and inbox.md */
@@ -235,7 +252,9 @@ async function moveCapturesToIdeas(v: Vault) {
 
 /** File changes go to every Waypoint window (each has its own tree, editors, search) */
 function notify(events: ChangeEvent[]) {
-  if (events.length) broadcast('vault:changed', [events])
+  if (!events.length) return
+  broadcast('vault:changed', [events])
+  noteVaultChanges(events) // plugins that listen for task changes
 }
 
 function startWatching(v: Vault) {
@@ -376,6 +395,8 @@ async function undoClaudeChange(id: string, asker: BrowserWindow): Promise<boole
   const c = (await readChanges(v)).find((x) => x.id === id)
   if (!c) throw new Error('That change is no longer in the log.')
   if (c.undone) return true
+  // The log also holds plugins' changes (tool "plugin:<id>"): the dialogs name who made it
+  const who = c.tool.startsWith('plugin:') ? `The ${c.tool.slice(7)} plugin` : 'Claude'
   const exists = existsSync(v.abs(c.path))
   if (c.action === 'renamed' || c.action === 'moved') {
     if (!c.from) throw new Error("The log doesn't say where it was before.")
@@ -386,7 +407,7 @@ async function undoClaudeChange(id: string, asker: BrowserWindow): Promise<boole
       c.action === 'renamed' ? vv.rename(c.path, posix.basename(from), true) : vv.move(c.path, posix.dirname(from))
     )
   } else if (c.action === 'created') {
-    if (exists && !(await trashPath(c.path, asker, undefined, 'Claude created it; undoing removes it.'))) return false
+    if (exists && !(await trashPath(c.path, asker, undefined, `${who} created it; undoing removes it.`))) return false
   } else {
     const old = c.hasSnapshot ? await readFile(v.abs(snapshotPath(c.id)), 'utf8').catch(() => null) : null
     if (old === null) throw new Error("The version from before this change wasn't kept (undo keeps them for 30 days).")
@@ -398,8 +419,8 @@ async function undoClaudeChange(id: string, asker: BrowserWindow): Promise<boole
         defaultId: 1,
         cancelId: 1,
         title: 'Undo',
-        message: `"${basename(c.path)}" has changed since Claude edited it.`,
-        detail: "Undoing puts back the version from before Claude's change, so the later changes go too."
+        message: `"${basename(c.path)}" has changed since ${who} edited it.`,
+        detail: `Undoing puts back the version from before ${who}'s change, so the later changes go too.`
       })
       if (response !== 0) return false
     }
@@ -840,6 +861,31 @@ function registerIpc() {
   })
   ipcMain.handle('fonts:list', () => installedFonts())
 
+  // Plugins (docs/plugins.md). Only the app's own page may ask: a plugin's frame has no preload, but check anyway
+  const appFrame = (e: Electron.IpcMainInvokeEvent) => {
+    if (e.senderFrame && e.senderFrame !== e.sender.mainFrame) throw new Error('Not allowed from here')
+  }
+  ipcMain.handle('plugin:list', () => listPlugins())
+  ipcMain.handle('plugin:enable', (e, id: string, on: boolean) => (appFrame(e), setPluginEnabled(id, !!on)))
+  ipcMain.handle('plugin:restart', (e, id: string) => (appFrame(e), restartPlugin(id)))
+  ipcMain.handle('plugin:openLog', async (e, id: string) => {
+    appFrame(e)
+    const err = await shell.openPath(await ensureLog(id))
+    if (err) throw new Error(err)
+  })
+  ipcMain.handle('plugin:addDevPath', (e, dir: string) => (appFrame(e), addDevPath(dir)))
+  ipcMain.handle('plugin:removeDevPath', (e, dir: string) => (appFrame(e), removeDevPath(dir)))
+  ipcMain.handle('plugin:call', (e, id: string, method: string, params: unknown) => {
+    appFrame(e)
+    if (typeof id !== 'string' || typeof method !== 'string') throw new Error('Bad plugin call')
+    return callPlugin(id, method, params)
+  })
+  ipcMain.handle('plugin:openExternal', async (e, url: string) => {
+    appFrame(e)
+    if (!externalUrlOk(url)) throw new Error('Only http(s), mailto and claude:// links can be opened')
+    await shell.openExternal(url)
+  })
+
   // Icons for notes, boards, folders, tasks and projects
   const iconChanged = () => broadcast('icons:changed', [])
   ipcMain.handle('icons:get', () => readIcons(requireVault()))
@@ -988,7 +1034,8 @@ if (!gotLock) {
     quitting = true
     if (quitFlushed) return
     e.preventDefault()
-    flushOthers().finally(() => {
+    // Plugins get their 5 s to deactivate while the windows save
+    Promise.allSettled([flushOthers(), stopPlugins()]).finally(() => {
       quitFlushed = true
       app.quit()
     })
@@ -1007,6 +1054,8 @@ if (!gotLock) {
     serveIcons(() => vault)
     serveAttachments(() => vault, (abs) => [...linkedRoots].some((root) => isInside(root, abs)))
     serveGalleryMedia(inGallery)
+    servePlugins()
+    initPlugins({ vault: () => vault, indexUpdate: async (rel) => void (await requireIndex().update(rel)), command: runCommand })
     initWindows({
       main: () => win,
       create: (opts, hash) => makeAppWindow(opts, hash),

@@ -1,4 +1,5 @@
 import type { Prefs } from './prefs'
+import type { PluginInfo, PluginResult } from './pluginApi'
 
 export interface TreeNode {
   name: string
@@ -213,6 +214,8 @@ export type ViewRef =
   | { kind: 'project'; slug: string }
   | { kind: 'board'; slug: string }
   | { kind: 'gallery'; slug: string }
+  /** A page of a plugin (docs/plugins.md); `state` is the tab's own, saved with it */
+  | { kind: 'plugin'; plugin: string; view: string; state?: unknown }
 
 /** Shown as a banner when Bill clicks a nudge, so he can mute or snooze it */
 export interface NudgeInfo {
@@ -233,6 +236,8 @@ export type AppCommand =
   | { kind: 'open-board'; slug: string }
   | { kind: 'snooze'; minutes: number }
   | { kind: 'reveal'; path: string }
+  /** A plugin's toast, or host.openView, opens one of its views */
+  | { kind: 'open-plugin'; plugin: string; view: string; state?: unknown }
   /** Show a nudge as a banner in the app (used when the window is in front) */
   | { kind: 'nudge'; nudge: NudgeInfo }
 
@@ -393,6 +398,23 @@ export interface Api {
   createBoard(dir: string, name: string): Promise<string>
   /** Show a nudge right away (ignores timing rules; for trying it out) */
   nudgeNow(): Promise<void>
+  /** Plugins found, with their switches and status (docs/plugins.md) */
+  plugins(): Promise<PluginInfo[]>
+  pluginEnable(id: string, on: boolean): Promise<void>
+  pluginRestart(id: string): Promise<void>
+  /** Open the plugin's plugin.log */
+  pluginOpenLog(id: string): Promise<void>
+  /** Load a plugin from a folder in place (it starts off); throws if the folder has no plugin.json */
+  pluginAddDevPath(dir: string): Promise<void>
+  pluginRemoveDevPath(dir: string): Promise<void>
+  /** A page's waypoint.call, forwarded to the plugin; errors come back as data so `status` survives */
+  pluginCall(id: string, method: string, params: unknown): Promise<PluginResult>
+  /** A page's waypoint.openExternal (http(s), mailto, claude:// only) */
+  pluginOpenExternal(url: string): Promise<void>
+  /** A plugin was switched on or off, started, stopped or failed, or the list of plugins changed */
+  onPluginsChanged(cb: () => void): () => void
+  /** A plugin's main module sent an event with host.emit (to every window; each forwards it to its pages) */
+  onPluginEvent(cb: (plugin: string, event: string, data: unknown) => void): () => void
 }
 
 /** Whether Claude Code is installed and knows about Waypoint (see src/main/claudeCode.ts) */

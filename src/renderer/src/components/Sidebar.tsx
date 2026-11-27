@@ -8,6 +8,9 @@ import SearchPanel from './SearchPanel'
 import { projectMenu, showMenu, treeMenu } from '../menus'
 import GitPanel, { GitIndicator } from './GitPanel'
 import Icon from './Icon'
+import { pluginGlyph } from './pluginIcons'
+import { sectionIcon, sectionLabel } from './Icon'
+import { pluginsFor, projectCommandItems, projectViews } from '../pluginUi'
 
 /** General notes live here (the Notes item) */
 const NOTES_DIR = 'notes'
@@ -24,6 +27,11 @@ function projectChildren(tree: TreeNode[], slug: string): TreeNode[] {
 /** The project the current tab belongs to, if any */
 function focusedProject(view: ReturnType<typeof useStore.getState>['view']): string | null {
   if (view.kind === 'project' || view.kind === 'board' || view.kind === 'gallery') return view.slug
+  // A plugin view opened for a project (its project button)
+  if (view.kind === 'plugin') {
+    const slug = (view.state as { project?: unknown } | undefined)?.project
+    return typeof slug === 'string' ? slug : null
+  }
   if ((view.kind === 'file' || view.kind === 'canvas' || view.kind === 'history') && view.path.startsWith('projects/')) {
     return view.path.split('/')[1] ?? null
   }
@@ -50,6 +58,8 @@ export default function Sidebar() {
     openProject,
     openGallery,
     openInNewWindow,
+    plugins,
+    openPlugin,
     createProject,
     openSettings,
     reorderProjects
@@ -261,11 +271,45 @@ Drag to reorder`}
                               ])
                             }
                           >
-                            <span className="chev spacer tree-icon">🖼</span>
-                            gallery
+                            <span className="chev spacer" />
+                            {sectionIcon('gallery')}
+                            {sectionLabel('gallery')}
                           </button>
                         </li>
                       </ul>
+                    )}
+                    {/* Views of plugins linked to this project (host.projects.setLinked), after the folders */}
+                    {pluginsFor(plugins, p.slug).flatMap((plugin) =>
+                      projectViews(plugin).map((def) => {
+                        const state = { project: p.slug }
+                        const active =
+                          view.kind === 'plugin' && view.plugin === plugin.id && view.view === def.id && (view.state as { project?: unknown } | undefined)?.project === p.slug
+                        return (
+                          <ul className="tree" key={`${plugin.id}/${def.id}`}>
+                            <li>
+                              <button
+                                className={`tree-row dir task-board ${active ? 'active' : ''}`}
+                                style={{ paddingLeft: 24 }}
+                                title={`${def.title} · ${plugin.name}`}
+                                onClick={() => openPlugin(plugin.id, def.id, state)}
+                                onContextMenu={(e) =>
+                                  showMenu(e, [
+                                    { label: 'Open', run: () => openPlugin(plugin.id, def.id, state) },
+                                    { label: 'Open in new tab', kbd: 'Ctrl click', run: () => openPlugin(plugin.id, def.id, state) },
+                                    { label: 'Open in new window', run: () => openInNewWindow({ kind: 'plugin', plugin: plugin.id, view: def.id, state }) },
+                                    'separator',
+                                    ...projectCommandItems(plugin, p.slug)
+                                  ])
+                                }
+                              >
+                                <span className="chev spacer" />
+                                {pluginGlyph(def.icon)}
+                                {sectionLabel(def.title)}
+                              </button>
+                            </li>
+                          </ul>
+                        )
+                      })
                     )}
                   </div>
                 )}

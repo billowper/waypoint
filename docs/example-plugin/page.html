@@ -1,0 +1,66 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>Plugin demo</title>
+    <style>
+      /* Waypoint's colours arrive as --wp-* variables on <html> and follow the theme live */
+      body {
+        margin: 0;
+        padding: 24px 28px;
+        background: var(--wp-bg);
+        color: var(--wp-fg);
+        font: 14px/1.5 var(--wp-font, system-ui, sans-serif);
+      }
+      h1 { margin: 0 0 4px; font-size: 20px; }
+      p.muted, small { color: var(--wp-muted); }
+      section { margin: 18px 0; padding: 14px 16px; background: var(--wp-panel); border: 1px solid var(--wp-border); border-radius: 8px; }
+      h2 { margin: 0 0 8px; font-size: 13px; text-transform: uppercase; letter-spacing: 0.04em; color: var(--wp-muted); }
+      pre { margin: 8px 0 0; padding: 8px 10px; background: var(--wp-bg-2); border-radius: 6px; font: 12.5px var(--wp-mono, monospace); white-space: pre-wrap; overflow-wrap: anywhere; }
+      button { font: inherit; padding: 4px 12px; margin-right: 6px; color: var(--wp-accent-fg); background: var(--wp-accent); border: 0; border-radius: 6px; cursor: pointer; }
+      button.plain { color: var(--wp-fg); background: var(--wp-bg-2); border: 1px solid var(--wp-border); }
+      .error { color: var(--wp-danger); }
+      ul { margin: 8px 0 0; padding-left: 18px; font-family: var(--wp-mono, monospace); font-size: 12.5px; }
+    </style>
+  </head>
+  <body>
+    <h1>Plugin demo</h1>
+    <p class="muted">A page from <code>docs/example-plugin</code>, running in a sandboxed frame.</p>
+
+    <section>
+      <h2>waypoint.view and waypoint.state</h2>
+      <div id="view"></div>
+      <pre id="state"></pre>
+      <p><button id="count">Count a click (setState)</button> <small>Saved with the tab: switch tabs or restart Waypoint and it is still there.</small></p>
+    </section>
+
+    <section>
+      <h2>waypoint.menu</h2>
+      <small>Right-click anywhere on this page: Waypoint's own menu opens at the pointer (the first item is ticked).</small>
+      <pre id="menu">(nothing yet)</pre>
+    </section>
+
+    <section>
+      <h2>Theme</h2>
+      <div id="theme"></div>
+      <small>Switch Settings → Appearance between dark and light: this page follows.</small>
+    </section>
+
+    <section>
+      <h2>waypoint.call → host.handle</h2>
+      <button id="ask">Ask the main module</button>
+      <button id="toast" class="plain">Show a toast</button>
+      <button id="external" class="plain">openExternal</button>
+      <pre id="answer">(nothing yet)</pre>
+    </section>
+
+    <section>
+      <h2>waypoint.on('tick') ← host.emit</h2>
+      <small>An event from the main module every 3 seconds.</small>
+      <ul id="ticks"></ul>
+    </section>
+
+    <script type="module" src="page.mjs"></script>
+  </body>
+</html>

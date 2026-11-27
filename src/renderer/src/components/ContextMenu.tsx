@@ -28,6 +28,8 @@ export default function ContextMenu({ x, y, items }: MenuState) {
     }
   }, [closeMenu])
 
+  // A menu with a ticked item (a plugin's choice list) leaves room for the tick on every row
+  const ticks = items.some((it) => it !== 'separator' && it.checked !== undefined)
   return (
     <div className="menu-backdrop" onMouseDown={closeMenu} onContextMenu={(e) => (e.preventDefault(), closeMenu())}>
       <div className="menu" ref={ref} style={pos} onMouseDown={(e) => e.stopPropagation()}>
@@ -45,7 +47,10 @@ export default function ContextMenu({ x, y, items }: MenuState) {
                 it.run()
               }}
             >
-              {it.label}
+              <span className="menu-label">
+                {ticks && <span className="menu-tick">{it.checked ? '✓' : ''}</span>}
+                {it.label}
+              </span>
               {it.kbd && <kbd>{it.kbd}</kbd>}
             </button>
           )

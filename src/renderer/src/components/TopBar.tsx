@@ -1,9 +1,11 @@
-import { useState, type DragEvent, type MouseEvent } from 'react'
+import { useState, type ReactNode, type DragEvent, type MouseEvent } from 'react'
 import { baseName } from '@shared/names'
 import type { Project, ViewRef } from '@shared/types'
+import type { PluginInfo } from '@shared/pluginApi'
 import { flushEditors, isContentWindow, toRef, useStore, type Tab } from '../store'
 import { projectMenu, showMenu, tabMenu, treeMenu } from '../menus'
 import Icon, { noteDefault } from './Icon'
+import { pluginGlyph } from './pluginIcons'
 
 const SAVE_LABEL = { saved: 'Saved', saving: 'Saving…', unsaved: 'Edited', error: 'Save failed' }
 
@@ -14,8 +16,16 @@ let myWindowId = -1
 window.api.windowInfo().then((w) => (myWindowId = w.id))
 const fromType = (id: number) => `application/x-waypoint-from-${id}`
 
-export function tabTitle(t: Tab, projects: Project[]): string {
+export function tabTitle(t: Tab, projects: Project[], plugins: PluginInfo[] = useStore.getState().plugins): string {
   const v = t.view
+  if (v.kind === 'plugin') {
+    const info = plugins.find((p) => p.id === v.plugin && p.status !== 'invalid')
+    const title = info?.views.find((x) => x.id === v.view)?.title ?? `${v.plugin}: ${v.view}`
+    // A view opened for a project (project button) says which
+    const slug = (v.state as { project?: unknown } | undefined)?.project
+    const project = typeof slug === 'string' ? (projects.find((x) => x.slug === slug)?.title ?? slug) : ''
+    return project ? `${title} · ${project}` : title
+  }
   if (v.kind === 'file') return baseName(v.path)
   if (v.kind === 'canvas') return baseName(v.path).replace(/\.excalidraw$/i, '')
   if (v.kind === 'project' || v.kind === 'board' || v.kind === 'gallery') {
@@ -27,9 +37,16 @@ export function tabTitle(t: Tab, projects: Project[]): string {
   return 'Home'
 }
 
+/** The glyph for a plugin tab: its view's icon */
+function pluginIcon(t: Tab, plugins: PluginInfo[]): ReactNode {
+  const v = t.view
+  if (v.kind !== 'plugin') return null
+  return pluginGlyph(plugins.find((p) => p.id === v.plugin)?.views.find((x) => x.id === v.view)?.icon)
+}
+
 /** Tab strip across the top of the window (also the window's drag area) */
 export function TabBar() {
-  const { tabs, activeTab, activateTab, closeTab, newTab, projects, moveTabToWindow, receiveTab, navBack, navForward, navigate } = useStore()
+  const { tabs, activeTab, activateTab, closeTab, newTab, projects, plugins, moveTabToWindow, receiveTab, navBack, navForward, navigate } = useStore()
   const [dropHere, setDropHere] = useState(false)
 
   const onMouseDown = (t: Tab) => (e: MouseEvent) => {
@@ -98,7 +115,7 @@ export function TabBar() {
           <div
             key={t.id}
             className={`tab ${t.id === activeTab ? 'active' : ''}`}
-            title={(t.view.kind === 'file' ? t.view.path : tabTitle(t, projects)) + '\nDrag out of the window to open it in its own'}
+            title={(t.view.kind === 'file' ? t.view.path : tabTitle(t, projects, plugins)) + '\nDrag out of the window to open it in its own'}
             draggable
             onDragStart={onDragStart(t)}
             onDragEnd={onDragEnd(t)}
@@ -111,8 +128,9 @@ export function TabBar() {
               {t.view.kind === 'board' && <Icon path={`projects/${t.view.slug}`} fallback={<span className="tab-icon">▦</span>} />}
               {t.view.kind === 'gallery' && <Icon path={`projects/${t.view.slug}`} fallback={<span className="tab-icon">🖼</span>} />}
               {t.view.kind === 'canvas' && <Icon path={t.view.path} fallback={<span className="tab-icon">✎</span>} />}
+              {t.view.kind === 'plugin' && <span className="tab-icon">{pluginIcon(t, plugins)}</span>}
               {t.view.kind === 'file' && <Icon path={t.view.path} fallback={noteDefault(t.view.path, /^projects\/[^/]+\/tasks\//.test(t.view.path))} />}
-              {tabTitle(t, projects)}
+              {tabTitle(t, projects, plugins)}
             </button>
             <button className="tab-close" title="Close tab (Ctrl+W)" onClick={() => closeTab(t.id)}>
               ×

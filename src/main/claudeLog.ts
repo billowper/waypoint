@@ -17,7 +17,10 @@ const KEEP_DAYS = 30
 export const hashText = (text: string) => createHash('sha1').update(text).digest('hex')
 export const snapshotPath = (id: string) => `${UNDO_DIR}/${id}.md`
 
-export type NewChange = Omit<ClaudeChange, 'id' | 'at' | 'session' | 'undone' | 'afterHash' | 'hasSnapshot'>
+export type NewChange = Omit<ClaudeChange, 'id' | 'at' | 'session' | 'undone' | 'afterHash' | 'hasSnapshot'> & {
+  /** Where the change came from, if not the connector's own session folder (plugins say theirs) */
+  session?: string
+}
 
 /**
  * Record a change. `before` is the file's text before an edit (null = the file didn't exist), and makes the change
@@ -25,7 +28,7 @@ export type NewChange = Omit<ClaudeChange, 'id' | 'at' | 'session' | 'undone' | 
  */
 export async function recordChange(vault: Vault, change: NewChange, before?: string | null): Promise<void> {
   const id = `${Date.now().toString(36)}-${randomBytes(3).toString('hex')}`
-  const entry: ClaudeChange = { id, at: new Date().toISOString(), ...change, session: process.cwd() }
+  const entry: ClaudeChange = { id, at: new Date().toISOString(), ...change, session: change.session ?? process.cwd() }
   if (before !== undefined) {
     const after = await vault.read(change.path).catch(() => null)
     if (after !== null) entry.afterHash = hashText(after)

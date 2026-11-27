@@ -7,6 +7,9 @@ import { baseName } from '@shared/names'
 import { useStore } from '../store'
 import { noteMenu, showMenu, taskMenu } from '../menus'
 import { ClaudeFeed, ClaudeProjectCard } from './ClaudeCode'
+import { pluginGlyph } from './pluginIcons'
+import PluginPanels from './PluginPanels'
+import { allProjectCommandItems, pluginsFor, projectViews } from '../pluginUi'
 
 const SAVE_DELAY = 500
 
@@ -27,8 +30,12 @@ const fail = (what: string) => (e: unknown) => alert(`${what}\n\n${(e as Error).
 
 export default function ProjectPage({ slug }: { slug: string }) {
   const prefs = useStore((st) => st.prefs)
-  const { projects, notes, tasks, boards, openFile, newNote, linkFile, refresh, openBoard, openGallery, createTask, openCanvas, createBoard } =
+  const { projects, notes, tasks, boards, openFile, newNote, linkFile, refresh, openBoard, openGallery, createTask, openCanvas, createBoard, plugins, openPlugin } =
     useStore()
+  // Views of the plugins linked to this project (plugin.json "scope": "project"): links under the header
+  const projectLinks = pluginsFor(plugins, slug).flatMap((plugin) => projectViews(plugin).map((def) => ({ plugin, def })))
+  // Commands plugins add for this project (the ⋯ next to the status)
+  const pluginItems = allProjectCommandItems(plugins, slug)
   const project = projects.find((p) => p.slug === slug)
   const projectTasks = tasks.filter((t) => t.project === slug && !t.archived)
   const projectBoards = boards.filter((b) => b.startsWith(`projects/${slug}/`))
@@ -115,6 +122,11 @@ export default function ProjectPage({ slug }: { slug: string }) {
             </button>
           ))}
         </div>
+        {pluginItems.length > 0 && (
+          <button className="icon-btn" title="Plugin commands" onClick={(e) => showMenu(e, pluginItems)}>
+            ⋯
+          </button>
+        )}
         <div className="project-meta">
           <label>
             Tags
@@ -150,6 +162,21 @@ export default function ProjectPage({ slug }: { slug: string }) {
         </div>
       </header>
 
+      {projectLinks.length > 0 && (
+        <div className="plugin-buttons">
+          {projectLinks.map(({ plugin, def }) => (
+            <button
+              key={`${plugin.id}/${def.id}`}
+              className="btn small"
+              title={`${def.title} (${plugin.name})`}
+              onClick={() => openPlugin(plugin.id, def.id, { project: slug })}
+            >
+              {pluginGlyph(def.icon)} {def.title}
+            </button>
+          ))}
+        </div>
+      )}
+
       <section className="card">
         <div className="card-head">
           <h2>Overview</h2>
@@ -161,6 +188,9 @@ export default function ProjectPage({ slug }: { slug: string }) {
         </div>
         <p className="overview">{project.overview || 'No overview yet.'}</p>
       </section>
+
+      {/* Panels of the plugins linked to this project */}
+      <PluginPanels where="project" project={slug} />
 
       <section className="card">
         <div className="card-head">
@@ -248,7 +278,7 @@ export default function ProjectPage({ slug }: { slug: string }) {
       </section>
 
       {prefs?.claudeCode && <ClaudeProjectCard slug={slug} repo={project.repo.path} dir={project.dir} />}
-      {prefs?.claudeCode && <ClaudeFeed slug={slug} limit={8} />}
+      <ClaudeFeed slug={slug} limit={8} />
 
       <section className="card">
         <div className="card-head">

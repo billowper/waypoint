@@ -4,6 +4,7 @@ import { assignClaude, isForClaude } from '@shared/types'
 import { linkTextFor } from '@shared/links'
 import { canNest } from '@shared/nesting'
 import { pagesFolder } from '@shared/names'
+import { allProjectCommandItems } from './pluginUi'
 import { canRename, claudeOn, flushEditors, useStore, type MenuItem, type Tab } from './store'
 
 // Right-click menus. Each builder returns the items for one kind of thing; `showMenu` opens them.
@@ -32,6 +33,7 @@ function openItems(ref: ViewRef): MenuItem[] {
     if (ref.kind === 'project') return s.openProject(ref.slug, { newTab })
     if (ref.kind === 'board') return s.openBoard(ref.slug, { newTab })
     if (ref.kind === 'gallery') return s.openGallery(ref.slug, { newTab })
+    if (ref.kind === 'plugin') return s.openPlugin(ref.plugin, ref.view, ref.state)
     if (ref.kind === 'history') return s.openHistory(ref.path, { newTab })
     if (ref.kind === 'settings') return s.openSettings()
     return s.goHome()
@@ -181,6 +183,7 @@ export function tabMenu(tab: Tab): MenuItem[] {
 export function projectMenu(slug: string): MenuItem[] {
   const s = store()
   const dir = `projects/${slug}`
+  const plugin = allProjectCommandItems(s.plugins, slug)
   return [
     ...openItems({ kind: 'project', slug }),
     sep,
@@ -197,7 +200,9 @@ export function projectMenu(slug: string): MenuItem[] {
     { label: 'New board', run: () => s.createBoard(`${dir}/boards`) },
     sep,
     { label: 'Copy path', run: () => copy(dir) },
-    { label: 'Show in Explorer', run: () => window.api.reveal(dir) }
+    { label: 'Show in Explorer', run: () => window.api.reveal(dir) },
+    // What plugins add for this project (docs/plugins.md)
+    ...(plugin.length ? [sep, ...plugin] : [])
   ]
 }
 

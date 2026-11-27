@@ -233,7 +233,7 @@ const canUndo = (c: ClaudeChange) => c.action === 'created' || c.action === 'ren
  * or all of them (Home). Updates when Claude logs another change.
  */
 export function ClaudeFeed({ slug, limit, panel }: { slug?: string; limit: number; panel?: boolean }) {
-  const { openFile, openProject, openCanvas, projects } = useStore()
+  const { openFile, openProject, openCanvas, projects, plugins } = useStore()
   const [changes, setChanges] = useState<ClaudeChange[]>([])
   const [showAll, setShowAll] = useState(false)
   const [busy, setBusy] = useState('')
@@ -265,21 +265,26 @@ export function ClaudeFeed({ slug, limit, panel }: { slug?: string; limit: numbe
       load()
     }
   }
+  // The log holds the connector's changes (tool "update_task"…) and plugins' (tool "plugin:<id>"): say who made each
+  const sourceOf = (c: ClaudeChange) => (c.tool.startsWith('plugin:') ? (plugins.find((x) => x.id === c.tool.slice(7))?.name ?? c.tool.slice(7)) : 'Claude')
+  const sources = [...new Set(changes.map(sourceOf))]
+  const mixed = sources.length > 1
   const shown = showAll ? changes : changes.slice(0, limit)
   const projectTitle = (path: string) => projects.find((p) => path === p.dir || path.startsWith(p.dir + '/'))?.title
 
   return (
     <section className={panel ? 'panel' : 'card'}>
-      <h2>Changed by Claude</h2>
+      <h2>{mixed ? 'Recent changes' : `Changed by ${sources[0]}`}</h2>
       <ul className="recent claude-feed">
         {shown.map((c) => (
           <li key={c.id} className={c.undone ? 'undone' : ''}>
-            <button onClick={(e) => open(c, e.ctrlKey)} title={`${c.path}\nfrom a session in ${c.session}`}>
+            <button onClick={(e) => open(c, e.ctrlKey)} title={`${c.path}\n${c.tool.startsWith('plugin:') ? `by ${sourceOf(c)}` : `from a session in ${c.session}`}`}>
               <span className="recent-name">
                 {VERB[c.action]} {changedName(c.path)}
               </span>
               <span className="recent-path">
                 {[
+                  mixed ? sourceOf(c) : '',
                   c.summary !== baseName(c.path) && !c.summary.includes(' → ') ? c.summary : '',
                   slug ? '' : projectTitle(c.path)
                 ]

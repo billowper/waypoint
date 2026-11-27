@@ -1,0 +1,22 @@
+{
+  "id": "example",
+  "name": "Example plugin",
+  "version": "0.2.0",
+  "api": 1,
+  "description": "Shows the plugin API once: a tab view, a project view, panels on Home and project pages, commands, menus, tasks with data",
+  "main": "main.mjs",
+  "views": [
+    { "id": "demo", "title": "Plugin demo", "icon": "puzzle", "page": "page.html" },
+    { "id": "tasks", "title": "Example tasks", "icon": "list", "page": "project.html", "scope": "project" }
+  ],
+  "panels": [
+    { "id": "home", "title": "Example plugin", "page": "panel.html", "where": "home" },
+    { "id": "project", "title": "Example: this project", "page": "panel.html", "where": "project" }
+  ],
+  "commands": [
+    { "id": "count", "title": "Count open tasks", "scope": "project" },
+    { "id": "link-all", "title": "Link every project", "scope": "home" },
+    { "id": "unlink", "title": "Unlink from this project", "scope": "project", "danger": true },
+    { "id": "link", "title": "Link to this project", "scope": "project", "when": "unlinked" }
+  ]
+}

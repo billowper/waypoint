@@ -4,7 +4,7 @@ import { arrange, canNest, type TreeRow } from '@shared/nesting'
 import { pagesFolder } from '@shared/names'
 import { canRename, useStore } from '../store'
 import { showMenu, treeMenu } from '../menus'
-import Icon, { noteDefault } from './Icon'
+import Icon, { noteDefault, sectionIcon, sectionLabel } from './Icon'
 
 export const DRAG_TYPE = 'application/x-waypoint-path'
 /** Hovering a closed folder while dragging opens it after this long */
@@ -21,12 +21,15 @@ interface Props {
 
 /** Where on a row a drag would land: a line above or below it, or inside it */
 type Zone = 'before' | 'into' | 'after'
+/** The folders directly under a project: the sidebar shows them capitalised, with a default icon */
+const PROJECT_ROOT = /^projects\/[^/]+$/
 const TASKS_DIR = /^projects\/[^/]+\/tasks(\/|$)/
 
 export default function FileTree({ nodes, dir, pinned, depth }: Props) {
   const { expanded, toggle, view, openFile, openCanvas, openBoard, openInNewWindow, createTask, selectedDir, selectDir, move, place, tasks, treeOrder } =
     useStore()
   const rows = arrange(nodes, treeOrder[dir], pinned)
+  const section = PROJECT_ROOT.test(dir) // first-level subsections of a project
   const taskByPath = new Map(tasks.map((t) => [t.path, t]))
   const openPath = view.kind === 'file' ? view.path : null
   const [dropOn, setDropOn] = useState<{ path: string; zone: Zone } | null>(null)
@@ -123,8 +126,9 @@ export default function FileTree({ nodes, dir, pinned, depth }: Props) {
                 }
                 {...drag(n)}
               >
-                <span className="chev spacer tree-icon">▦</span>
-                {n.name}
+                <span className="chev spacer" />
+                <Icon path={n.path} fallback={sectionIcon('tasks')} />
+                {section ? sectionLabel(n.name) : n.name}
                 <span className="tree-count">{tasks.filter((t) => t.project === boardOf && t.status !== 'done' && !t.archived).length || ''}</span>
               </button>
             </li>
@@ -146,8 +150,8 @@ export default function FileTree({ nodes, dir, pinned, depth }: Props) {
                 {...drag(n)}
               >
                 <span className={`chev ${isOpen ? 'open' : ''}`}>›</span>
-                <Icon path={n.path} />
-                {n.name}
+                <Icon path={n.path} fallback={section ? sectionIcon(n.name) : undefined} />
+                {section ? sectionLabel(n.name) : n.name}
               </button>
               {isOpen && n.children && <FileTree nodes={n.children} dir={n.path} depth={depth + 1} />}
             </li>

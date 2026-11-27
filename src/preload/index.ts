@@ -138,7 +138,25 @@ const api: Api = {
     ipcRenderer.on('prefs:changed', h)
     return () => ipcRenderer.removeListener('prefs:changed', h)
   },
-  editAction: (action) => ipcRenderer.send('edit:action', action)
+  editAction: (action) => ipcRenderer.send('edit:action', action),
+  plugins: () => ipcRenderer.invoke('plugin:list'),
+  pluginEnable: (id, on) => ipcRenderer.invoke('plugin:enable', id, on),
+  pluginRestart: (id) => ipcRenderer.invoke('plugin:restart', id),
+  pluginOpenLog: (id) => ipcRenderer.invoke('plugin:openLog', id),
+  pluginAddDevPath: (dir) => ipcRenderer.invoke('plugin:addDevPath', dir),
+  pluginRemoveDevPath: (dir) => ipcRenderer.invoke('plugin:removeDevPath', dir),
+  pluginCall: (id, method, params) => ipcRenderer.invoke('plugin:call', id, method, params),
+  pluginOpenExternal: (url) => ipcRenderer.invoke('plugin:openExternal', url),
+  onPluginsChanged: (cb) => {
+    const h = () => cb()
+    ipcRenderer.on('plugins:changed', h)
+    return () => ipcRenderer.removeListener('plugins:changed', h)
+  },
+  onPluginEvent: (cb) => {
+    const h = (_e: IpcRendererEvent, plugin: string, event: string, data: unknown) => cb(plugin, event, data)
+    ipcRenderer.on('plugin:event', h)
+    return () => ipcRenderer.removeListener('plugin:event', h)
+  }
 }
 
 contextBridge.exposeInMainWorld('api', api)

@@ -5,6 +5,7 @@ import type { GitStatus, NudgeInfo, Project, Task, TaskFields, TreeNode, TreeOrd
 import { baseName, IDEAS_DIR, movedPath, pagesFolder } from '@shared/names'
 import { arrange, findNode } from '@shared/nesting'
 import type { Prefs } from '@shared/prefs'
+import type { PluginInfo } from '@shared/pluginApi'
 
 /** `docId` stays the same when the open file is renamed, so the editor isn't recreated. */
 export type View =
@@ -19,6 +20,8 @@ export type View =
   | { kind: 'settings' }
   /** An Excalidraw board file (.excalidraw) */
   | { kind: 'canvas'; path: string }
+  /** A page of a plugin; `state` is the page's own (waypoint.setState), saved with the tab */
+  | { kind: 'plugin'; plugin: string; view: string; state?: unknown }
 
 export interface Tab {
   id: number
@@ -38,7 +41,7 @@ interface PromptState {
 }
 
 export type MenuItem =
-  | { label: string; run: () => unknown; kbd?: string; danger?: boolean; disabled?: boolean }
+  | { label: string; run: () => unknown; kbd?: string; danger?: boolean; disabled?: boolean; checked?: boolean }
   | 'separator'
 
 /** A right-click menu at a point (items built by menus.ts) */
@@ -46,6 +49,15 @@ export interface MenuState {
   x: number
   y: number
   items: MenuItem[]
+  /** Called once when the menu goes away (after an item's run, or on dismissal); a plugin's menu answers its page with it */
+  onClose?: () => void
+}
+
+/** A brief message shown in the app (a plugin command's {toast}) */
+export interface Notice {
+  id: number
+  text: string
+  error?: boolean
 }
 
 /** Ctrl+P note switcher, or the folder chooser for "Move to…" */
@@ -92,6 +104,10 @@ interface State {
   gitBusy: string | null
   vaultSettings: VaultSettings | null
   prefs: Prefs | null
+  /** Plugins found (docs/plugins.md): what Settings, the sidebar, project pages and plugin tabs show */
+  plugins: PluginInfo[]
+  /** The first look at the plugins has come back (before that, a plugin tab can't say whether its plugin is missing) */
+  pluginsLoaded: boolean
   /** Slugs of the projects set up for Claude Code, where tasks can be assigned to Claude (see `claudeOn`) */
   claudeProjects: string[]
   /** The nudge Bill clicked through, shown as a banner until dismissed */
@@ -106,6 +122,7 @@ interface State {
   navForward: ViewRef[]
   prompt: PromptState | null
   menu: MenuState | null
+  notice: Notice | null
   picker: PickerState | null
   reveal: Reveal | null
 
@@ -119,6 +136,14 @@ interface State {
   createProject(): Promise<void>
   openBoard(slug: string, opts?: { newTab?: boolean }): void
   openGallery(slug: string, opts?: { newTab?: boolean }): void
+  /**
+   * Show a plugin's view in a new tab, or switch to the tab that has the same view and state
+   * (`anyState`: the view is enough, e.g. from the sidebar, whatever state its page has saved since)
+   */
+  openPlugin(plugin: string, view: string, state?: unknown, anyState?: boolean): void
+  /** The page in a plugin tab saved its state (waypoint.setState); kept with the tab */
+  setPluginState(tabId: number, state: unknown): void
+  refreshPlugins(): Promise<void>
   createTask(project: string, fields: Partial<TaskFields>): Promise<string | null>
   updateTask(path: string, patch: Partial<TaskFields>): Promise<void>
   /** Archive (on) or bring back tasks; they keep their status */
@@ -168,6 +193,8 @@ interface State {
   setSaveState(tabId: number, s: SaveState): void
   openMenu(menu: MenuState): void
   closeMenu(): void
+  /** Show a brief message for a few seconds */
+  showNotice(text: string, error?: boolean): void
   openPicker(picker: PickerState): void
   closePicker(): void
   setSidebarMode(mode: State['sidebarMode']): void
@@ -243,8 +270,10 @@ function saveToc(open: boolean) {
     /* ignore */
   }
 }
+let noticeId = 0
 const NAV_LIMIT = 100
-const navKey = (r: ViewRef) => JSON.stringify(r)
+// A plugin page changing its own state (setState) isn't going anywhere, so it doesn't count for Back/Forward
+const navKey = (r: ViewRef) => JSON.stringify(r.kind === 'plugin' ? { kind: r.kind, plugin: r.plugin, view: r.view } : r)
 /** Where a remembered place is now, after a rename or move */
 function movedRef(r: ViewRef, from: string, to: string): ViewRef {
   if (r.kind === 'project' || r.kind === 'board' || r.kind === 'gallery') {
@@ -329,11 +358,13 @@ function saveTabs(vault: string | undefined, tabs: Tab[], activeTab: number) {
         ? t.view.path
         : t.view.kind === 'project' || t.view.kind === 'board' || t.view.kind === 'gallery'
           ? `${t.view.kind}:${t.view.slug}`
-          : t.view.kind === 'settings'
-            ? 'settings'
-            : t.view.kind === 'canvas'
-              ? `canvas:${t.view.path}`
-              : null
+          : t.view.kind === 'plugin'
+            ? `plugin:${JSON.stringify({ plugin: t.view.plugin, view: t.view.view, state: t.view.state })}`
+            : t.view.kind === 'settings'
+              ? 'settings'
+              : t.view.kind === 'canvas'
+                ? `canvas:${t.view.path}`
+                : null
     )
     localStorage.setItem(tabsKey(vault), JSON.stringify({ paths, active: tabs.findIndex((t) => t.id === activeTab) }))
   } catch {
@@ -350,6 +381,12 @@ function loadTabs(vault: string, notes: string[], projects: Project[]): { tabs: 
     const tabs = saved.paths.map((p): Tab => {
       if (p === 'settings') return { id: ++nextId, view: { kind: 'settings' } }
       if (p?.startsWith('canvas:')) return { id: ++nextId, view: { kind: 'canvas', path: p.slice(7) } }
+      if (p?.startsWith('plugin:')) {
+        const r = JSON.parse(p.slice(7)) as { plugin: string; view: string; state?: unknown }
+        if (typeof r.plugin === 'string' && typeof r.view === 'string') {
+          return { id: ++nextId, view: { kind: 'plugin', plugin: r.plugin, view: r.view, ...(r.state === undefined ? {} : { state: r.state }) } }
+        }
+      }
       const [, kind, slug] = /^(project|board|gallery):(.+)$/.exec(p ?? '') ?? []
       if (slug && projects.some((x) => x.slug === slug)) {
         return { id: ++nextId, view: { kind: kind as 'project' | 'board' | 'gallery', slug } }
@@ -438,6 +475,7 @@ export const useStore = create<State>((set, get) => {
     })
     window.api.onPrefsChanged((prefs) => set({ prefs }))
     window.api.onIconsChanged(async () => set({ icons: await window.api.icons().catch(() => get().icons) }))
+    window.api.onPluginsChanged(() => void get().refreshPlugins())
   }
 
   /** Show a project page or board: switch to its tab if open, else replace the current tab or add one */
@@ -482,6 +520,8 @@ export const useStore = create<State>((set, get) => {
     gitBusy: null,
     vaultSettings: null,
     prefs: null,
+    plugins: [],
+    pluginsLoaded: false,
     claudeProjects: [],
     nudge: null,
     backlinksOpen: true,
@@ -491,6 +531,7 @@ export const useStore = create<State>((set, get) => {
     navForward: [],
     prompt: null,
     menu: null,
+    notice: null,
     picker: null,
     reveal: null,
 
@@ -500,6 +541,7 @@ export const useStore = create<State>((set, get) => {
       if (!vault) return
       await get().refresh()
       void get().refreshClaude()
+      void get().refreshPlugins()
       listenToOtherWindows()
       if (isContentWindow) {
         const tabs = initialViews.map((r) => ({ id: ++nextId, view: fromRef(r) }))
@@ -518,6 +560,7 @@ export const useStore = create<State>((set, get) => {
       if (!vault) return
       await get().refresh()
       void get().refreshClaude()
+      void get().refreshPlugins()
       listenToOtherWindows()
       if (isContentWindow) {
         const tabs = initialViews.map((r) => ({ id: ++nextId, view: fromRef(r) }))
@@ -596,6 +639,37 @@ export const useStore = create<State>((set, get) => {
 
     openGallery(slug, opts = {}) {
       openView({ kind: 'gallery', slug }, opts.newTab)
+    },
+
+    openPlugin(plugin, view, state, anyState) {
+      const { tabs, activeTab } = get()
+      const same = (t: Tab) =>
+        t.view.kind === 'plugin' &&
+        t.view.plugin === plugin &&
+        t.view.view === view &&
+        (anyState || JSON.stringify(t.view.state ?? null) === JSON.stringify(state ?? null))
+      const existing = tabs.find(same)
+      if (existing) return setTabs(tabs, existing.id)
+      // Always a tab of its own: a plugin page keeps running behind the others, so replacing one would throw its state away
+      const tab: Tab = { id: ++nextId, view: { kind: 'plugin', plugin, view, ...(state === undefined ? {} : { state }) } }
+      const at = tabs.findIndex((t) => t.id === activeTab) + 1
+      setTabs([...tabs.slice(0, at), tab, ...tabs.slice(at)], tab.id)
+    },
+
+    setPluginState(tabId, state) {
+      const { tabs, activeTab } = get()
+      const tab = tabs.find((t) => t.id === tabId)
+      if (!tab || tab.view.kind !== 'plugin') return
+      const view: View = { ...tab.view, state }
+      if (tabId === activeTab) navHere = toRef(view) // not a move: no Back entry
+      setTabs(
+        tabs.map((t) => (t.id === tabId ? { ...t, view } : t)),
+        activeTab
+      )
+    },
+
+    async refreshPlugins() {
+      set({ plugins: await window.api.plugins().catch(() => get().plugins), pluginsLoaded: true })
     },
 
     async createTask(project, fields) {
@@ -973,8 +1047,20 @@ ${(e as Error).message.replace(/^Error invoking remote method '[^']+': (Error: )
     },
 
     setSaveState: (tabId, s) => set((st) => ({ saveStates: { ...st.saveStates, [tabId]: s } })),
-    openMenu: (menu) => set({ menu }),
-    closeMenu: () => set({ menu: null }),
+    openMenu: (menu) => {
+      get().menu?.onClose?.() // a menu replaced by another counts as dismissed
+      set({ menu })
+    },
+    closeMenu: () => {
+      const menu = get().menu
+      set({ menu: null })
+      menu?.onClose?.()
+    },
+    showNotice(text, error) {
+      const id = ++noticeId
+      set({ notice: { id, text, error } })
+      setTimeout(() => get().notice?.id === id && set({ notice: null }), error ? 8000 : 5000)
+    },
     openPicker: (picker) => set({ picker, menu: null }),
     closePicker: () => set({ picker: null }),
     // Search and Git live in the Files section, so choosing them opens it
@@ -1087,6 +1173,7 @@ ${(e as Error).message.replace(/^Error invoking remote method '[^']+': (Error: )
         else if (target.kind === 'project') s.openProject(target.slug)
         else if (target.kind === 'board') s.openBoard(target.slug)
         else if (target.kind === 'gallery') s.openGallery(target.slug)
+        else if (target.kind === 'plugin') s.openPlugin(target.plugin, target.view, target.state)
         else if (target.kind === 'history') s.openHistory(target.path)
         else if (target.kind === 'settings') s.openSettings()
         else s.goHome()

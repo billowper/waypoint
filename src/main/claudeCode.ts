@@ -65,6 +65,11 @@ async function findCli(): Promise<string | null> {
   return existsSync(local) ? local : bundledCli()
 }
 
+/** Is the claude command (or the desktop app's copy) there? Plugins ask this before offering Claude */
+export async function claudeAvailable(): Promise<boolean> {
+  return !!(await findCli())
+}
+
 /** Run the CLI. Node refuses to start a .cmd (npm's claude.cmd) without a shell, so that goes through cmd.exe */
 function runCli(cli: string, args: string[]) {
   if (!/\.cmd$/i.test(cli)) return run(cli, args, cliOpts)
@@ -193,12 +198,16 @@ export async function writeInstructions(repo: string, title: string, slug: strin
   }
 }
 
+/** Text safe to pass through a terminal command line: letters, digits and a little punctuation, on one line */
+export const plainPrompt = (s: string, max: number) =>
+  s.replace(/[^\p{L}\p{N} .,_-]/gu, ' ').replace(/\s+/g, ' ').trim().slice(0, max)
+
 /**
  * What a task's session starts with. Plain characters only, because the terminal route passes it through
  * command lines (wt.exe splits on ";", cmd.exe acts on & | % and quotes) and task titles can hold anything.
  */
 export function taskPrompt(id: string, title: string): string {
-  const plain = (s: string) => s.replace(/[^\p{L}\p{N} .,_-]/gu, ' ').replace(/\s+/g, ' ').trim().slice(0, 120)
+  const plain = (s: string) => plainPrompt(s, 120)
   return `Work on Waypoint task ${plain(id)}: ${plain(title)}. Read it with waypoint_get_task, move it to doing, do the work, then move it to done with a short progress note.`
 }
 

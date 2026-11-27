@@ -1,0 +1,21 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8" />
+    <title>Example tasks</title>
+    <style>
+      body { margin: 0; padding: 24px 28px; background: var(--wp-bg); color: var(--wp-fg); font: 14px/1.5 var(--wp-font, system-ui, sans-serif); }
+      h1 { margin: 0 0 12px; font-size: 20px; }
+      button { font: inherit; padding: 4px 12px; color: var(--wp-accent-fg); background: var(--wp-accent); border: 0; border-radius: 6px; cursor: pointer; }
+      li { margin: 4px 0; }
+      small { color: var(--wp-muted); }
+      code { font: 12.5px var(--wp-mono, monospace); }
+    </style>
+  </head>
+  <body>
+    <h1 id="title"></h1>
+    <p><button id="add">Add a task with extra data</button> <small>Right-click a task for a menu.</small></p>
+    <ul id="list"></ul>
+    <script type="module" src="project.mjs"></script>
+  </body>
+</html>

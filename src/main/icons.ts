@@ -4,6 +4,7 @@ import { createHash } from 'crypto'
 import { extname, join } from 'path'
 import { pathToFileURL } from 'url'
 import type { Vault } from './vault'
+import { PLUGIN_SCHEME } from '@shared/pluginApi'
 export { readIcons, setIcon, moveIcons, dropIcons } from './iconMap'
 
 /**
@@ -28,14 +29,16 @@ const EXT_FOR_TYPE: Record<string, string> = {
 
 /**
  * The page shows stored pictures as wp-icon://<file>, and pictures in notes as wp-file://
- * (attachments.ts), and gallery files as wp-media:// (galleryMedia.ts). Electron takes one call for all schemes, before the app is ready.
+ * (attachments.ts), and gallery files as wp-media:// (galleryMedia.ts), plugin pages as wp-plugin:// (plugins/serve.ts). Electron takes one call for all schemes, before the app is ready.
  */
 export function registerIconScheme() {
   protocol.registerSchemesAsPrivileged([
     { scheme: 'wp-icon', privileges: { standard: true, secure: true } },
     { scheme: 'wp-file', privileges: { standard: true, secure: true } },
     // Gallery pictures and videos (galleryMedia.ts); `stream` lets videos play and seek
-    { scheme: 'wp-media', privileges: { standard: true, secure: true, stream: true } }
+    { scheme: 'wp-media', privileges: { standard: true, secure: true, stream: true } },
+    // Plugin pages (plugins/serve.ts); the page may fetch() its own files
+    { scheme: PLUGIN_SCHEME, privileges: { standard: true, secure: true, supportFetchAPI: true } }
   ])
 }
 

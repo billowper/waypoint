@@ -3,6 +3,7 @@ import { noteMenu, projectMenu, showMenu, taskMenu } from '../menus'
 import Icon, { noteDefault } from './Icon'
 import { byUrgency, dueState, formatDue } from './Board'
 import { ClaudeFeed } from './ClaudeCode'
+import PluginPanels from './PluginPanels'
 
 function greeting() {
   const h = new Date().getHours()
@@ -108,7 +109,7 @@ export default function Home() {
         )}
       </section>
 
-      {prefs?.claudeCode && <ClaudeFeed limit={6} panel />}
+      <ClaudeFeed limit={6} panel />
 
       <section className="panel">
         <h2>Recent</h2>
@@ -128,6 +129,9 @@ export default function Home() {
           </ul>
         )}
       </section>
+
+      {/* Panels plugins embed (docs/plugins.md), after Waypoint's own sections */}
+      <PluginPanels where="home" />
     </div>
   )
 }

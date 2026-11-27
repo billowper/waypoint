@@ -9,7 +9,12 @@ export default defineConfig({
     build: {
       rollupOptions: {
         // mcp.js: the Claude Code connector, run separately (Waypoint.exe in node mode) over stdio
-        input: { index: resolve('src/main/index.ts'), mcp: resolve('src/mcp/server.ts') }
+        // runner.js: runs one plugin's main module in a utilityProcess (src/main/plugins/manager.ts starts it)
+        input: {
+          index: resolve('src/main/index.ts'),
+          mcp: resolve('src/mcp/server.ts'),
+          runner: resolve('src/plugin-runner/runner.ts')
+        }
       }
     }
   },

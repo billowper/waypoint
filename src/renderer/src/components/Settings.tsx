@@ -4,6 +4,7 @@ import { DEFAULT_COLORS, DEFAULT_FONTS, type Prefs } from '@shared/prefs'
 import AccentPicker from './AccentPicker'
 import FontSelect from './FontSelect'
 import { ClaudeSettings } from './ClaudeCode'
+import { PluginSettings } from './PluginSettings'
 
 /** Fonts that come with Windows 11 (any installed font name can be typed in too) */
 const FONT_CHOICES = [
@@ -401,6 +402,8 @@ ${(e as Error).message}`)
       </section>
 
       <ClaudeSettings />
+
+      <PluginSettings />
 
       <section className="card">
         <h2>Keyboard shortcuts</h2>

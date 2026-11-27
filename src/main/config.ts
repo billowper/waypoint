@@ -17,6 +17,8 @@ export interface AppConfig {
   lastNudgeKey?: string
   /** Content windows (beyond the main one) open at last quit, to reopen */
   windows?: { views: ViewRef[]; bounds: { x: number; y: number; width: number; height: number } }[]
+  /** Plugins (docs/plugins.md): which are switched on (missing = off), and dev folders loaded in place */
+  plugins?: { enabled?: Record<string, boolean>; devPaths?: string[] }
 }
 
 export const prefs = (): Prefs => withDefaults(loadConfig().prefs)
